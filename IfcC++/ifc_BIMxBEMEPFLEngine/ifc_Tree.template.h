@@ -489,35 +489,46 @@ int ifc_Tree::BuildTreeFrom(Type_Elmt_Of_Source* pElem, Type_Source * const& ifc
 	}// if (lpRelatedObjects.size!=0)
 	else
 	{
-		//
-		//lecture du Quantities des "IfcSpace"
-		Map_String_String map_messages;
-		res = ifcXmlFile->ReadKeyWordsAndValuesOfIfcElementQuantity(pElem, map_messages);
-		FillQuantitiesAttributeOf_STRUCT_IFCENTITY(st_IfcBelongTo, map_messages);
-
-		//
-		// IfcProductDefinitionShape
-		//
-		//récupérer le lien IfcSpace <-> Faces (pas le data geom!) => IfcProductDefinitionShape
-		//Recuperation de l'IfcEntity (IfcProductDefinitionShape) de "IfcSpace" consigné dans sa definition
-		list<Type_Elmt_Of_Source*> lpShape;
-		res = ifcXmlFile->FindRepresentationInSpace(pElem, &lpShape);
-
-		BuildTreeFromShapeOfSpace(lpShape, ifcXmlFile, &(*st_IfcBelongTo));
-
-		//
-		// IfcRelSpaceBoundary
-		// 
-		//Recuperation des IfcEntity liés à "IfcSpace" par le lien ternaire IfcRelSpaceBoundary
-		list<Type_Elmt_Of_Source*> lpRelatedBuildingElement;
-		list<Type_Elmt_Of_Source*> lpConnectionSurfaceGeometry;
-		res = ifcXmlFile->FindRelatedBuildingElementAndConnectionGeometryInRelSpaceBoundaryFromRelatingSpace(pElem, &lpRelatedBuildingElement, &lpConnectionSurfaceGeometry);
-
-		if (lpRelatedBuildingElement.size() != 0 && lpRelatedBuildingElement.size() == lpConnectionSurfaceGeometry.size())
+		//Test car il peut exister par exemple des IfcBuildingStorey sans espace => ne pas continuer cette branche
+		// Par sécurité, test étendu aux entités "pères": IfcProject, IfcSite, IfcBuilding, IfcBuildingStorey
+		if (string(pElem->Value()) != string("IfcProject")
+			&& string(pElem->Value()) != string("IfcSite")
+			&& string(pElem->Value()) != string("IfcBuilding")
+			&& string(pElem->Value()) != string("IfcBuildingStorey")
+			)
 		{
-			BuildTreeFromRelSpaceBoundary(lpRelatedBuildingElement, lpConnectionSurfaceGeometry, ifcXmlFile, &(*st_IfcBelongTo));
-		}// if (lpRelatedBuildingElement.size() != 0 && lpRelatedBuildingElement.size() == lpConnectionSurfaceGeometry.size())
+			//
+			//lecture du Quantities des "IfcSpace"
+			Map_String_String map_messages;
+			res = ifcXmlFile->ReadKeyWordsAndValuesOfIfcElementQuantity(pElem, map_messages);
+			FillQuantitiesAttributeOf_STRUCT_IFCENTITY(st_IfcBelongTo, map_messages);
 
+			//
+			// IfcProductDefinitionShape
+			//
+			//récupérer le lien IfcSpace <-> Faces (pas le data geom!) => IfcProductDefinitionShape
+			//Recuperation de l'IfcEntity (IfcProductDefinitionShape) de "IfcSpace" consigné dans sa definition
+			list<Type_Elmt_Of_Source*> lpShape;
+			res = ifcXmlFile->FindRepresentationInSpace(pElem, &lpShape);
+
+			BuildTreeFromShapeOfSpace(lpShape, ifcXmlFile, &(*st_IfcBelongTo));
+
+			//
+			// IfcRelSpaceBoundary
+			// 
+			//Recuperation des IfcEntity liés à "IfcSpace" par le lien ternaire IfcRelSpaceBoundary
+			list<Type_Elmt_Of_Source*> lpRelatedBuildingElement;
+			list<Type_Elmt_Of_Source*> lpConnectionSurfaceGeometry;
+			res = ifcXmlFile->FindRelatedBuildingElementAndConnectionGeometryInRelSpaceBoundaryFromRelatingSpace(pElem, &lpRelatedBuildingElement, &lpConnectionSurfaceGeometry);
+
+			if (lpRelatedBuildingElement.size() != 0 && lpRelatedBuildingElement.size() == lpConnectionSurfaceGeometry.size())
+			{
+				BuildTreeFromRelSpaceBoundary(lpRelatedBuildingElement, lpConnectionSurfaceGeometry, ifcXmlFile, &(*st_IfcBelongTo));
+			}// if (lpRelatedBuildingElement.size() != 0 && lpRelatedBuildingElement.size() == lpConnectionSurfaceGeometry.size())
+		}// if (string(pElem->Value()) != string("IfcProject")
+		//  && string(pElem->Value()) != string("IfcSite")
+		//	&& string(pElem->Value()) != string("IfcBuilding")
+		//	&& string(pElem->Value()) != string("IfcBuildingStorey")
 	}// else if (lpRelatedObjects.size!=0)
 
 	return res;
