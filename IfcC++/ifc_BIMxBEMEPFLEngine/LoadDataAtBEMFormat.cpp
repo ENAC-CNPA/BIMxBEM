@@ -165,16 +165,17 @@ int LoadDataAtBEMFormat::ConvertBasifiedTree(Map_Basified_Tree *&map_BasifTree)
 	_str_SubFacesDefinitions = _str_SubFacesDefinitions.substr(str_Deb.length(), _str_SubFacesDefinitions.length() - str_Deb.length());
 
 	*_str_EntitiesDefinitions = _str_ProjectsDefinitions
-								+ _str_SitesDefinitions
-								+ _str_BuildingsDefinitions
-								+ _str_BuildingStoreysDefinitions
-								+ _str_SpacesDefinitions
-								//+ _str_ProductDefinitionShapesDefinitions
-								+ _str_TIFCSurfacesDefinitions
-								+ _str_TIFCGeo2DDefinitions
-								+ _str_FacesDefinitions
-								+ _str_SubFacesDefinitions
-								+ _str_ConnectionSurfaceGeometriesDefinitions;
+		+ _str_SitesDefinitions
+		+ _str_BuildingsDefinitions
+		+ _str_BuildingStoreysDefinitions
+		+ _str_SpacesDefinitions
+		//+ _str_ProductDefinitionShapesDefinitions
+		+ _str_TIFCSurfacesDefinitions
+		+ _str_TIFCGeo2DDefinitions
+		+ _str_FacesDefinitions
+		+ _str_SubFacesDefinitions
+		//+_str_ConnectionSurfaceGeometriesDefinitions
+		;
 
 	return Res;
 }

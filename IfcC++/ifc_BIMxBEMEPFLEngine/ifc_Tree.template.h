@@ -491,7 +491,7 @@ int ifc_Tree::BuildTreeFrom(Type_Elmt_Of_Source* pElem, Type_Source * const& ifc
 	{
 		//Test car il peut exister par exemple des IfcBuildingStorey sans espace => ne pas continuer cette branche
 		// Par sécurité, test étendu aux entités "pères": IfcProject, IfcSite, IfcBuilding, IfcBuildingStorey
-		if (string(pElem->Value()) != string("IfcProject")
+		if (string(pElem->Value()) != string("IfcProject") 
 			&& string(pElem->Value()) != string("IfcSite")
 			&& string(pElem->Value()) != string("IfcBuilding")
 			&& string(pElem->Value()) != string("IfcBuildingStorey")
