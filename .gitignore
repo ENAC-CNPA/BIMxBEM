@@ -186,3 +186,11 @@ _windows
 
 # dbnavigator settings
 dbnavigator.xml
+
+*.VC.opendb
+*.pdb
+*.lib
+*.ilk
+*.exp
+*.obj
+*.tlog
