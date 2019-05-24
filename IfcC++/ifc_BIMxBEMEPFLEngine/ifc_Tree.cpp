@@ -125,31 +125,6 @@ void ifc_Tree::FillAttributeOf_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_IfcTree, Ma
 		// Pour les tailles: http://www.buildingsmart-tech.org/ifc/IFC2x3/TC1/html/
 		FillNameAndIDAttributeOf_STRUCT_IFCENTITY(st_IfcTree, map_messages);
 
-		//char *ch_copy22 = new char[23];//size+1 pour que strncpy mette'\0'
-		//strncpy(ch_copy22, map_messages["GlobalId"].c_str(), 23);
-		//st_IfcTree->ch_GlobalId = ch_copy22;
-
-		//if (map_messages.count("LongName"))
-		//{
-		//	char *ch_copy255 = new char[256];//size+1 pour que strncpy mette'\0'
-		//	strncpy(ch_copy255, map_messages["LongName"].c_str(), 256);
-		//	st_IfcTree->ch_Name = ch_copy255;
-		//}
-		//else
-		//{
-		//	char *ch_copy255 = new char[256];//size+1 pour que strncpy mette'\0'
-		//	strncpy(ch_copy255, map_messages["Name"].c_str(), 256);
-		//	st_IfcTree->ch_Name = ch_copy255;
-		//}
-
-		//char *ch_copy9 = new char[10];//size+1 pour que strncpy mette'\0'
-		//strncpy(ch_copy9, map_messages["Id"].c_str(), 10);
-		//st_IfcTree->ch_Id = ch_copy9;
-
-		//char *ch_copy55 = new char[56];//size+1 pour que strncpy mette'\0'
-		//strncpy(ch_copy55, map_messages["Type"].c_str(), 56);
-		//st_IfcTree->ch_Type = ch_copy55;
-
 		if (st_IfcBelongTo)
 		{
 			st_IfcTree->st_BelongsTo.push_back(st_IfcBelongTo);
@@ -221,7 +196,7 @@ void ifc_Tree::FillNameAndIDAttributeOf_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_If
 		char *ch_copy255 = new char[256];//size+1 pour que strncpy mette'\0'
 		strncpy(ch_copy255, map_messages["Name"].c_str(), 256);
 		st_IfcTree->ch_Name = ch_copy255;
-	}
+	}// else if (map_messages.count("LongName"))
 
 	char *ch_copy9 = new char[16];//size+1 pour que strncpy mette'\0'
 	strncpy(ch_copy9, map_messages["Id"].c_str(), 16);
@@ -301,7 +276,7 @@ void ifc_Tree::FillQuantitiesAttributeOf_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_I
 
 int ifc_Tree::BuildTIFCSurfaceTreeFrom_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_IfcEntCS1)
 {
-	int Res = 0;
+	int res = 0;
 	
 	//On vérifie qu'il n'y a qu'une IfcConnectionSurfaceGeometry en vis-à-vis
 	// car la TIFCSurface associe des paires de IfcConnectionSurfaceGeometry (pas plus)
@@ -335,11 +310,38 @@ int ifc_Tree::BuildTIFCSurfaceTreeFrom_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_Ifc
 				st_TIFCSurface->st_Contains.push_back(st_IfcEntCS2);
 			}// if (st_TIFCSurface)
 
-			//PENSER A FAIRE LE DELETE CORRECTEMENT(ATTENTION REFERENCE MULTIPLE) = > ne deleter que les TIFCSurface mais sont referencées dans 2 IfcConnectionSurfaceGeometry
 		}// if (st_IfcEntCS2 && st_IfcEntCS2->st_TIFCSurface==nullptr)
 		else
-			Res = 6;
-	}// if (st_IfcEntCS1->st_FaceToFace.size()==1)
+			res = 3001;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
+	}// if (st_IfcEntCS1 && st_IfcEntCS1->st_FaceToFace.size()==1)
+	else 
+	{
+		if (st_IfcEntCS1 && st_IfcEntCS1->st_FaceToFace.size() == 0)
+		{
+			//SOIT MUR exterieur 
+			//SOIT dalle entre étage => pas sûr car dalles devraientt se traiter comme les murs intérieurs??!!?? 
 
-	return Res;
+			// ATTENTION: la taille du nom "Ch_Id" est limité à 16 dans FillNameAndIDAttributeOf_STRUCT_IFCENTITY
+			Map_String_String map_messages;
+			map_messages["Id"] = string(st_IfcEntCS1->ch_Id) + "------";
+			map_messages["Type"] = "TIFCSurface";
+			// Indiquer le type du TIFCSurface (ifcWall...) : map_messages["Type"] = ...
+
+			//Création et Remplissage de la structure de "TIFCSurface"
+			STRUCT_IFCENTITY * st_TIFCSurface = new STRUCT_IFCENTITY;
+			FillNameAndIDAttributeOf_STRUCT_IFCENTITY(st_TIFCSurface, map_messages);
+
+			//FillAttributeOf_STRUCT_IFCENTITY(st_IfcContain, map_messages, db_LocalMat, &(*st_IfcBelongTo));
+			st_IfcEntCS1->st_TIFCSurface = st_TIFCSurface;
+			//st_IfcEntCS2->st_TIFCSurface = st_TIFCSurface;
+			if (st_TIFCSurface)
+			{
+				st_TIFCSurface->st_Contains.push_back(st_IfcEntCS1);
+				//st_TIFCSurface->st_Contains.push_back(st_IfcEntCS2);
+			}// if (st_TIFCSurface)
+
+		}// if (st_IfcEntCS1 && st_IfcEntCS1->st_FaceToFace.size() == 0)
+	}// else if (st_IfcEntCS1->st_FaceToFace.size()==1)
+
+	return res;
 }
