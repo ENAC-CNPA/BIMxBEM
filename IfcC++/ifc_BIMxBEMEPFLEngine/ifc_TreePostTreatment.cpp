@@ -16,29 +16,29 @@ ifc_TreePostTreatment::~ifc_TreePostTreatment()
 
 int ifc_TreePostTreatment::BasifyTree(Map_Basified_Tree *&map_BasifTree)
 {
-	int Res = 0;
+	int res = 0;
 
 	STRUCT_IFCENTITY* st_IfcTree = nullptr;
 	if (_CurrentIfcTree)
 	{
 		st_IfcTree =_CurrentIfcTree->Getstruct();
 		if (st_IfcTree)
-			BasifyTreeFrom(st_IfcTree);
+			res = BasifyTreeFrom(st_IfcTree);
 		else
-			Res = 2;
+			res = 4002;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 
 		map_BasifTree = &_map_BasifTree;
 	}// if (_CurrentIfcTree)
 	else
-		Res = 1;
+		res = 4001;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 
 
-	return Res;
+	return res;
 }
 
 int ifc_TreePostTreatment::BasifyTreeFrom(STRUCT_IFCENTITY *&st_IfcTree)
 {
-	int Res = 0;
+	int res = 0;
 	//Memo adresse pointeur (si existe pas ajouté) et son type "Ifc" 
 	// => la map permet de ne pas référencer de multiple fois une même entité 
 	//    dans l'arbre, des entités sont référencés plusieurs fois car elles appartiennent à plusieurs objets
@@ -47,15 +47,16 @@ int ifc_TreePostTreatment::BasifyTreeFrom(STRUCT_IFCENTITY *&st_IfcTree)
 	list <STRUCT_IFCENTITY*> ::iterator it_Elem;
 	for (it_Elem = (st_IfcTree->st_Contains).begin(); it_Elem != (st_IfcTree->st_Contains).end(); it_Elem++)
 	{
-		BasifyTreeFrom((*it_Elem));
+		res = BasifyTreeFrom((*it_Elem));
+		if (res) return res;
 	}// for (it_Elem = (st_IfcTree->st_Contains).begin(); it_Elem != (st_IfcTree->st_Contains).end(); it_Elem++)
 
-	return Res;
+	return res;
 }
 
 int ifc_TreePostTreatment::CompleteBasifiedTreeFromByTIFCSurfaces()
 {
-	int Res = 0;
+	int res = 0;
 
 	std::map<STRUCT_IFCENTITY*, std::string>::reverse_iterator it_Elem;
 	for (it_Elem = _map_BasifTree.rbegin(); it_Elem != _map_BasifTree.rend(); it_Elem++)
@@ -64,28 +65,29 @@ int ifc_TreePostTreatment::CompleteBasifiedTreeFromByTIFCSurfaces()
 			_map_BasifTree[it_Elem->first->st_TIFCSurface] = it_Elem->first->st_TIFCSurface->ch_Type;
 	}// for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 
-	return Res;
+	return res;
 }
 
 //Retrait dans les contours (st_PointsDesContours) du derniers point lorsqu'il est égal au 1er (+ consigne bool bo_IsItLoop=true)
 int ifc_TreePostTreatment::RemoveLastPointOfLoopContours()
 {
-	int Res = 0;
+	int res = 0;
 
 	std::map<STRUCT_IFCENTITY*, std::string>::iterator it_Elem;
 	for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 	{
 		if (it_Elem->first->st_PointsDesContours.size() != 0)
-			Res = RemoveLastPointOfOneLoopContour(it_Elem->first);
+			res = RemoveLastPointOfOneLoopContour(it_Elem->first);
+		if (res) return res;
 	}// for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 
-	return Res;
+	return res;
 }
 
 //Retrait dans le contour (st_PointsDesContours) du derniers point lorsqu'il est égal au 1er (+ consigne bool bo_IsItLoop=true)
 int ifc_TreePostTreatment::RemoveLastPointOfOneLoopContour(STRUCT_IFCENTITY *st_IfcEnt)
 {
-	int Res = 0;
+	int res = 0;
 
 	//Boucle sur les différents sous-contours
 	list <list <double*>> ::iterator it_llPt;
@@ -113,28 +115,29 @@ int ifc_TreePostTreatment::RemoveLastPointOfOneLoopContour(STRUCT_IFCENTITY *st_
 		}// if (db_Dist < 0.0000001)
 	}// for (it_llPt = (st_IfcEnt->st_PointsDesContours).begin(); it_llPt != (st_IfcEnt->st_PointsDesContours).end(); it_llPt++)
 
-	return Res;
+	return res;
 }
 
 //Calcul des surfaces IfcConnectionSurfaceGeometry
 int ifc_TreePostTreatment::ComputeIfcConnectionSurfaceGeometrySurface()
 {
-	int Res = 0;
+	int res = 0;
 
 	std::map<STRUCT_IFCENTITY*, std::string>::iterator it_Elem;
 	for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 	{
 		if (it_Elem->second == "IfcConnectionSurfaceGeometry")
-			Res = ComputeOneIfcConnectionSurfaceGeometrySurface(it_Elem->first);
+			res = ComputeOneIfcConnectionSurfaceGeometrySurface(it_Elem->first);
+		if (res) return res;
 	}// for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 
-	return Res;
+	return res;
 }
 
 //Calcul de la surface d'une IfcConnectionSurfaceGeometry
 int ifc_TreePostTreatment::ComputeOneIfcConnectionSurfaceGeometrySurface(STRUCT_IFCENTITY *st_IfcEntCS)
 {
-	int Res = 0;
+	int res = 0;
 
 	//Recup de toutes les coordonnées de tous les points du contour
 	double db_TotalSurf = 0.0;
@@ -160,15 +163,15 @@ int ifc_TreePostTreatment::ComputeOneIfcConnectionSurfaceGeometrySurface(STRUCT_
 	if (_CurrentIfcTree)
 		_CurrentIfcTree->FillQuantitiesAttributeOf_STRUCT_IFCENTITY(st_IfcEntCS, map_messages);
 	else
-		Res = 3;
+		res = 4003;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 
-	return Res;
+	return res;
 }
 
 //Calcul d'une surface plane à partir de ses contours
 double ifc_TreePostTreatment::ComputeSurfaceFromAContour(vector<double*> &vc_PointCoordCtr)
 {
-	//int Res = 0;
+	//int res = 0;
 
 	double db_Surf = 0.0;
 	vector<double*>::iterator it_Coord1Pt1;/*P1_x*/
@@ -186,58 +189,60 @@ double ifc_TreePostTreatment::ComputeSurfaceFromAContour(vector<double*> &vc_Poi
 //Creation des TIFCSurfaces par concatenation des IfcConnectionSurfaceGeometry en vis-à-vis
 int ifc_TreePostTreatment::CreateTIFCSurfaces()
 {
-	int Res = 0;
+	int res = 0;
 
 	std::map<STRUCT_IFCENTITY*, std::string>::iterator it_Elem;
 	for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 	{
 		if (it_Elem->second == "IfcConnectionSurfaceGeometry")
-			Res= CreateTIFCSurface(it_Elem->first);
+			res= CreateTIFCSurface(it_Elem->first);
+		if (res) return res;
 	}// for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 
-	return Res;
+	return res;
 }
 
 //Creation d'une TIFCSurface par concatenation des 2 IfcConnectionSurfaceGeometry en vis-à-vis
 int ifc_TreePostTreatment::CreateTIFCSurface(STRUCT_IFCENTITY *st_IfcEntCS)
 {
-	int Res = 0;
+	int res = 0;
 
 	//On vérifie que cette IfcConnectionSurfaceGeometry (st_IfcEntCS) n'a pas déjà sa TIFCSurface 
 	//car à sa création la même TIFCSurface est associée à 2 IfcConnectionSurfaceGeometry
 	if (st_IfcEntCS && st_IfcEntCS->st_TIFCSurface==nullptr)
 	{
 		if (_CurrentIfcTree)
-			Res = _CurrentIfcTree->BuildTIFCSurfaceTreeFrom_STRUCT_IFCENTITY(st_IfcEntCS);
+			res = _CurrentIfcTree->BuildTIFCSurfaceTreeFrom_STRUCT_IFCENTITY(st_IfcEntCS);
 		else
-			Res = 5;
+			res = 4005;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 	}
-	else
-		Res = 4;
+	//else
+	//	res = 4004;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 
-	return Res;
+	return res;
 }
 
 
 //Calcul des isobarycentres des IfcConnectionSurfaceGeometry
 int ifc_TreePostTreatment::CentroidsComputation()
 {
-	int Res = 0;
+	int res = 0;
 
 	std::map<STRUCT_IFCENTITY*, std::string>::iterator it_Elem;
 	for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 	{
 		if (it_Elem->second == "IfcConnectionSurfaceGeometry")
-			Res= CentroidComputation(it_Elem->first);
+			res= CentroidComputation(it_Elem->first);
+		if (res) return res;
 	}// for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 
-	return Res;
+	return res;
 }
 
 //Calcul de l'isobarycentre d'une IfcConnectionSurfaceGeometry
 int ifc_TreePostTreatment::CentroidComputation(STRUCT_IFCENTITY *st_IfcEntCS)
 {
-	int Res = 0;
+	int res = 0;
 
 	//Init isobarycentre
 	double db_IsoBar[3] = { 0.,0.,0. };
@@ -270,14 +275,14 @@ int ifc_TreePostTreatment::CentroidComputation(STRUCT_IFCENTITY *st_IfcEntCS)
 	if (_CurrentIfcTree)
 		_CurrentIfcTree->FillCentroidOf_STRUCT_IFCENTITY(st_IfcEntCS, db_IsoBar);
 	else
-		Res = 5;
+		res = 4006;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 
-	return Res;
+	return res;
 }
 
 int ifc_TreePostTreatment::RelimitSideBySideSurfaces()
 {
-	int Res = 0;
+	int res = 0;
 
 	std::map<STRUCT_IFCENTITY*, std::string>::iterator it_Elem;
 	for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
@@ -285,25 +290,20 @@ int ifc_TreePostTreatment::RelimitSideBySideSurfaces()
 		//Traitement des IfcConnectionSurfaceGeometry ayant 2 côté à étendre
 		//Recherche des IfcConnectionSurfaceGeometry avec 2 SideBySide
 		if (it_Elem->second == "IfcConnectionSurfaceGeometry" /*&& it_Elem->first->st_SideBySide.size()==2*/)
-			Res = RelimitSideBySideSurfacesOfMiddleIfcConnectionSurfaceGeometry(it_Elem->first);
-
-		//Traitement des IfcConnectionSurfaceGeometry ayant 1 côté à étendre
-		//DEB: SLC A FAIRE 1 sidebyside
-
+			res = RelimitSideBySideSurfacesOfMiddleIfcConnectionSurfaceGeometry(it_Elem->first);
+		if (res) return res;
 	}// for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 
-	return Res;
+	return res;
 }
 
 //Raccord du IfcConnectionSurfaceGeometry milieu PAS SEULEMENT!!! (entre 2 autres IfcConnectionSurfaceGeometry)
 int ifc_TreePostTreatment::RelimitSideBySideSurfacesOfMiddleIfcConnectionSurfaceGeometry(STRUCT_IFCENTITY *st_IfcEntCS)
 {
-	int Res = 0;
+	int res = 0;
 
 	//Retrouver les 2 IfcConnectionSurfaceGeometry qui sont côte-à-côte avec l'IfcConnectionSurfaceGeometry en cours
 	map <STRUCT_IFCENTITY*,bool> ::iterator it_SideBySideIfcEntCS;
-	//list <STRUCT_IFCENTITY*> ::iterator it_SideBySideIfcEntCS;
-	//for (it_SideBySideIfcEntCS = (st_IfcEntCS->st_SideBySide).begin(); it_SideBySideIfcEntCS != (st_IfcEntCS->st_SideBySide).end(); it_SideBySideIfcEntCS++)
 	for (it_SideBySideIfcEntCS = (st_IfcEntCS->mp_SideBySide).begin(); it_SideBySideIfcEntCS != (st_IfcEntCS->mp_SideBySide).end(); it_SideBySideIfcEntCS++)
 	{
 		//retrouver les paires de points les plus proches (chaque point appartenant à l'un ou l'autre des IfcConnectionSurfaceGeometry)
@@ -315,12 +315,12 @@ int ifc_TreePostTreatment::RelimitSideBySideSurfacesOfMiddleIfcConnectionSurface
 		}// if (!(*it_SideBySideIfcEntCS).second)
 	}// for (it_Elem2 = (it_Elem1->first->st_Contains).begin(); it_Elem2 != (it_Elem1->first->st_Contains).end(); it_Elem2++)
 
-	return Res;
+	return res;
 }
 
 int ifc_TreePostTreatment::RelimitOneSideBySideSurfaceOfMiddleIfcConnectionSurfaceGeometry(STRUCT_IFCENTITY *&st_IfcEntCS1, STRUCT_IFCENTITY *st_IfcEntCS2)
 {
-	int Res = 0;
+	int res = 0;
 
 	//Recup de toutes les coordonnées de tous les points du 1er contour
 	vector<double*> vc_PointCoordCtr1;
@@ -400,12 +400,12 @@ int ifc_TreePostTreatment::RelimitOneSideBySideSurfaceOfMiddleIfcConnectionSurfa
 		}// for (it_IndPtCtr1_IndPtCtr2_Dist; it_IndPtCtr1_IndPtCtr2_Dist!= li_IndPtCtr1_IndPtCtr2_Dist.end;++it_IndPtCtr1_IndPtCtr2_Dist)
 	}// if ((*it_IndPtCtr1_IndPtCtr2_Dist).second > db_eps)
 
-	return Res;
+	return res;
 }
 
 int ifc_TreePostTreatment::TransformEntitiesToWorlCoordFrame()
 {
-	int Res = 0;
+	int res = 0;
 
 	std::map<STRUCT_IFCENTITY*, std::string>::iterator it_Elem;
 	for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
@@ -435,7 +435,8 @@ int ifc_TreePostTreatment::TransformEntitiesToWorlCoordFrame()
 			}// for (it_llPt = (it_Elem->first->st_PointsDesContours).begin(); it_llPt != (it_Elem->first->st_PointsDesContours).end(); it_llPt++)
 
 			//Changer les coordonnées pour les mettre P/R au referentiel projet 
-			Res = TransformEntityToWorlCoordFrame(it_Elem->first, db_CoordPts, i_Size);
+			res = TransformEntityToWorlCoordFrame(it_Elem->first, db_CoordPts, i_Size);
+			if (res) return res;
 
 			//Mémoriser dans la structure les points modifiés
 			//A FAIRE
@@ -462,12 +463,12 @@ int ifc_TreePostTreatment::TransformEntitiesToWorlCoordFrame()
 		}// if (it_Elem->first->st_PointsDesContours.size != 0)
 	}// for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 
-	return Res;
+	return res;
 }
 
 int ifc_TreePostTreatment::TransformEntityToWorlCoordFrame(STRUCT_IFCENTITY *st_IfcEnt, double *&db_CoordPts, size_t int_Size)
 {
-	int Res = 0;
+	int res = 0;
 	
 	//S'il existe db_RelativePlacement sur l'entité en cours on l'applique
 	if (st_IfcEnt->db_RelativePlacement.size() != 0)
@@ -508,34 +509,39 @@ int ifc_TreePostTreatment::TransformEntityToWorlCoordFrame(STRUCT_IFCENTITY *st_
 	//IMPORTANT: S'il existe 2 BelongsTo (on se trouve au niveau du IfcConnectionSurfaceGeometry) prendre le ifcSpace et non l'élément de construction
 	if (st_IfcEnt->st_BelongsTo.size() == 1)
 	{
-		TransformEntityToWorlCoordFrame(*(st_IfcEnt->st_BelongsTo.begin()), db_CoordPts, int_Size);
+		res = TransformEntityToWorlCoordFrame(*(st_IfcEnt->st_BelongsTo.begin()), db_CoordPts, int_Size);
+		if (res) return res;
 	}// if (st_IfcEnt->st_BelongsTo.size == 1)
 	else if (st_IfcEnt->st_BelongsTo.size() == 2)
 	{
 		list <STRUCT_IFCENTITY*> ::iterator it_Elem = (st_IfcEnt->st_BelongsTo).begin();
 		if (string((*it_Elem)->ch_Type) == "IfcSpace")
 		{
-			TransformEntityToWorlCoordFrame((*it_Elem), db_CoordPts, int_Size);
+			res = TransformEntityToWorlCoordFrame((*it_Elem), db_CoordPts, int_Size);
+			if (res) return res;
 		}// if ((*it_Elem)->ch_Type = "IfcSpace")
 		else 
 		{
 			it_Elem++;
 			if (string((*it_Elem)->ch_Type) == "IfcSpace")
-				TransformEntityToWorlCoordFrame((*it_Elem), db_CoordPts, int_Size);
+			{
+				res = TransformEntityToWorlCoordFrame((*it_Elem), db_CoordPts, int_Size);
+				if (res) return res;
+			}// if (string((*it_Elem)->ch_Type) == "IfcSpace")
 			else
-				Res = 2;
+				res = 4008;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 		}// else if ((*it_Elem)->ch_Type = "IfcSpace")
 	}// if (st_IfcEnt->st_BelongsTo.size == 1)
 	else if (st_IfcEnt->st_BelongsTo.size() > 2)
-		Res = 1;
+		res = 4007;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 
-	return Res;
+	return res;
 }
 
 //Recherche des surfaces IfcConnectionSurfaceGeometry en vis-à-vis et côte-à-côte
 int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfaces()
 {
-	int Res = 0;
+	int res = 0;
 
 	//Recherche de tous les elements de construction
 	// => sont sous IfcSpace->st_Contains et ce qui n'est ni IfcConnectionSurfaceGeometry ni IfcProductDefinitionShape
@@ -559,10 +565,11 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfaces()
 	std::map<STRUCT_IFCENTITY*, std::string>::iterator it_BuildingElem;
 	for (it_BuildingElem = map_BuildingElem_Type.begin(); it_BuildingElem != map_BuildingElem_Type.end(); it_BuildingElem++)
 	{
-			Res = FindFaceToFaceAndSideBySideSurfacesOfOneBuildingelement(it_BuildingElem->first);
+		res = FindFaceToFaceAndSideBySideSurfacesOfOneBuildingelement(it_BuildingElem->first);
+		if (res) return res;
 	}// for (it_BuildingElem = map_BuildingElem_Type.begin(); it_BuildingElem != map_BuildingElem_Type.end(); it_BuildingElem++)
 
-	return Res;
+	return res;
 }
 
 //Routine pour trouver sur un même élément de construction 
@@ -570,7 +577,7 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfaces()
 //	les surfaces côte à côte (chacun appartenant à un même espace)
 int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfacesOfOneBuildingelement(STRUCT_IFCENTITY *st_IfcEntBE)
 {
-	int Res = 0;
+	int res = 0;
 	
 	//
 	//Préparations des éléments d'informations nécessaires aux algo de FaceToFace et SideBySide
@@ -624,13 +631,14 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfacesOfOneBuildingeleme
 
 	//
 	//Détection des IfcConnectionSurfaceGeometry en vis-à-vis
-	FindFaceToFaceSurfacesOfOneBuildingelement(st_IfcEntBE, map_IfcConn_IfcSpace, li_IfcConn_IfcConn_Dist);
+	res = FindFaceToFaceSurfacesOfOneBuildingelement(st_IfcEntBE, map_IfcConn_IfcSpace, li_IfcConn_IfcConn_Dist);
+	if (res) return res;
 
 	//
 	//Détection des IfcConnectionSurfaceGeometry en côte-à-côte
-	FindSideBySideSurfacesOfOneBuildingelement(st_IfcEntBE, map_IfcConn_IfcSpace, li_IfcConn_IfcConn_Dist, map_IfcSpace_NbIfcConn);
+	res = FindSideBySideSurfacesOfOneBuildingelement(st_IfcEntBE, map_IfcConn_IfcSpace, li_IfcConn_IfcConn_Dist, map_IfcSpace_NbIfcConn);
 
-	return Res;
+	return res;
 }
 
 //bool compare_dist(const pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double> &first, const pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double> &second)
@@ -647,7 +655,7 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfacesOfOneBuildingeleme
 //  li_IfcConn_IfcConn_Dist: liste de paire d'IfcConnectionSurfaceGeometry ORDONNEE en fonction de leur distance (permet de déterminer les vis-à-vis)
 int ifc_TreePostTreatment::FindFaceToFaceSurfacesOfOneBuildingelement(STRUCT_IFCENTITY *st_IfcEntBE, map<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *> &map_IfcConn_IfcSpace, list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>> &li_IfcConn_IfcConn_Dist)
 {
-	int Res = 0;
+	int res = 0;
 
 	//Surfaces en vis à vis (sur un même élément de construction) 
 	//Repérer les surfaces les plus proches et en vis à vis (=distance centre de gravite < 2*epaisseur mur)
@@ -677,7 +685,7 @@ int ifc_TreePostTreatment::FindFaceToFaceSurfacesOfOneBuildingelement(STRUCT_IFC
 		}// if (map_IfcConn_IfcSpace[(*it).first.first] != map_IfcConn_IfcSpace[(*it).first.second])
 	}// for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
 
-	return Res;
+	return res;
 }
 
 //Algo pour détecter les IfcConnectionSurfaceGeometry côte-à-côte
@@ -687,7 +695,7 @@ int ifc_TreePostTreatment::FindFaceToFaceSurfacesOfOneBuildingelement(STRUCT_IFC
 //  map_IfcSpace_NbIfcConn détermine le nombre d'IfcConnectionSurfaceGeometry par IfcSpace (permet à la fois de boucler sur les ifcSpaces et de déterminer "l'algo" en fonction du nombre d'IfcConnectionSurfaceGeometry)
 int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFCENTITY *st_IfcEntBE, map<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *> &map_IfcConn_IfcSpace, list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>> &li_IfcConn_IfcConn_Dist, map<STRUCT_IFCENTITY *, int> &map_IfcSpace_NbIfcConn)
 {
-	int Res = 0;
+	int res = 0;
 
 	//Surfaces côte à côte (sur un même élément de construction)
 	//Paires de Surfaces les plus proches qui ne soient pas en vis à vis et appartenant à un même espace
@@ -1075,15 +1083,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 		}// else if ((*mp_Space).second > 2)
 	}// for (mp_Elem1 = map_IfcSpace_NbIfcConn.begin(); mp_Elem1 != map_IfcSpace_NbIfcConn.end(); mp_Elem1++)
 
-	////
-	////Retrait des redondances dans le membre SideBySide des IfcConnectionSurfaceGeometry
-	//for (map<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>::iterator it_Elem1 = map_IfcConn_IfcSpace.begin(); it_Elem1 != map_IfcConn_IfcSpace.end(); it_Elem1++)
-	//{
-	//	((*it_Elem1).first)->st_SideBySide.sort();
-	//	((*it_Elem1).first)->st_SideBySide.unique();
-	//}// for (map<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>::iterator it_Elem1 = map_IfcConn_IfcSpace.begin(); it_Elem1 != map_IfcConn_IfcSpace.end(); it_Elem1++)
-
-	return Res;
+	return res;
 }
 
 double ifc_TreePostTreatment::ComputePtPtDistance(vector<double*> &vc_Point1, vector<double*> &vc_Point2)
