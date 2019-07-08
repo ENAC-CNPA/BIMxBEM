@@ -1,54 +1,65 @@
 template <class Type_Elmt_Of_Source, class Type_Source>
 int ifc_Tree::BuildTreeFromRoot(Type_Elmt_Of_Source *&pElem/*, STRUCT_IFCENTITY *&st_IfcTree*/, Type_Source * const& ifcXmlFile)
 {
+	int res = 0;
+
 	//lecture des Id et type de "IfcProject"
 	Map_String_String m_messages;
-	int iRes = ifcXmlFile->ReadIdAndTypeOfAnEntity(pElem, m_messages);
+	res = ifcXmlFile->ReadIdAndTypeOfAnEntity(pElem, m_messages);
+	if (res) return res;
 
 	//Recup du positionnement relatif
 	Type_Elmt_Of_Source *lpObjectPlac = nullptr;
-	ifcXmlFile->FindIfcGeometricRepresentationContext(pElem, lpObjectPlac);
+	res = ifcXmlFile->FindIfcGeometricRepresentationContext(pElem, lpObjectPlac);
+	if (res) return res;
 
 	//Recup de la matrice de position
 	double db_LocalMat[3][4];
-	ifcXmlFile->ReadIfcAxis2Placement3DMatrix(lpObjectPlac, db_LocalMat);
+	res = ifcXmlFile->ReadIfcAxis2Placement3DMatrix(lpObjectPlac, db_LocalMat);
+	if (res) return res;
 
 	//Création et Remplissage de la structure de "IfcProject"
 	_st_IfcTree = new STRUCT_IFCENTITY();
 	FillAttributeOf_STRUCT_IFCENTITY(_st_IfcTree, m_messages, db_LocalMat);
 
 	//Recupération chainée des entités successives de "IfcProject"
-	iRes = BuildTreeFrom(pElem, ifcXmlFile, _st_IfcTree);
+	res = BuildTreeFrom(pElem, ifcXmlFile, _st_IfcTree);
+	if (res) return res;
 
-	return iRes;
+	return res;
 }
 
 template <class Type_Elmt_Of_Source, class Type_Source>
 int ifc_Tree::BuildTreeFromRelAggregates(list<Type_Elmt_Of_Source*> &lpRelatedObjects, Type_Source * const& ifcXmlFile, STRUCT_IFCENTITY *st_IfcBelongTo)
 {
-	//Boucle sur les RelatedObjects de IfcRelAggregates en cours
 	int res = 0;
+
+	//Boucle sur les RelatedObjects de IfcRelAggregates en cours
 	list <Type_Elmt_Of_Source*> ::iterator it_Elem;
 	for (it_Elem = lpRelatedObjects.begin(); it_Elem != lpRelatedObjects.end(); it_Elem++)
 	{
 		//lecture du contenu des child d'un IfcEntity liés à "IfcProject"
 		Map_String_String map_messages;
 		res = ifcXmlFile->ReadIdAndTypeOfAnEntity(*it_Elem, map_messages);
+		if (res) return res;
 
 		//Recup du positionnement relatif
 		Type_Elmt_Of_Source *lpObjectPlac = nullptr;
-		ifcXmlFile->FindIfcLocalPlacement(*it_Elem, lpObjectPlac);
+		res = ifcXmlFile->FindIfcLocalPlacement(*it_Elem, lpObjectPlac);
+		if (res) return res;
 
 		//Recup de la matrice de position
 		double db_LocalMat[3][4];
-		ifcXmlFile->ReadIfcAxis2Placement3DMatrix(lpObjectPlac, db_LocalMat);
+		res = ifcXmlFile->ReadIfcAxis2Placement3DMatrix(lpObjectPlac, db_LocalMat);
+		if (res) return res;
 
 		//Création et Remplissage de la structure de "IfcEntity"
 		STRUCT_IFCENTITY * st_IfcContain = new STRUCT_IFCENTITY;
 		FillAttributeOf_STRUCT_IFCENTITY(st_IfcContain, map_messages, db_LocalMat, &(*st_IfcBelongTo));
 
 		//Appel Récursif 
-		BuildTreeFrom(*it_Elem, ifcXmlFile, st_IfcContain);
+		res = BuildTreeFrom(*it_Elem, ifcXmlFile, st_IfcContain);
+		if (res) return res;
 	}// for (it_Elem = lpRelatedObjects.begin(); it_Elem != lpRelatedObjects.end(); it_Elem++)
 
 	return res;
@@ -57,14 +68,16 @@ int ifc_Tree::BuildTreeFromRelAggregates(list<Type_Elmt_Of_Source*> &lpRelatedOb
 template <class Type_Elmt_Of_Source, class Type_Source>
 int ifc_Tree::BuildTreeFromShapeOfSpace(list<Type_Elmt_Of_Source*> &lpShape, Type_Source * const& ifcXmlFile, STRUCT_IFCENTITY *st_IfcBelongTo)
 {
-	//Boucle sur les IfcProductDefinitionShape de IfcSpace en cours
 	int res = 0;
+
+	//Boucle sur les IfcProductDefinitionShape de IfcSpace en cours
 	list <Type_Elmt_Of_Source*> ::iterator it_ElemShape;
 	for (it_ElemShape = lpShape.begin(); it_ElemShape != lpShape.end(); it_ElemShape++)
 	{
 		//lecture du contenu des child d'un IfcEntity liés à "IfcProject"
 		Map_String_String map_messages;
 		res = ifcXmlFile->ReadIdAndTypeOfAnEntity(*it_ElemShape, map_messages);
+		if (res) return res;
 
 		// !!!! IfcProductDefinitionShape n'a pas de LocalPlacement !!!!
 
@@ -73,10 +86,10 @@ int ifc_Tree::BuildTreeFromShapeOfSpace(list<Type_Elmt_Of_Source*> &lpShape, Typ
 		FillAttributeOf_STRUCT_IFCENTITY(st_IfcContainRep, map_messages, nullptr, &(*st_IfcBelongTo));
 
 		//Appel Récursif 
-		//1/2) A REVOIR Voir à récuperer les data (les n faces) des ifcSpaces...=> cf STRUCT_GEOMDATA_POINTS
 		//IfcConnectionSurfaceGeometry<SurfaceOnRelatingElement<IfcCurveBoundedPlane
 		//IfcCurveBoundedPlane<BasisSurface<IfcPlane...
-		BuildExplicitDataTreeFrom(*it_ElemShape, ifcXmlFile, st_IfcContainRep);
+		res = BuildExplicitDataTreeFrom(*it_ElemShape, ifcXmlFile, st_IfcContainRep);
+		if (res) return res;
 	}// for (it_ElemShape = lpRelatedObjects.begin(); it_ElemShape != lpRelatedObjects.end(); it_ElemShape++)
 
 	return res;
@@ -85,8 +98,9 @@ int ifc_Tree::BuildTreeFromShapeOfSpace(list<Type_Elmt_Of_Source*> &lpShape, Typ
 template <class Type_Elmt_Of_Source, class Type_Source>
 int ifc_Tree::BuildTreeFromRelSpaceBoundary(list<Type_Elmt_Of_Source*> &lpRelatedBuildingElement, list<Type_Elmt_Of_Source*> &lpConnectionSurfaceGeometry, Type_Source * const& ifcXmlFile, STRUCT_IFCENTITY *st_IfcBelongTo)
 {
-	//Boucle à la fois sur les éléments de construction et sur les ConnectionSurfaceGeometry (correspondance unaire 1 <-> 1)
 	int res = 0;
+
+	//Boucle à la fois sur les éléments de construction et sur les ConnectionSurfaceGeometry (correspondance unaire 1 <-> 1)
 	list <Type_Elmt_Of_Source*> ::iterator it_ElemBE;
 	list <Type_Elmt_Of_Source*> ::iterator it_ElemCSG;
 	for (it_ElemBE = lpRelatedBuildingElement.begin(), it_ElemCSG = lpConnectionSurfaceGeometry.begin(); it_ElemBE != lpRelatedBuildingElement.end() && it_ElemCSG != lpConnectionSurfaceGeometry.end(); it_ElemBE++, it_ElemCSG++)
@@ -94,6 +108,7 @@ int ifc_Tree::BuildTreeFromRelSpaceBoundary(list<Type_Elmt_Of_Source*> &lpRelate
 		//lecture du contenu des Buildingelements de "IfcSpace"
 		Map_String_String map_messages;
 		res = ifcXmlFile->ReadIdAndTypeOfAnEntity(*it_ElemBE, map_messages);
+		if (res) return res;
 
 		//Création (ou recuperation) et Remplissage de la structure du Building Element "IfcWall..."
 		STRUCT_IFCENTITY * st_IfcContainBE = nullptr;
@@ -111,6 +126,7 @@ int ifc_Tree::BuildTreeFromRelSpaceBoundary(list<Type_Elmt_Of_Source*> &lpRelate
 			//lecture du Quantities des Buildingelements de "IfcSpace"
 			map_messages.clear();
 			res = ifcXmlFile->ReadKeyWordsAndValuesOfIfcElementQuantity(*it_ElemBE, map_messages);
+			if (res) return res;
 			FillQuantitiesAttributeOf_STRUCT_IFCENTITY(st_IfcContainBE, map_messages);
 
 			//Fillattribute.... A FAIRE
@@ -119,16 +135,17 @@ int ifc_Tree::BuildTreeFromRelSpaceBoundary(list<Type_Elmt_Of_Source*> &lpRelate
 		//lecture du contenu des ConnectionSurfaceGeometry (sous-Faces) de "IfcSpace"
 		map_messages.clear();
 		res = ifcXmlFile->ReadIdAndTypeOfAnEntity(*it_ElemCSG, map_messages);
+		if (res) return res;
 
 		//Création et Remplissage de la structure de "IfcConnectionSurfaceGeometry"
 		STRUCT_IFCENTITY * st_IfcContainCSG = new STRUCT_IFCENTITY;
 		FillAttributeOf_STRUCT_IFCENTITY(st_IfcContainCSG, map_messages, nullptr, &(*st_IfcBelongTo), &(*st_IfcContainBE));
 
 		//Appel Récursif 
-		//2/2) A REVOIR Voir à récuperer les data (les n ss-faces) des ifcSpaces...=> cf STRUCT_GEOMDATA_POINTS
 		//IfcConnectionSurfaceGeometry<SurfaceOnRelatingElement<IfcCurveBoundedPlane
 		//IfcCurveBoundedPlane<BasisSurface<IfcPlane...
-		BuildExplicitDataTreeFrom(*it_ElemCSG, ifcXmlFile, st_IfcContainCSG);
+		res = BuildExplicitDataTreeFrom(*it_ElemCSG, ifcXmlFile, st_IfcContainCSG);
+		if (res) return res;
 	}// for (int int_Index = 0; ppRelatedObjects[int_Index]; int_Index++)
 
 	return res;
@@ -219,12 +236,16 @@ int ifc_Tree::BuildExplicitDataTreeFromIfcConnectionSurfaceGeometry(Type_Elmt_Of
 	//</IfcCartesianPoint>
 	//
 
+	int res = 0;
+
 	//Recup de repere local P/R reprere global
 	Type_Elmt_Of_Source *lpObjectPlac = nullptr;
-	ifcXmlFile->FindIfcCurveBoundedPlanePlacemcent(pElem, lpObjectPlac);
+	res = ifcXmlFile->FindIfcCurveBoundedPlanePlacemcent(pElem, lpObjectPlac);
+	if (res) return res;
 
 	double db_LocalMat[3][4];
-	int Res = ifcXmlFile->ReadIfcAxis2Placement3DMatrix(lpObjectPlac, db_LocalMat);
+	res = ifcXmlFile->ReadIfcAxis2Placement3DMatrix(lpObjectPlac, db_LocalMat);
+	if (res) return res;
 
 	FillRelativePlacementOf_STRUCT_IFCENTITY(st_IfcBelongTo, db_LocalMat);
 
@@ -243,14 +264,15 @@ int ifc_Tree::BuildExplicitDataTreeFromIfcConnectionSurfaceGeometry(Type_Elmt_Of
 	// "l" est une liste d'entités (IfcPolyline,...) sous Segments>ParentCurve (cette liste rassemble la multiplicité de ces Segments>ParentCurve)
 	list <Type_Elmt_Of_Source*> lpObjectSubFace;
 	list <list <list <Type_Elmt_Of_Source*>>> lllBoundaryOfSurface_SubFace;
-	Res = ifcXmlFile->FindObjectFromRefAndPathBy3(pElem, it_ElemForPath_SubFace, lst_Path_For_SubFace.end(), lllBoundaryOfSurface_SubFace, lpObjectSubFace);
+	res = ifcXmlFile->FindObjectFromRefAndPathBy3(pElem, it_ElemForPath_SubFace, lst_Path_For_SubFace.end(), lllBoundaryOfSurface_SubFace, lpObjectSubFace);
+	if (res) return res;
 
 	//Recupération des points définissant chaque face + création des faces et assoc avec les "BelongTo" 
 	//Si il y a plus d'une Rep => problème 
 	if (lllBoundaryOfSurface_SubFace.size() > 1)
-		return 1;
+		return 2001;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 	if (lllBoundaryOfSurface_SubFace.size() != lpObjectSubFace.size())
-		return 2;
+		return 2002;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 	//
 	//Recup de la Rep
 	list <list <list <Type_Elmt_Of_Source*>>> ::iterator it_BoundaryOfSurface = lllBoundaryOfSurface_SubFace.begin();
@@ -262,17 +284,19 @@ int ifc_Tree::BuildExplicitDataTreeFromIfcConnectionSurfaceGeometry(Type_Elmt_Of
 	{
 		//lecture du contenu des child d'un IfcEntity liés à "IfcProject"
 		Map_String_String map_messages;
-		Res = ifcXmlFile->ReadIdAndTypeOfAnEntity(*it_SubFace, map_messages);
+		res = ifcXmlFile->ReadIdAndTypeOfAnEntity(*it_SubFace, map_messages);
+		if (res) return res;
 
 		list<list<double*>> SubFacePtsCoord;//la list<double*> définit un des contours de la face, list<list<double*>> définit les contours de la face
-		Res = ifcXmlFile->ReadPtsDefiningPolyloopOrPolyline((*it_SegmentsOfBoundary), SubFacePtsCoord);
+		res = ifcXmlFile->ReadPtsDefiningPolyloopOrPolyline((*it_SegmentsOfBoundary), SubFacePtsCoord);
+		if (res) return res;
 
 		//Création et Remplissage de la structure "Sous-Face"
 		STRUCT_IFCENTITY * st_IfcSubFacGeomRep = new STRUCT_IFCENTITY;
 		FillGeomAttributeOf_STRUCT_IFCENTITY(st_IfcSubFacGeomRep, SubFacePtsCoord, st_IfcBelongTo, map_messages);
 	}// for (it_SegmentsOfBoundary = (*it_BoundaryOfSurface).begin(); it_SegmentsOfBoundary != (*it_BoundaryOfSurface).end(); it_SegmentsOfBoundary++)
 
-	return Res;
+	return res;
 }
 
 template <class Type_Elmt_Of_Source, class Type_Source>
@@ -397,20 +421,24 @@ int ifc_Tree::BuildExplicitDataTreeFromIfcProductDefinitionShape(Type_Elmt_Of_So
 	//</IfcGeometricCurveSet>
 	//
 
-	int Res = 0;
+	int res = 0;
 
 	//
 	//Recup de l'IfcShapeRepresentation de type BRep
 	Type_Elmt_Of_Source *lpObjectFound = nullptr;
-	ifcXmlFile->FindIfcShapeRepresentationBrep(pElem, lpObjectFound);
+	res = ifcXmlFile->FindIfcShapeRepresentationBrep(pElem, lpObjectFound);
+	if (res) return res;
+
 	if (lpObjectFound)
 	{
 		//Recup de repere local P/R reprere global
 		Type_Elmt_Of_Source *lpObjectPlac = nullptr;
-		ifcXmlFile->FindIfcGeometricRepresentationSubContext(lpObjectFound, lpObjectPlac);
+		res = ifcXmlFile->FindIfcGeometricRepresentationSubContext(lpObjectFound, lpObjectPlac);
+		if (res) return res;
 
 		double db_LocalMat[3][4];
-		Res = ifcXmlFile->ReadIfcAxis2Placement3DMatrix(lpObjectPlac, db_LocalMat);
+		res = ifcXmlFile->ReadIfcAxis2Placement3DMatrix(lpObjectPlac, db_LocalMat);
+		if (res) return res;
 
 		FillRelativePlacementOf_STRUCT_IFCENTITY(st_IfcBelongTo, db_LocalMat);
 
@@ -431,14 +459,15 @@ int ifc_Tree::BuildExplicitDataTreeFromIfcProductDefinitionShape(Type_Elmt_Of_So
 		// "l" est une liste d'entités (IfcPolyLoop,...) sous Bounds>Bound (cette liste rassemble la multiplicité de ces Bounds>Bound)
 		list <Type_Elmt_Of_Source*> lpObjectFace;
 		list <list <list <Type_Elmt_Of_Source*>>> lllCFsFacesOfOneItem_Face; // => liste des BRep (1 seule utile pour BEM??) 
-		Res = ifcXmlFile->FindObjectFromRefAndPathBy3(lpObjectFound, it_ElemForPath_BodyFaces, lst_Path_For_BodyFaces.end(), lllCFsFacesOfOneItem_Face, lpObjectFace);
+		res = ifcXmlFile->FindObjectFromRefAndPathBy3(lpObjectFound, it_ElemForPath_BodyFaces, lst_Path_For_BodyFaces.end(), lllCFsFacesOfOneItem_Face, lpObjectFace);
+		if (res) return res;
 
 		//Recupération des points définissant chaque face + création des faces et assoc avec les "BelongTo" 
 		//Si il y a plus d'une Rep => problème 
 		if (lllCFsFacesOfOneItem_Face.size() > 1)
-			return 1;
+			return 2003;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 		if ( (*(lllCFsFacesOfOneItem_Face.begin())).size() != lpObjectFace.size())
-			return 2;
+			return 2004;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
 		//
 		//Recup de la Rep
 		list <list <list <Type_Elmt_Of_Source*>>> ::iterator it_CFsFacesOfOneItem = lllCFsFacesOfOneItem_Face.begin();
@@ -450,10 +479,12 @@ int ifc_Tree::BuildExplicitDataTreeFromIfcProductDefinitionShape(Type_Elmt_Of_So
 		{
 			//lecture du contenu des child d'un IfcEntity liés à "IfcProject"
 			Map_String_String map_messages;
-			Res = ifcXmlFile->ReadIdAndTypeOfAnEntity(*it_Face, map_messages);
+			res = ifcXmlFile->ReadIdAndTypeOfAnEntity(*it_Face, map_messages);
+			if (res) return res;
 
 			list<list<double*>> FacePtsCoord;//la list<double*> définit un des contours de la face, list<list<double*>> définit les contours de la face
-			Res = ifcXmlFile->ReadPtsDefiningPolyloopOrPolyline(*it_BoundsOfOneCFsFace, FacePtsCoord);
+			res = ifcXmlFile->ReadPtsDefiningPolyloopOrPolyline(*it_BoundsOfOneCFsFace, FacePtsCoord);
+			if (res) return res;
 
 			//Création et Remplissage de la structure "Face"
 			STRUCT_IFCENTITY * st_IfcFacGeomRep = new STRUCT_IFCENTITY;
@@ -462,7 +493,7 @@ int ifc_Tree::BuildExplicitDataTreeFromIfcProductDefinitionShape(Type_Elmt_Of_So
 
 	}// if(lpObjectFound)
 
-	return Res;
+	return res;
 }
 
 //
@@ -474,50 +505,70 @@ int ifc_Tree::BuildExplicitDataTreeFromIfcProductDefinitionShape(Type_Elmt_Of_So
 template <class Type_Elmt_Of_Source, class Type_Source>
 int ifc_Tree::BuildTreeFrom(Type_Elmt_Of_Source* pElem, Type_Source * const& ifcXmlFile, STRUCT_IFCENTITY *st_IfcBelongTo)
 {
+	int res = 0;
+
 	//
 	// IfcRelAggregates
 	//
 	//Recuperation des IfcEntity liés à pElem ("IfcProject",ifcSite...) par le lien binaire IfcRelAggregates
 	list<Type_Elmt_Of_Source*> lpRelatedObjects;
-	int res = ifcXmlFile->FindRelatedObjectsInRelAggregatesFromRelatingObject(pElem, &lpRelatedObjects);
+	res = ifcXmlFile->FindRelatedObjectsInRelAggregatesFromRelatingObject(pElem, &lpRelatedObjects);
+	if (res) return res;
 
 	// Si lpRelatedObjects est vide il n'y a pas d'autre RelAggreg => à priori à partir des ifcspaces
 	// ???Si lpRelatedObjects est vide il n'y a pas d'autre RelAggreg => essayer alors RelProperties...???
 	if (lpRelatedObjects.size() != 0)
 	{
-		BuildTreeFromRelAggregates(lpRelatedObjects, ifcXmlFile, &(*st_IfcBelongTo));
+		res = BuildTreeFromRelAggregates(lpRelatedObjects, ifcXmlFile, &(*st_IfcBelongTo));
+		if (res) return res;
 	}// if (lpRelatedObjects.size!=0)
 	else
 	{
-		//
-		//lecture du Quantities des "IfcSpace"
-		Map_String_String map_messages;
-		res = ifcXmlFile->ReadKeyWordsAndValuesOfIfcElementQuantity(pElem, map_messages);
-		FillQuantitiesAttributeOf_STRUCT_IFCENTITY(st_IfcBelongTo, map_messages);
-
-		//
-		// IfcProductDefinitionShape
-		//
-		//récupérer le lien IfcSpace <-> Faces (pas le data geom!) => IfcProductDefinitionShape
-		//Recuperation de l'IfcEntity (IfcProductDefinitionShape) de "IfcSpace" consigné dans sa definition
-		list<Type_Elmt_Of_Source*> lpShape;
-		res = ifcXmlFile->FindRepresentationInSpace(pElem, &lpShape);
-
-		BuildTreeFromShapeOfSpace(lpShape, ifcXmlFile, &(*st_IfcBelongTo));
-
-		//
-		// IfcRelSpaceBoundary
-		// 
-		//Recuperation des IfcEntity liés à "IfcSpace" par le lien ternaire IfcRelSpaceBoundary
-		list<Type_Elmt_Of_Source*> lpRelatedBuildingElement;
-		list<Type_Elmt_Of_Source*> lpConnectionSurfaceGeometry;
-		res = ifcXmlFile->FindRelatedBuildingElementAndConnectionGeometryInRelSpaceBoundaryFromRelatingSpace(pElem, &lpRelatedBuildingElement, &lpConnectionSurfaceGeometry);
-
-		if (lpRelatedBuildingElement.size() != 0 && lpRelatedBuildingElement.size() == lpConnectionSurfaceGeometry.size())
+		//Test car il peut exister par exemple des IfcBuildingStorey sans espace => ne pas continuer cette branche
+		// Par sécurité, test étendu aux entités "pères": IfcProject, IfcSite, IfcBuilding, IfcBuildingStorey
+		if (string(pElem->Value()) != string("IfcProject") 
+			&& string(pElem->Value()) != string("IfcSite")
+			&& string(pElem->Value()) != string("IfcBuilding")
+			&& string(pElem->Value()) != string("IfcBuildingStorey")
+			)
 		{
-			BuildTreeFromRelSpaceBoundary(lpRelatedBuildingElement, lpConnectionSurfaceGeometry, ifcXmlFile, &(*st_IfcBelongTo));
-		}// if (lpRelatedBuildingElement.size() != 0 && lpRelatedBuildingElement.size() == lpConnectionSurfaceGeometry.size())
+			//
+			//lecture du Quantities des "IfcSpace"
+			Map_String_String map_messages;
+			res = ifcXmlFile->ReadKeyWordsAndValuesOfIfcElementQuantity(pElem, map_messages);
+			if (res) return res;
+			FillQuantitiesAttributeOf_STRUCT_IFCENTITY(st_IfcBelongTo, map_messages);
 
+			//
+			// IfcProductDefinitionShape
+			//
+			//récupérer le lien IfcSpace <-> Faces (pas le data geom!) => IfcProductDefinitionShape
+			//Recuperation de l'IfcEntity (IfcProductDefinitionShape) de "IfcSpace" consigné dans sa definition
+			list<Type_Elmt_Of_Source*> lpShape;
+			res = ifcXmlFile->FindRepresentationInSpace(pElem, &lpShape);
+			if (res) return res;
+
+			res = BuildTreeFromShapeOfSpace(lpShape, ifcXmlFile, &(*st_IfcBelongTo));
+			if (res) return res;
+
+			//
+			// IfcRelSpaceBoundary
+			// 
+			//Recuperation des IfcEntity liés à "IfcSpace" par le lien ternaire IfcRelSpaceBoundary
+			list<Type_Elmt_Of_Source*> lpRelatedBuildingElement;
+			list<Type_Elmt_Of_Source*> lpConnectionSurfaceGeometry;
+			res = ifcXmlFile->FindRelatedBuildingElementAndConnectionGeometryInRelSpaceBoundaryFromRelatingSpace(pElem, &lpRelatedBuildingElement, &lpConnectionSurfaceGeometry);
+			if (res) return res;
+
+			if (lpRelatedBuildingElement.size() != 0 && lpRelatedBuildingElement.size() == lpConnectionSurfaceGeometry.size())
+			{
+				res = BuildTreeFromRelSpaceBoundary(lpRelatedBuildingElement, lpConnectionSurfaceGeometry, ifcXmlFile, &(*st_IfcBelongTo));
+				if (res) return res;
+			}// if (lpRelatedBuildingElement.size() != 0 && lpRelatedBuildingElement.size() == lpConnectionSurfaceGeometry.size())
+		}// if (string(pElem->Value()) != string("IfcProject")
+		//  && string(pElem->Value()) != string("IfcSite")
+		//	&& string(pElem->Value()) != string("IfcBuilding")
+		//	&& string(pElem->Value()) != string("IfcBuildingStorey")
 	}// else if (lpRelatedObjects.size!=0)
 
 	return res;
@@ -526,12 +577,13 @@ int ifc_Tree::BuildTreeFrom(Type_Elmt_Of_Source* pElem, Type_Source * const& ifc
 template <class Type_Elmt_Of_Source, class Type_Source>
 int ifc_Tree::BuildExplicitDataTreeFrom(Type_Elmt_Of_Source* pElem, Type_Source * const& ifcXmlFile, STRUCT_IFCENTITY *st_IfcBelongTo)
 {
-	int Res = 0;
+	int res = 0;
 	
 	//Pour IfcConnectionSurfaceGeometry => 1 Sous-Face
 	if (string(pElem->Value()) == string("IfcConnectionSurfaceGeometry"))
 	{
-		Res = BuildExplicitDataTreeFromIfcConnectionSurfaceGeometry(pElem, ifcXmlFile, st_IfcBelongTo);
+		res = BuildExplicitDataTreeFromIfcConnectionSurfaceGeometry(pElem, ifcXmlFile, st_IfcBelongTo);
+		if (res) return res;
 	}// if (string(pElem->Value()) == string("IfcConnectionSurfaceGeometry"))
 
 	 //Pour IfcProductDefinitionShape => n Faces
@@ -545,9 +597,10 @@ int ifc_Tree::BuildExplicitDataTreeFrom(Type_Elmt_Of_Source* pElem, Type_Source 
 	 //
 	if (string(pElem->Value()) == string("IfcProductDefinitionShape"))
 	{
-		Res=BuildExplicitDataTreeFromIfcProductDefinitionShape(pElem, ifcXmlFile, st_IfcBelongTo);
+		res=BuildExplicitDataTreeFromIfcProductDefinitionShape(pElem, ifcXmlFile, st_IfcBelongTo);
+		if (res) return res;
 	}// if (string(pElem->Value()) == string("IfcProductDefinitionShape"))
 
-	return 0;
+	return res;
 }
 
