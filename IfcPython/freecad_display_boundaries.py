@@ -13,10 +13,14 @@ import Part
 def display_boundaries(ifc_path):
     ifc_file = ifcopenshell.open(ifc_path)
     settings = ifcopenshell.geom.settings()
-    settings.set(settings.USE_PYTHON_OPENCASCADE, True)
     settings.set(settings.USE_WORLD_COORDS, True)
     settings.set(settings.INCLUDE_CURVES, True)
-    settings.set(settings.USE_BREP_DATA, True)
+    brep = False
+    if brep:
+        settings.set(settings.USE_PYTHON_OPENCASCADE, True)
+        settings.set(settings.USE_BREP_DATA, True)
+    else:
+        settings.set(settings.USE_PYTHON_OPENCASCADE, False)
     space_boundaries = ifc_file.by_type("IfcRelSpaceBoundary")
 
     doc = FreeCAD.ActiveDocument
@@ -25,17 +29,31 @@ def display_boundaries(ifc_path):
         outer_boundary = (
             space_boundary.ConnectionGeometry.SurfaceOnRelatingElement.OuterBoundary
         )
+        ifc_shape = ifcopenshell.geom.create_shape(settings, outer_boundary)
 
-        occ_shape = ifcopenshell.geom.create_shape(settings, outer_boundary)
-        tmp_file = "/tmp/shape.brep"
-        OCC.BRepTools.breptools_Write(occ_shape, tmp_file)
-        shape = Part.read(tmp_file)
+
         face = doc.addObject("Part::Feature", "Face")
-        face.Shape = Part.Face(shape.Wires)
+        if brep:
+            face.Shape = Part.Face(geom_by_brep(ifc_shape))
+        else:
+            face.Shape = Part.Face(geom_by_mesh(ifc_shape))
         face.Placement = get_placement(space_boundary)
         face.ViewObject.ShapeColor = get_color(space_boundary.RelatedBuildingElement)
 
     doc.recompute()
+
+
+def geom_by_brep(ifc_shape):
+    tmp_file = "/tmp/shape.brep"
+    OCC.BRepTools.breptools_Write(ifc_shape, tmp_file)
+    return Part.read(tmp_file).Wires
+
+
+def geom_by_mesh(ifc_shape):
+    """Retrieve boundaries surface wire"""
+    ifc_verts = ifc_shape.verts
+    occ_verts = [FreeCAD.Vector(ifc_verts[i:i+3]) for i in range(0, len(ifc_verts), 3)]
+    return Part.makePolygon(occ_verts)
 
 
 def get_placement(boundary):
@@ -69,5 +87,5 @@ if __name__ == "__main__":
     ptvsd.wait_for_attach()
     # breakpoint()
     display_boundaries(
-        ifc_path="/home/cyril/Projects/BIMxBEM/IfcPython/9000_BIMxBEM_TestModèle_ACAD.ifc"
+        ifc_path="/home/cyril/git/BIMxBEM/IfcPython/9000_BIMxBEM_TestModèle_R19.ifc"
     )
