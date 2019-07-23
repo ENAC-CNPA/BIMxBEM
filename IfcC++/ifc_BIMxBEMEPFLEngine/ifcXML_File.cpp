@@ -8,7 +8,7 @@ ifcXML_File::ifcXML_File() :_hRoot(0), _cl_ifcTree(nullptr)/*, st_IfcTree(nullpt
 ifcXML_File::~ifcXML_File()
 {
 	//
-	//Desalloc des donnÈes membres de ifcXML_File
+	//Desalloc des donn√©es membres de ifcXML_File
 	if (_cl_ifcTree)
 		delete _cl_ifcTree;
 	_cl_ifcTree = nullptr;
@@ -25,36 +25,36 @@ int ifcXML_File::LoadFile(char *strFileName)
 	//http://www.grinninglizard.com/tinyxmldocs/classTiXmlDocument.html
 	TiXmlDocument doc(strFileName);
 	if (!doc.LoadFile())
-		return 1001;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÈro de l'erreur dans cette routine
+		return 1001;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=num√©ro de l'erreur dans cette routine
 
 	TiXmlHandle hDoc(&doc);
 	TiXmlElement* pElem = hDoc.FirstChildElement().ToElement();
 
 	// should always have a valid root but handle gracefully if it does
 	if (!pElem)
-		return 1002;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÈro de l'erreur dans cette routine
+		return 1002;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=num√©ro de l'erreur dans cette routine
 
 	// memo root
 	_hRoot = pElem->FirstChild("ex:uos");
 
-	//Chargement de toutes les entitÈs du fichier xml dans un tableau de type "MAP": 
+	//Chargement de toutes les entit√©s du fichier xml dans un tableau de type "MAP": 
 	//	_map_ID_Elmt["i1722"] = TiXmlElement *(<IfcProject id="i1722">)
 	int res = LoadIfcEntities(_hRoot);
 	if (res != 0)
-		return 1003;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÈro de l'erreur dans cette routine
+		return 1003;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=num√©ro de l'erreur dans cette routine
 
 	//Initialisation de la map _map_BE_Quantities
-	// => Chargement de toutes les entitÈs du fichier xml dans un tableau de type "MAP" associant ‡ chaque ÈlÈment de construction (IfcWallStandardCase, IfcSlab, ...) 
-	//	  leurs propriÈtÈs "IfcElementQuantity" (Length, Width, Height, GrossFootprintArea, ...):
+	// => Chargement de toutes les entit√©s du fichier xml dans un tableau de type "MAP" associant √† chaque √©l√©ment de construction (IfcWallStandardCase, IfcSlab, ...) 
+	//	  leurs propri√©t√©s "IfcElementQuantity" (Length, Width, Height, GrossFootprintArea, ...):
 	//	  _map_BE_Quantities[TiXmlElement * Buildingelemet] = TiXmlElement * IfcElementQuantity
 	res = ScanIfcRelDefinesByPropertiesForQuantities();
 	if (res != 0)
-		return 1004;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÈro de l'erreur dans cette routine
+		return 1004;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=num√©ro de l'erreur dans cette routine
 
-	//Recup de l'ÈlÈment "IfcProject"
+	//Recup de l'√©l√©ment "IfcProject"
 	pElem = _hRoot.FirstChild("IfcProject").ToElement();
 
-	// Constitution de l'arbre structure de donnÈes BIMxBEM
+	// Constitution de l'arbre structure de donn√©es BIMxBEM
 	_cl_ifcTree = new ifc_Tree();
 	if (_cl_ifcTree)
 		res = _cl_ifcTree->BuildTreeFromRoot<TiXmlElement, ifcXML_File>(pElem, this);
@@ -63,28 +63,28 @@ int ifcXML_File::LoadFile(char *strFileName)
 }
 
 //
-// La dÈfinition d'une entitÈ se compose de lien direct (les attributs) et de liens indirects vers d'autres entitÈs (les entitÈs liÈes)
+// La d√©finition d'une entit√© se compose de lien direct (les attributs) et de liens indirects vers d'autres entit√©s (les entit√©s li√©es)
 //
-// Cette classe se dÈcompose en 4 parties principales:
+// Cette classe se d√©compose en 4 parties principales:
 //		1.0: Routines de base de lecture des attributs
-//		1.1: Routines spÈcifiques de lecture des attributs
-//		2.0: Routines de base de recherche des entitÈs liÈs
-//		2.1: Routines de recherche par chemin "UN-aire" des entitÈs liÈes
-//		2.2: Routines de recherche par chemin "MULTI-aire" des entitÈs liÈes
+//		1.1: Routines sp√©cifiques de lecture des attributs
+//		2.0: Routines de base de recherche des entit√©s li√©s
+//		2.1: Routines de recherche par chemin "UN-aire" des entit√©s li√©es
+//		2.2: Routines de recherche par chemin "MULTI-aire" des entit√©s li√©es
 //		3.0: Routines de scan 
 //
-// Pour chercher des entitÈs depuis leur id => utiliser _map_ID_Elmt (si on a l'id) 
-// Pour chercher des entitÈs depuis leur ref => utiliser la routine FindObjectFromRef 
-// Pour chercher des entitÈs depuis leur nom de type ifc => utiliser routines de base du parser (par exemple "TiXmlHandle.Child(pKeyword1,..)")
+// Pour chercher des entit√©s depuis leur id => utiliser _map_ID_Elmt (si on a l'id) 
+// Pour chercher des entit√©s depuis leur ref => utiliser la routine FindObjectFromRef 
+// Pour chercher des entit√©s depuis leur nom de type ifc => utiliser routines de base du parser (par exemple "TiXmlHandle.Child(pKeyword1,..)")
 //
 
 //////////////////////////////////////////////////////////////////////////////////////
 //  1.0) ROUTINES DE BASE DE LECTURE (DES ATTRIBUTS) DE LA DEFINITION D'UNE ENTITE  //
 //////////////////////////////////////////////////////////////////////////////////////
 
-// Lecture de tous les attributs enfants d'une entitÈ 
-// En quelque sorte, lecture des liens directs/constitutifs de la def qui ne soient pas des liens vers d'autres entitÈs ifc (liens indirects)
-// Ce liens indirects sont associÈs avec un chemin de mots clÈs pour obtenir l'entitÈ souhaitÈe => plutÙt dans les routines "Find..."
+// Lecture de tous les attributs enfants d'une entit√© 
+// En quelque sorte, lecture des liens directs/constitutifs de la def qui ne soient pas des liens vers d'autres entit√©s ifc (liens indirects)
+// Ce liens indirects sont associ√©s avec un chemin de mots cl√©s pour obtenir l'entit√© souhait√©e => plut√¥t dans les routines "Find..."
 int ifcXML_File::ReadIdAndTypeOfAnEntity(TiXmlElement *pIfcEntity, Map_String_String &map_messages)
 {
 	int res = 0;
@@ -110,8 +110,8 @@ int ifcXML_File::ReadIdAndTypeOfAnEntity(TiXmlElement *pIfcEntity, Map_String_St
 	return res;
 }
 
-// Routines semblable ‡ ReadIdAndTypeOfAnEntity (sans lecture de l'ID et du type) et surtout utilise en argument une liste plutÙt que map car 
-// le problËme est que si les index du tableau "map" sont les mÍmes (pour lecture des coordonnÈes par exemple) cela ecrase alors la prÈcÈdente valeur
+// Routines semblable √† ReadIdAndTypeOfAnEntity (sans lecture de l'ID et du type) et surtout utilise en argument une liste plut√¥t que map car 
+// le probl√®me est que si les index du tableau "map" sont les m√™mes (pour lecture des coordonn√©es par exemple) cela ecrase alors la pr√©c√©dente valeur
 int ifcXML_File::ReadAllValuesOfAnEntity(TiXmlElement *pIfcEntity, list<string> &li_messages)
 {
 	int res = 0;
@@ -134,7 +134,7 @@ int ifcXML_File::ReadAllValuesOfAnEntity(TiXmlElement *pIfcEntity, list<string> 
 	return res;
 }
 
-// Lecture d'un attribut enfant d'une entitÈ 
+// Lecture d'un attribut enfant d'une entit√© 
 int ifcXML_File::ReadOneSpecificValueOfAnEntity(TiXmlElement *pIfcEntity, string &st_Path, string &st_value)
 {
 	int res = 0;
@@ -182,7 +182,7 @@ int ifcXML_File::ReadIfcAxis2Placement3DMatrix(TiXmlElement *pElement, double Ma
 		TiXmlHandle hLocalBaseRoot3(lpObjectFound);
 		TiXmlHandle hLocalBaseRoot4(hLocalBaseRoot3.FirstChild("Coordinates"));
 
-		//lecture du contenu des child d'un IfcEntity liÈs ‡ "IfcProject"
+		//lecture du contenu des child d'un IfcEntity li√©s √† "IfcProject"
 		list<string> li_messages;
 		res = ReadAllValuesOfAnEntity(hLocalBaseRoot4.ToElement(), li_messages);
 
@@ -204,7 +204,7 @@ int ifcXML_File::ReadIfcAxis2Placement3DMatrix(TiXmlElement *pElement, double Ma
 		TiXmlHandle hLocalBaseRoot3(lpObjectFound);
 		TiXmlHandle hLocalBaseRoot4(hLocalBaseRoot3.FirstChild("DirectionRatios"));
 
-		//lecture du contenu des child d'un IfcEntity liÈs ‡ "IfcProject"
+		//lecture du contenu des child d'un IfcEntity li√©s √† "IfcProject"
 		list<string> li_messages;
 		res = ReadAllValuesOfAnEntity(hLocalBaseRoot4.ToElement(), li_messages);
 
@@ -226,7 +226,7 @@ int ifcXML_File::ReadIfcAxis2Placement3DMatrix(TiXmlElement *pElement, double Ma
 		TiXmlHandle hLocalBaseRoot3(lpObjectFound);
 		TiXmlHandle hLocalBaseRoot4(hLocalBaseRoot3.FirstChild("DirectionRatios"));
 
-		//lecture du contenu des child d'un IfcEntity liÈs ‡ "IfcProject"
+		//lecture du contenu des child d'un IfcEntity li√©s √† "IfcProject"
 		list<string> li_messages;
 		res = ReadAllValuesOfAnEntity(hLocalBaseRoot4.ToElement(), li_messages);
 
@@ -239,7 +239,7 @@ int ifcXML_File::ReadIfcAxis2Placement3DMatrix(TiXmlElement *pElement, double Ma
 	}
 
 	// The axis is the placement Z axis direction and the ref_direction is an approximation to the placement X axis direction. 
-	// 1ere colonne = ´ RefDirection ª ; 2Ëme colonne = ´ Axis ª X ´ RefDirection ª ; 3Ëme colonne = ´ Axis ª 
+	// 1ere colonne = ¬´ RefDirection ¬ª ; 2√®me colonne = ¬´ Axis ¬ª X ¬´ RefDirection ¬ª ; 3√®me colonne = ¬´ Axis ¬ª 
 	// Definition from IAI: If the attribute values for Axis and RefDirection are not given, 
 	// the placement defaults to P[1] (x-axis) as [1.,0.,0.], P[2] (y-axis) as [0.,1.,0.] and P[3] (z-axis) as [0.,0.,1.].  
 
@@ -250,7 +250,7 @@ int ifcXML_File::ReadIfcAxis2Placement3DMatrix(TiXmlElement *pElement, double Ma
 	Matrix[2][1] = Matrix[0][2] * Matrix[1][0] - Matrix[1][2] * Matrix[0][0];
 
 	//Normalisation de Axe Y: 
-	// Remarque: ‡ priori x et z sont ortho et normalisÈs => pas nÈcessaire de normaliser y?
+	// Remarque: √† priori x et z sont ortho et normalis√©s => pas n√©cessaire de normaliser y?
 	double db_Norm = sqrt(Matrix[0][1] * Matrix[0][1] + Matrix[1][1] * Matrix[1][1] + Matrix[2][1] * Matrix[2][1]);
 	Matrix[0][1] /= db_Norm;
 	Matrix[1][1] /= db_Norm;
@@ -283,7 +283,7 @@ int ifcXML_File::ReadKeyWordsAndValuesOfIfcElementQuantity(TiXmlElement *pIfcEnt
 
 	int res = 0;
 
-	//Recup de la definition geomÈtrique (IfcQuantity) de l'entitÈ en cours
+	//Recup de la definition geom√©trique (IfcQuantity) de l'entit√© en cours
 	TiXmlElement* pIfcEntityQuant = _map_BE_Quantities[pIfcEntity];
 
 	//Lecture des attributs de la definition
@@ -315,8 +315,8 @@ int ifcXML_File::ReadKeyWordsAndValuesOfIfcElementQuantity(TiXmlElement *pIfcEnt
 //  2.0) ROUTINES DE BASE DE RECHERCHE (DES ENTITES LIEES) DE LA DEFINITION D'UNE ENTITE  //
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-// Chargement en mÈmoire de tous les noeuds enfants de la racine => point d'entrÈe de toutes les entitÈs ifc (de leur dÈfinition)
-// Permet une recherche optimisÈe des dÈfinitions des entitÈs ‡ partir de leur "ref" qui se fait par leur "Id" (en index de la map) => cf. FindObjectFromRef
+// Chargement en m√©moire de tous les noeuds enfants de la racine => point d'entr√©e de toutes les entit√©s ifc (de leur d√©finition)
+// Permet une recherche optimis√©e des d√©finitions des entit√©s √† partir de leur "ref" qui se fait par leur "Id" (en index de la map) => cf. FindObjectFromRef
 int ifcXML_File::LoadIfcEntities(TiXmlHandle &hroot)
 {
 	int res = 0;
@@ -334,7 +334,7 @@ int ifcXML_File::LoadIfcEntities(TiXmlHandle &hroot)
 	return res;
 }
 
-// Recherche optimisÈe de la definition d'une entitÈ rÈfÈrencÈ dans une autre entitÈ (associÈ avec la routine LoadIfcEntities)
+// Recherche optimis√©e de la definition d'une entit√© r√©f√©renc√© dans une autre entit√© (associ√© avec la routine LoadIfcEntities)
 int ifcXML_File::FindObjectFromRef(TiXmlElement *&RelatedElmt, TiXmlElement *&lpObject)
 {
 	int res = 0;
@@ -344,7 +344,7 @@ int ifcXML_File::FindObjectFromRef(TiXmlElement *&RelatedElmt, TiXmlElement *&lp
 	return res;
 }
 
-//Recherche d'une entitÈ liÈe de type st_Path[1] sous le "lien" st_Path[0]
+//Recherche d'une entit√© li√©e de type st_Path[1] sous le "lien" st_Path[0]
 int ifcXML_File::FindOneSpecificLinkedObjectFromFirstLinkPath(TiXmlElement *pElement, string st_Path[2], TiXmlElement *&lpObject)
 {
 	// <pElement>
@@ -358,7 +358,7 @@ int ifcXML_File::FindOneSpecificLinkedObjectFromFirstLinkPath(TiXmlElement *pEle
 	TiXmlHandle hLocalBaseRoot1(pElement);
 	TiXmlHandle hLocalBaseRoot2(hLocalBaseRoot1.FirstChild(st_Path[0].c_str()));
 
-	//Lecture du seul Specific object souhaitÈ st_Path[1]
+	//Lecture du seul Specific object souhait√© st_Path[1]
 	TiXmlElement *lpObjectToSearch1 = hLocalBaseRoot2.FirstChild(st_Path[1].c_str()).ToElement();
 
 	res = FindObjectFromRef(lpObjectToSearch1, lpObject);
@@ -366,13 +366,13 @@ int ifcXML_File::FindOneSpecificLinkedObjectFromFirstLinkPath(TiXmlElement *pEle
 	return res;
 }
 
-//Recherche de toutes les entitÈs liÈes de type st_Path[1] sous le "lien" st_Path[0]
+//Recherche de toutes les entit√©s li√©es de type st_Path[1] sous le "lien" st_Path[0]
 int ifcXML_File::FindSeveralSpecificLinkedObjectsFromFirstLinkPath(TiXmlElement *pElement, string st_Path[2], list<TiXmlElement*> &llpObject)
 {
 	// <pElement>
 	//     <st_Path[0]>
 	//         <st_Path[1] ref="..."> => lpObject lien vers sa def <st_Path[1] id="...">
-	//         <ifcAutreTypeEnt ref="..."> => pas recupÈrÈ dans lpObject 
+	//         <ifcAutreTypeEnt ref="..."> => pas recup√©r√© dans lpObject 
 	//         <st_Path[1] ref="..."> => lpObject lien vers sa def <st_Path[1] id="...">
 	//     </st_Path[0]>
 	// </pElement>
@@ -382,7 +382,7 @@ int ifcXML_File::FindSeveralSpecificLinkedObjectsFromFirstLinkPath(TiXmlElement 
 	TiXmlHandle hLocalBaseRoot1(pElement);
 	TiXmlHandle hLocalBaseRoot2(hLocalBaseRoot1.FirstChild(st_Path[0].c_str()));
 
-	//Lecture de tous les Specific Object du type souhaitÈ st_Path[1]
+	//Lecture de tous les Specific Object du type souhait√© st_Path[1]
 	int int_Index = 0;
 	TiXmlElement *lpObjectToSearch1 = hLocalBaseRoot2.Child(st_Path[1].c_str(), int_Index).ToElement();
 	while (lpObjectToSearch1)
@@ -399,7 +399,7 @@ int ifcXML_File::FindSeveralSpecificLinkedObjectsFromFirstLinkPath(TiXmlElement 
 	return res;
 }
 
-//Recherche de toutes les entitÈs liÈes (quelque soit le type ifc) sous le "lien" st_Path[0]
+//Recherche de toutes les entit√©s li√©es (quelque soit le type ifc) sous le "lien" st_Path[0]
 int ifcXML_File::FindAllLinkedObjectsFromFirstLinkPath(TiXmlElement *pElement, string &st_Path, list<TiXmlElement*> &llpObject)
 {
 	// <pElement>
@@ -415,7 +415,7 @@ int ifcXML_File::FindAllLinkedObjectsFromFirstLinkPath(TiXmlElement *pElement, s
 	TiXmlHandle hLocalBaseRoot1(pElement);
 	TiXmlHandle hLocalBaseRoot2(hLocalBaseRoot1.FirstChild(st_Path.c_str()));
 
-	//Lecture de tous les Specific Object [pas de type souhaitÈ st_Path[1]]
+	//Lecture de tous les Specific Object [pas de type souhait√© st_Path[1]]
 	int int_Index = 0;
 	TiXmlElement *lpObjectToSearch1 = hLocalBaseRoot2.Child(int_Index).ToElement();
 	while (lpObjectToSearch1)
@@ -522,7 +522,7 @@ int ifcXML_File::FindIfcGeometricRepresentationSubContext(TiXmlElement *pElement
 	string st_Path[2] = { "","" };
 
 	//ATTENTION "ContextOfItems" peut-il avoir plusieurs IfcGeometricRepresentationSubContext?
-	//        => multiplicitÈ pas gÈrÈe par cette routine 
+	//        => multiplicit√© pas g√©r√©e par cette routine 
 	st_Path[0] = "ContextOfItems";
 	st_Path[1] = "IfcGeometricRepresentationSubContext";
 	TiXmlElement *lpObjectFound1 = nullptr;
@@ -561,9 +561,9 @@ int ifcXML_File::FindIfcGeometricRepresentationContext(TiXmlElement *pElement, T
 	string st_Path[2] = { "","" };
 
 	//ATTENTION "RepresentationContexts" peut avoir plusieurs IfcGeometricRepresentationContext
-	//        => multiplicitÈ pas gÈrÈe par cette routine 
-	//        A voir si nÈcessaire au niveau de ifcprojet seul usage de cette routine 
-	//		    => quel rÙle des IfcGeometricRepresentationContext du ifcproject, est-ce seulement de rassembler les contextes? 
+	//        => multiplicit√© pas g√©r√©e par cette routine 
+	//        A voir si n√©cessaire au niveau de ifcprojet seul usage de cette routine 
+	//		    => quel r√¥le des IfcGeometricRepresentationContext du ifcproject, est-ce seulement de rassembler les contextes? 
 	//			=> impliquerait ne pas appliquer (et de ne pas sauvegarder) matrice de position de ifcproject!!!
 	// Pour les faces et sous-faces routine FindIfcGeometricRepresentationSubContext pourlaquelle il n'y a toujours qu'un seul contexte!
 	st_Path[0] = "RepresentationContexts";
@@ -716,30 +716,30 @@ int ifcXML_File::FindObjectFromRefAndPathBy3(TiXmlElement *&RelatedElmt, list<st
 				res = FindObjectFromRef(lpObjectToSearch, lpSearchedObject);
 
 			// Pour IfcConnectionSurfaceGeometry
-			// "lll" est une liste qui dissocie les IfcPolyline par entitÈs de type (IfcCurveBoundedPlane,...) sous SurfaceOnRelatingElement
-			// "ll" est une liste qui dissocie les IfcPolyline par entitÈs de type (IfcCompositeCurve,...) sous OuterBoundary
-			// "l" est une liste d'entitÈs (IfcPolyline,...) sous Segments>ParentCurve (cette liste rassemble la multiplicitÈ de ces Segments>ParentCurve)
+			// "lll" est une liste qui dissocie les IfcPolyline par entit√©s de type (IfcCurveBoundedPlane,...) sous SurfaceOnRelatingElement
+			// "ll" est une liste qui dissocie les IfcPolyline par entit√©s de type (IfcCompositeCurve,...) sous OuterBoundary
+			// "l" est une liste d'entit√©s (IfcPolyline,...) sous Segments>ParentCurve (cette liste rassemble la multiplicit√© de ces Segments>ParentCurve)
 			//
 			// Pour IfcShapeRepresentation
-			// "lll" est une liste qui dissocie les IfcPolyLoop par entitÈs de type (IfcFacetedBrep,...) sous Items
-			// "ll" est une liste qui dissocie les IfcPolyLoop par entitÈs de type (IfcFace,...) sous CfsFaces
-			// "l" est une liste d'entitÈs (IfcPolyLoop,...) sous Bounds>Bound (cette liste rassemble la multiplicitÈ de ces Bounds>Bound)
+			// "lll" est une liste qui dissocie les IfcPolyLoop par entit√©s de type (IfcFacetedBrep,...) sous Items
+			// "ll" est une liste qui dissocie les IfcPolyLoop par entit√©s de type (IfcFace,...) sous CfsFaces
+			// "l" est une liste d'entit√©s (IfcPolyLoop,...) sous Bounds>Bound (cette liste rassemble la multiplicit√© de ces Bounds>Bound)
 			//
-			// Si le mot-clÈ a une multiplicitÈ [1,m] => crÈation d'une liste
-			// Si c'est le NiËme mot-clÈ multiple [1,m] => crÈation d'une liste ‡ 3-N profondeur "list <list <..(3-N) fois"
+			// Si le mot-cl√© a une multiplicit√© [1,m] => cr√©ation d'une liste
+			// Si c'est le Ni√®me mot-cl√© multiple [1,m] => cr√©ation d'une liste √† 3-N profondeur "list <list <..(3-N) fois"
 			//
-			//Au 1er mot clÈ "multiple" (N=1)  => on ajoute une liste de (3-1=2) niveaux (llxxx)
+			//Au 1er mot cl√© "multiple" (N=1)  => on ajoute une liste de (3-1=2) niveaux (llxxx)
 			//if (string(ch_Name) == string("CfsFaces")) // liste par CfsFace
 			if (string(ch_Name) == string("Items") || string(ch_Name) == string("SurfaceOnRelatingElement")) // liste par Item, par SurfaceOnRelatingElement
 			{
 				//On descend au niveau N 
-				// => au 1er niveau c'est la liste passÈe en argument (lllpObject) pas d'action
+				// => au 1er niveau c'est la liste pass√©e en argument (lllpObject) pas d'action
 
 				//On ajoute la liste de niveau 3-N
 				list <list <TiXmlElement*>> llNewpObject;
 				lllpObject.push_back(llNewpObject);
 			}
-			// Au 2nd mot clÈ "multiple" (N=2) => on ajoute une liste de (3-2=1) niveau (lxxx)
+			// Au 2nd mot cl√© "multiple" (N=2) => on ajoute une liste de (3-2=1) niveau (lxxx)
 			if (string(ch_Name) == string("CfsFaces") || string(ch_Name) == string("OuterBoundary") || string(ch_Name) == string("InnerBoundaries")) // liste par CfsFace, par OuterBoundary/InnerBoundaries
 			{
 				//On descend au niveau N
@@ -768,8 +768,8 @@ int ifcXML_File::FindObjectFromRefAndPathBy3(TiXmlElement *&RelatedElmt, list<st
 	}// if (lst_Path != lst_PathEnd)
 	else
 	{
-		//if (string(ch_Name) == string("Segments") || string(ch_Name) == string("Bounds")) // liste par Bound ou Segment => on rassemble en 1 liste car carac d'1 mÍme face!
-		// Au N=3Ëme multiple => on ajoute une liste de (3-3=0) niveau (xxx soit l'objet final)
+		//if (string(ch_Name) == string("Segments") || string(ch_Name) == string("Bounds")) // liste par Bound ou Segment => on rassemble en 1 liste car carac d'1 m√™me face!
+		// Au N=3√®me multiple => on ajoute une liste de (3-3=0) niveau (xxx soit l'objet final)
 
 		//On descend au niveau N
 		list <list <list <TiXmlElement*>>> ::iterator it_lll = lllpObject.end();
@@ -879,11 +879,11 @@ int ifcXML_File::FindRepresentationInSpace(TiXmlElement* &pElemSpace, list<TiXml
 
 int ifcXML_File::FindRelatedObjectsInRelAggregatesFromRelatingObject(TiXmlElement *&lpRelatingObj, list<TiXmlElement*> *lpRelatedObjects)
 {
-	// => ATTENTION La multiplicite sous pKeyword2 n'est pas gÈrÈ
+	// => ATTENTION La multiplicite sous pKeyword2 n'est pas g√©r√©
 	//
 	// <pKeyword1>
 	//     <pKeyword2>
-	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt1 id="..."> => l'entitÈ est retrouvÈ si valeur de ref = valeur de id 
+	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt1 id="..."> => l'entit√© est retrouv√© si valeur de ref = valeur de id 
 	//     </pKeyword2>
 	//     <pKeyword3>
 	//         <ifcEnt1 ref="..."> => lpRelatedObjects lien vers sa def <ifcEnt1 id="...">
@@ -897,10 +897,10 @@ int ifcXML_File::FindRelatedObjectsInRelAggregatesFromRelatingObject(TiXmlElemen
 	// Recherche de toutes les ifcentity de type pKeyword1 sur lesquelles se fait le scan
 	const char* pKeyword1 = "IfcRelAggregates";
 
-	// Parmi les ifcentity de type pKeyword1 on ne s'interesse qu'‡ ceux qui ont l'entitÈ lpRelatingObj en attribut pKeyword2 
+	// Parmi les ifcentity de type pKeyword1 on ne s'interesse qu'√† ceux qui ont l'entit√© lpRelatingObj en attribut pKeyword2 
 	const char* pKeyword2 = "RelatingObject";
 
-	// Pour ces ifcentities de type pKeyword1 liÈes ‡ lpRelatingObj on rÈcupËre les entitÈs sous l'attribut pKeyword3 dans lpRelatedObjects
+	// Pour ces ifcentities de type pKeyword1 li√©es √† lpRelatingObj on r√©cup√®re les entit√©s sous l'attribut pKeyword3 dans lpRelatedObjects
 	const char* pKeyword3 = "RelatedObjects";
 
 	res = FindObjectsInRelFromRelatingEnt(lpRelatingObj, lpRelatedObjects, pKeyword1, pKeyword2, pKeyword3);
@@ -909,11 +909,11 @@ int ifcXML_File::FindRelatedObjectsInRelAggregatesFromRelatingObject(TiXmlElemen
 
 int ifcXML_File::FindRelatedBuildingElementAndConnectionGeometryInRelSpaceBoundaryFromRelatingSpace(TiXmlElement *&lpRelatingObj, list<TiXmlElement*> *lpRelatedObjects, list<TiXmlElement*> *lpsecondRelatedObjects)
 {
-	// => ATTENTION La multiplicite sous pKeyword2 n'est pas gÈrÈ
+	// => ATTENTION La multiplicite sous pKeyword2 n'est pas g√©r√©
 	//
 	// <pKeyword1>
 	//     <pKeyword2>
-	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt1 id="..."> => l'entitÈ est retrouvÈ si valeur de ref = valeur de id 
+	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt1 id="..."> => l'entit√© est retrouv√© si valeur de ref = valeur de id 
 	//     </pKeyword2>
 	//     <pKeyword3>
 	//         <ifcEnt1 ref="..."> => lpRelatedObjects lien vers sa def <ifcEnt1 id="...">
@@ -932,13 +932,13 @@ int ifcXML_File::FindRelatedBuildingElementAndConnectionGeometryInRelSpaceBounda
 	// Recherche de toutes les ifcentity de type pKeyword1 sur lesquelles se fait le scan
 	const char* pKeyword1 = "IfcRelSpaceBoundary";
 
-	// Parmi les ifcentity de type pKeyword1 on ne s'interesse qu'‡ ceux qui ont l'entitÈ lpRelatingObj en attribut pKeyword2 
+	// Parmi les ifcentity de type pKeyword1 on ne s'interesse qu'√† ceux qui ont l'entit√© lpRelatingObj en attribut pKeyword2 
 	const char* pKeyword2 = "RelatingSpace";
 
-	// Pour ces ifcentities de type pKeyword1 liÈes ‡ lpRelatingObj on rÈcupËre les entitÈs sous l'attribut pKeyword3 dans lpRelatedObjects
+	// Pour ces ifcentities de type pKeyword1 li√©es √† lpRelatingObj on r√©cup√®re les entit√©s sous l'attribut pKeyword3 dans lpRelatedObjects
 	const char* pKeyword3 = "RelatedBuildingElement";
 
-	// ParallËlement, pour ces ifcentities de type pKeyword1 liÈes ‡ lpRelatingObj on rÈcupËre les entitÈs sous l'attribut pKeyword4 dans lpsecondRelatedObjects
+	// Parall√®lement, pour ces ifcentities de type pKeyword1 li√©es √† lpRelatingObj on r√©cup√®re les entit√©s sous l'attribut pKeyword4 dans lpsecondRelatedObjects
 	const char* pKeyword4 = "ConnectionGeometry";
 
 	res = FindObjectsInRelFromRelatingEnt(lpRelatingObj, lpRelatedObjects, pKeyword1, pKeyword2, pKeyword3, pKeyword4, lpsecondRelatedObjects);
@@ -947,11 +947,11 @@ int ifcXML_File::FindRelatedBuildingElementAndConnectionGeometryInRelSpaceBounda
 
 int ifcXML_File::FindObjectsInRelFromRelatingEnt(TiXmlElement *&lpRelatingObj, list<TiXmlElement*> *lpRelatedObjects, const char* pKeyword1, const char* pKeyword2, const char* pKeyword3, const char* pKeyword4, list<TiXmlElement*> *lpsecondRelatedObjects)
 {
-	// => ATTENTION La multiplicite sous pKeyword2 n'est pas gÈrÈ
+	// => ATTENTION La multiplicite sous pKeyword2 n'est pas g√©r√©
 	//
 	// <pKeyword1>
 	//     <pKeyword2>
-	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt1 id="..."> => l'entitÈ est retrouvÈ si valeur de ref = valeur de id 
+	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt1 id="..."> => l'entit√© est retrouv√© si valeur de ref = valeur de id 
 	//     </pKeyword2>
 	//     <pKeyword3>
 	//         <ifcEnt1 ref="..."> => lpRelatedObjects lien vers sa def <ifcEnt1 id="...">
@@ -964,7 +964,7 @@ int ifcXML_File::FindObjectsInRelFromRelatingEnt(TiXmlElement *&lpRelatingObj, l
 	//
 	// <pKeyword1>
 	//     <pKeyword2>
-	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt1 id="..."> => l'entitÈ est retrouvÈ si valeur de ref = valeur de id 
+	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt1 id="..."> => l'entit√© est retrouv√© si valeur de ref = valeur de id 
 	//     </pKeyword2>
 	//     <pKeyword3>
 	//         <ifcEnt1 ref="..."> => lpRelatedObjects lien vers sa def <ifcEnt1 id="...">
@@ -987,14 +987,14 @@ int ifcXML_File::FindObjectsInRelFromRelatingEnt(TiXmlElement *&lpRelatingObj, l
 	bool boo_IsItTheEnd = false;
 	while (!boo_IsItTheEnd)
 	{
-		// Pour une recherche ‡ partir du nom d'entitÈ, 
-		// ‡ priori le plus optimisÈ est d'utiliser les routines de base du parser: "TiXmlHandle.Child(pKeyword1,..)"
+		// Pour une recherche √† partir du nom d'entit√©, 
+		// √† priori le plus optimis√© est d'utiliser les routines de base du parser: "TiXmlHandle.Child(pKeyword1,..)"
 		TiXmlHandle hLocalVariableRoot1(hLocalBaseRoot.Child(pKeyword1, int_nbcount));//"IfcRelAggregates", "IfcRelSpaceBoundary"
 		TiXmlHandle hLocalVariableRoot2(hLocalVariableRoot1.FirstChild(pKeyword2));//"RelatingObject", "RelatingSpace"
 		TiXmlHandle hLocalVariableRoot3(hLocalVariableRoot2.FirstChild(/*"IfcProject"*/));
 		if (nullptr != hLocalVariableRoot3.ToElement())
 		{
-			//DEB: A REVOIR en terme de perfo si judicieux d'utiliser le _map_ID_Elmt plutÙt que 
+			//DEB: A REVOIR en terme de perfo si judicieux d'utiliser le _map_ID_Elmt plut√¥t que 
 			// comparaison de string  std::string str_SearchedID(lpRelatingObj->Attribute("id")) en dehors boucle puis if (str_SearchedID == std::string(ch_ID))
 			//FIN:
 			//if (_map_ID_Elmt[lpRelatingObj->Attribute("id")]== _map_ID_Elmt[hLocalVariableRoot3.ToElement()->Attribute("ref")])
@@ -1002,13 +1002,13 @@ int ifcXML_File::FindObjectsInRelFromRelatingEnt(TiXmlElement *&lpRelatingObj, l
 			{
 				if (pKeyword3)
 				{
-					//Recup des entitÈs sous pKeyword3
+					//Recup des entit√©s sous pKeyword3
 					TiXmlHandle hLocalVariableRoot4(hLocalVariableRoot1.FirstChild(pKeyword3));//"RelatedObjects", "RelatedBuildingElement"
 					int int_Index = 0;
 					TiXmlElement *RelatedElmt = hLocalVariableRoot4.Child(int_Index).ToElement();
 					while (RelatedElmt)
 					{
-						// Recuperation de la def de l'ÈlÈment dont la ref est RelatedElmt
+						// Recuperation de la def de l'√©l√©ment dont la ref est RelatedElmt
 						TiXmlElement *RelatedElmt2 = nullptr;
 						res = FindObjectFromRef(RelatedElmt, RelatedElmt2);
 
@@ -1022,14 +1022,14 @@ int ifcXML_File::FindObjectsInRelFromRelatingEnt(TiXmlElement *&lpRelatingObj, l
 
 				if (pKeyword4)
 				{
-					//Recup des entitÈs sous pKeyword4
-					//A REVOIR... Attention ‡ voir comment ca marche s il y a plusieurs "RelatingObject", "RelatingSpace" pour gÈnÈraliser la routine
+					//Recup des entit√©s sous pKeyword4
+					//A REVOIR... Attention √† voir comment ca marche s il y a plusieurs "RelatingObject", "RelatingSpace" pour g√©n√©raliser la routine
 					TiXmlHandle hLocalVariableRoot4(hLocalVariableRoot1.FirstChild(pKeyword4));//"ConnectionGeometry"
 					int int_Index = 0;
 					TiXmlElement *RelatedElmt = hLocalVariableRoot4.Child(int_Index).ToElement();
 					while (RelatedElmt)
 					{
-						// Recuperation de la def de l'ÈlÈment dont la ref est RelatedElmt
+						// Recuperation de la def de l'√©l√©ment dont la ref est RelatedElmt
 						TiXmlElement *RelatedElmt2 = nullptr;
 						res = FindObjectFromRef(RelatedElmt, RelatedElmt2);
 
@@ -1058,14 +1058,14 @@ int ifcXML_File::FindObjectsInRelFromRelatingEnt(TiXmlElement *&lpRelatingObj, l
 
 int ifcXML_File::ScanAssociateRelatedAndRelatingEnt(const char* pKeyword1, const char* pKeyword2, const char* pKeyword3, const char* pKeyword4)
 {
-	// => ATTENTION La multiplicite sous pKeyword2 est gÈrÈe, mais suppose l'unicitÈ sous pKeyword3
+	// => ATTENTION La multiplicite sous pKeyword2 est g√©r√©e, mais suppose l'unicit√© sous pKeyword3
 	//
 	// <pKeyword1> => IfcRelDefinesByProperties
 	//     <pKeyword2> => RelatedObjects
-	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt1 id="..."> => l'entitÈ est retrouvÈ si valeur de ref = valeur de id 
-	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt2 id="..."> => l'entitÈ est retrouvÈ si valeur de ref = valeur de id 
+	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt1 id="..."> => l'entit√© est retrouv√© si valeur de ref = valeur de id 
+	//         <lpRelatingObj ref="..."> => ATTENTION: lpRelatingObj est en fait un lien vers def <ifcEnt2 id="..."> => l'entit√© est retrouv√© si valeur de ref = valeur de id 
 	//     </pKeyword2>
-	//     <pKeyword3> => RelatingPropertyDefinition ATTENTION multiplicitÈ pas gÈrÈe
+	//     <pKeyword3> => RelatingPropertyDefinition ATTENTION multiplicit√© pas g√©r√©e
 	//         <ifcEnt1 ref="..."> => lpRelatedObjects lien vers sa def <ifcEnt1 id="..."> => IfcElementQuantity
 	//     </pKeyword3>
 	// </pKeyword1>
@@ -1083,15 +1083,15 @@ int ifcXML_File::ScanAssociateRelatedAndRelatingEnt(const char* pKeyword1, const
 	//while (!boo_IsItTheEnd)
 	while (hLocalVariableRoot1.ToNode() != nullptr)
 	{
-		// Pour une recherche ‡ partir du nom d'entitÈ, 
-		// ‡ priori le plus optimisÈ est d'utiliser les routines de base du parser: "TiXmlHandle.Child(pKeyword1,..)"
+		// Pour une recherche √† partir du nom d'entit√©, 
+		// √† priori le plus optimis√© est d'utiliser les routines de base du parser: "TiXmlHandle.Child(pKeyword1,..)"
 		TiXmlHandle hLocalVariableRoot2(hLocalVariableRoot1.FirstChild(pKeyword2));//"RelatingPropertyDefinition"
 		TiXmlElement *RelatingElmt = hLocalVariableRoot2.Child(0).ToElement();
 		if (nullptr != RelatingElmt)
 		{
 			if (string(RelatingElmt->Value()) == string(pKeyword3)) //"IfcElementQuantity"
 			{
-				// Recuperation de la def de l'ÈlÈment dont la ref est RelatingElmt
+				// Recuperation de la def de l'√©l√©ment dont la ref est RelatingElmt
 				TiXmlElement *RelatingElmt2 = nullptr;
 				res = FindObjectFromRef(RelatingElmt, RelatingElmt2);
 
@@ -1100,7 +1100,7 @@ int ifcXML_File::ScanAssociateRelatedAndRelatingEnt(const char* pKeyword1, const
 				TiXmlElement *RelatedElmt = hLocalVariableRoot3.Child(int_Index).ToElement();
 				while (RelatedElmt)
 				{
-					// Recuperation de la def de l'ÈlÈment dont la ref est RelatedElmt
+					// Recuperation de la def de l'√©l√©ment dont la ref est RelatedElmt
 					TiXmlElement *RelatedElmt2 = nullptr;
 					res = FindObjectFromRef(RelatedElmt, RelatedElmt2);
 
@@ -1159,16 +1159,16 @@ int ifcXML_File::ScanIfcRelDefinesByPropertiesForQuantities()
 	// Recherche de toutes les ifcentity de type pKeyword1 sur lesquelles se fait le scan
 	const char* pKeyword1 = "IfcRelDefinesByProperties";
 
-	// Parmi les ifcentity de type pKeyword1 on ne s'interesse qu'‡ ceux qui ont l'entitÈ "RelatingPropertyDefinition" en attribut pKeyword2 
+	// Parmi les ifcentity de type pKeyword1 on ne s'interesse qu'√† ceux qui ont l'entit√© "RelatingPropertyDefinition" en attribut pKeyword2 
 	// et comme sous-type "IfcElementQuantity" en attribut pKeyword3
 	const char* pKeyword2 = "RelatingPropertyDefinition";
 	const char* pKeyword3 = "IfcElementQuantity";
 
-	// Pour ces ifcentities de type pKeyword1 liÈes ‡ "RelatingPropertyDefinition"->"IfcElementQuantity" on rÈcupËre les entitÈs sous l'attribut pKeyword4 dans "RelatedObjects"
+	// Pour ces ifcentities de type pKeyword1 li√©es √† "RelatingPropertyDefinition"->"IfcElementQuantity" on r√©cup√®re les entit√©s sous l'attribut pKeyword4 dans "RelatedObjects"
 	const char* pKeyword4 = "RelatedObjects";
 
-	// Chargement en mÈmoire de toutes les associations => _map_BE_Quantities[TiXmlElement "BuildingElement"]=TiXmlElement "IfcElementQuantity"
-	// Permet une recherche optimisÈe des dÈfinitions des entitÈs ‡ partir de leur "ref" qui se fait par leur "Id" (en index de la map) => cf. FindObjectFromRef
+	// Chargement en m√©moire de toutes les associations => _map_BE_Quantities[TiXmlElement "BuildingElement"]=TiXmlElement "IfcElementQuantity"
+	// Permet une recherche optimis√©e des d√©finitions des entit√©s √† partir de leur "ref" qui se fait par leur "Id" (en index de la map) => cf. FindObjectFromRef
 	res = ScanAssociateRelatedAndRelatingEnt(pKeyword1, pKeyword2, pKeyword3, pKeyword4);
 
 	return res;

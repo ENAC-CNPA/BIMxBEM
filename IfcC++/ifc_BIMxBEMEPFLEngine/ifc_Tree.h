@@ -25,7 +25,7 @@ struct STRUCT_IFCENTITY {
 	list<list<double*>> st_PointsDesContours;
 	bool bo_ArePointsDesContoursALoop = false;//Si true = les 1er et dernier points de st_PointsDesContours sont identiques 
 	list<double*> db_Centroid;
-	Map_String_String* map_DefValues = nullptr;// tableau des noms des attributs gÈomÈtriques (Length, Width,...) et de leur valeur (en string)
+	Map_String_String* map_DefValues = nullptr;// tableau des noms des attributs g√©om√©triques (Length, Width,...) et de leur valeur (en string)
 };
 
 typedef map<string, STRUCT_IFCENTITY*> Map_String_ptrSTRUCT_IFCENTITY;
@@ -46,7 +46,7 @@ public:
 	void FillQuantitiesAttributeOf_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_IfcTree, Map_String_String &map_messages);
 	void delete_STRUCT_IFCENTITY(STRUCT_IFCENTITY *&st_IfcTree, STRUCT_IFCENTITY* st_IfcCurrentFather = nullptr);
 
-	//Creation d'entitÈ (TIFCSurface) ‡ partir des autres entitÈs STRUCT_IFCENTITY (IfcConnectionSurfaceGeometry) dÈj‡ dÈfinies (pas ‡ partir des entitÈs xml comme dans ifc_Tree.template.h) 
+	//Creation d'entit√© (TIFCSurface) √† partir des autres entit√©s STRUCT_IFCENTITY (IfcConnectionSurfaceGeometry) d√©j√† d√©finies (pas √† partir des entit√©s xml comme dans ifc_Tree.template.h) 
 	int BuildTIFCSurfaceTreeFrom_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_IfcTree);
 
 #include "ifc_Tree.template.h"

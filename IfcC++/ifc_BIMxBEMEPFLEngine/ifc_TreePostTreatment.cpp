@@ -25,12 +25,12 @@ int ifc_TreePostTreatment::BasifyTree(Map_Basified_Tree *&map_BasifTree)
 		if (st_IfcTree)
 			res = BasifyTreeFrom(st_IfcTree);
 		else
-			res = 4002;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
+			res = 4002;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÃ©ro de l'erreur dans cette routine
 
 		map_BasifTree = &_map_BasifTree;
 	}// if (_CurrentIfcTree)
 	else
-		res = 4001;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
+		res = 4001;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÃ©ro de l'erreur dans cette routine
 
 
 	return res;
@@ -39,9 +39,9 @@ int ifc_TreePostTreatment::BasifyTree(Map_Basified_Tree *&map_BasifTree)
 int ifc_TreePostTreatment::BasifyTreeFrom(STRUCT_IFCENTITY *&st_IfcTree)
 {
 	int res = 0;
-	//Memo adresse pointeur (si existe pas ajouté) et son type "Ifc" 
-	// => la map permet de ne pas référencer de multiple fois une même entité 
-	//    dans l'arbre, des entités sont référencés plusieurs fois car elles appartiennent à plusieurs objets
+	//Memo adresse pointeur (si existe pas ajoutÃ©) et son type "Ifc" 
+	// => la map permet de ne pas rÃ©fÃ©rencer de multiple fois une mÃªme entitÃ© 
+	//    dans l'arbre, des entitÃ©s sont rÃ©fÃ©rencÃ©s plusieurs fois car elles appartiennent Ã  plusieurs objets
 	_map_BasifTree[st_IfcTree] = st_IfcTree->ch_Type;
 
 	list <STRUCT_IFCENTITY*> ::iterator it_Elem;
@@ -68,7 +68,7 @@ int ifc_TreePostTreatment::CompleteBasifiedTreeFromByTIFCSurfaces()
 	return res;
 }
 
-//Retrait dans les contours (st_PointsDesContours) du derniers point lorsqu'il est égal au 1er (+ consigne bool bo_IsItLoop=true)
+//Retrait dans les contours (st_PointsDesContours) du derniers point lorsqu'il est Ã©gal au 1er (+ consigne bool bo_IsItLoop=true)
 int ifc_TreePostTreatment::RemoveLastPointOfLoopContours()
 {
 	int res = 0;
@@ -84,16 +84,16 @@ int ifc_TreePostTreatment::RemoveLastPointOfLoopContours()
 	return res;
 }
 
-//Retrait dans le contour (st_PointsDesContours) du derniers point lorsqu'il est égal au 1er (+ consigne bool bo_IsItLoop=true)
+//Retrait dans le contour (st_PointsDesContours) du derniers point lorsqu'il est Ã©gal au 1er (+ consigne bool bo_IsItLoop=true)
 int ifc_TreePostTreatment::RemoveLastPointOfOneLoopContour(STRUCT_IFCENTITY *st_IfcEnt)
 {
 	int res = 0;
 
-	//Boucle sur les différents sous-contours
+	//Boucle sur les diffÃ©rents sous-contours
 	list <list <double*>> ::iterator it_llPt;
 	for (it_llPt = (st_IfcEnt->st_PointsDesContours).begin(); it_llPt != (st_IfcEnt->st_PointsDesContours).end(); it_llPt++)
 	{
-		//Verif si 1er pt=dernier pt => si oui retirer le dernier pt (les 3 dernières coordonnées) + consigne bool bo_IsItLoop=true
+		//Verif si 1er pt=dernier pt => si oui retirer le dernier pt (les 3 derniÃ¨res coordonnÃ©es) + consigne bool bo_IsItLoop=true
 		list <double*> ::iterator it_lPt = it_llPt->begin();
 		double X1 = *(*it_lPt); it_lPt++;
 		double Y1 = *(*it_lPt); it_lPt++;
@@ -139,7 +139,7 @@ int ifc_TreePostTreatment::ComputeOneIfcConnectionSurfaceGeometrySurface(STRUCT_
 {
 	int res = 0;
 
-	//Recup de toutes les coordonnées de tous les points du contour
+	//Recup de toutes les coordonnÃ©es de tous les points du contour
 	double db_TotalSurf = 0.0;
 	vector<double*> vc_PointCoordCtr1;
 	for (list<STRUCT_IFCENTITY *>::iterator it_lEnt = (st_IfcEntCS->st_Contains).begin(); it_lEnt != (st_IfcEntCS->st_Contains).end(); it_lEnt++)
@@ -149,11 +149,11 @@ int ifc_TreePostTreatment::ComputeOneIfcConnectionSurfaceGeometrySurface(STRUCT_
 			//Recup du contour
 			vc_PointCoordCtr1.insert(vc_PointCoordCtr1.end(), (*it_llCtr).begin(), (*it_llCtr).end());
 			
-			//Fermer le contour par ajout du premier Pt en dernier (nécessaire au calcul de la surface)
+			//Fermer le contour par ajout du premier Pt en dernier (nÃ©cessaire au calcul de la surface)
 			vector<double*>::iterator it_CoordPt1_end = vc_PointCoordCtr1.begin(); ++++++it_CoordPt1_end;
 			vc_PointCoordCtr1.insert(vc_PointCoordCtr1.end(), vc_PointCoordCtr1.begin(), it_CoordPt1_end);
 
-			//Calcul de la surface définie par ce contour + Somme des differentes surfaces déjà calculés
+			//Calcul de la surface dÃ©finie par ce contour + Somme des differentes surfaces dÃ©jÃ  calculÃ©s
 			db_TotalSurf += ComputeSurfaceFromAContour(vc_PointCoordCtr1);
 		}// for (list<list<double*>>::iterator it_llCtr = ((*it_lEnt)->st_PointsDesContours).begin(); it_llCtr != ((*it_lEnt)->st_PointsDesContours).end(); it_llCtr++)
 	}// for (list<STRUCT_IFCENTITY *>::iterator it_lEnt = (st_IfcEntCS->st_Contains).begin(); it_lEnt != (st_IfcEntCS->st_Contains).end(); it_lEnt++)
@@ -163,12 +163,12 @@ int ifc_TreePostTreatment::ComputeOneIfcConnectionSurfaceGeometrySurface(STRUCT_
 	if (_CurrentIfcTree)
 		_CurrentIfcTree->FillQuantitiesAttributeOf_STRUCT_IFCENTITY(st_IfcEntCS, map_messages);
 	else
-		res = 4003;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
+		res = 4003;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÃ©ro de l'erreur dans cette routine
 
 	return res;
 }
 
-//Calcul d'une surface plane à partir de ses contours
+//Calcul d'une surface plane Ã  partir de ses contours
 double ifc_TreePostTreatment::ComputeSurfaceFromAContour(vector<double*> &vc_PointCoordCtr)
 {
 	//int res = 0;
@@ -186,7 +186,7 @@ double ifc_TreePostTreatment::ComputeSurfaceFromAContour(vector<double*> &vc_Poi
 	return db_Surf;
 }
 
-//Creation des TIFCSurfaces par concatenation des IfcConnectionSurfaceGeometry en vis-à-vis
+//Creation des TIFCSurfaces par concatenation des IfcConnectionSurfaceGeometry en vis-Ã -vis
 int ifc_TreePostTreatment::CreateTIFCSurfaces()
 {
 	int res = 0;
@@ -202,22 +202,22 @@ int ifc_TreePostTreatment::CreateTIFCSurfaces()
 	return res;
 }
 
-//Creation d'une TIFCSurface par concatenation des 2 IfcConnectionSurfaceGeometry en vis-à-vis
+//Creation d'une TIFCSurface par concatenation des 2 IfcConnectionSurfaceGeometry en vis-Ã -vis
 int ifc_TreePostTreatment::CreateTIFCSurface(STRUCT_IFCENTITY *st_IfcEntCS)
 {
 	int res = 0;
 
-	//On vérifie que cette IfcConnectionSurfaceGeometry (st_IfcEntCS) n'a pas déjà sa TIFCSurface 
-	//car à sa création la même TIFCSurface est associée à 2 IfcConnectionSurfaceGeometry
+	//On vÃ©rifie que cette IfcConnectionSurfaceGeometry (st_IfcEntCS) n'a pas dÃ©jÃ  sa TIFCSurface 
+	//car Ã  sa crÃ©ation la mÃªme TIFCSurface est associÃ©e Ã  2 IfcConnectionSurfaceGeometry
 	if (st_IfcEntCS && st_IfcEntCS->st_TIFCSurface==nullptr)
 	{
 		if (_CurrentIfcTree)
 			res = _CurrentIfcTree->BuildTIFCSurfaceTreeFrom_STRUCT_IFCENTITY(st_IfcEntCS);
 		else
-			res = 4005;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
+			res = 4005;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÃ©ro de l'erreur dans cette routine
 	}
 	//else
-	//	res = 4004;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
+	//	res = 4004;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÃ©ro de l'erreur dans cette routine
 
 	return res;
 }
@@ -257,7 +257,7 @@ int ifc_TreePostTreatment::CentroidComputation(STRUCT_IFCENTITY *st_IfcEntCS)
 		list <list <double*>> ::iterator it_llPt;
 		for (it_llPt = ((*it_Elem)->st_PointsDesContours).begin(); it_llPt != ((*it_Elem)->st_PointsDesContours).end(); it_llPt++)
 		{
-			//lire la liste des points (le dernier point est toujours différent du 1er car a été enlevé par routine RemoveLastPointOfLoopContours)
+			//lire la liste des points (le dernier point est toujours diffÃ©rent du 1er car a Ã©tÃ© enlevÃ© par routine RemoveLastPointOfLoopContours)
 			list <double*> ::iterator it_lPt;
 			for (it_lPt = (*it_llPt).begin(); it_lPt != (*it_llPt).end(); it_lPt++)
 			{
@@ -271,11 +271,11 @@ int ifc_TreePostTreatment::CentroidComputation(STRUCT_IFCENTITY *st_IfcEntCS)
 	for(int j=0;j<3;j++)
 		db_IsoBar[j] /= (i / 3);
 
-	//Mémo dans la structure
+	//MÃ©mo dans la structure
 	if (_CurrentIfcTree)
 		_CurrentIfcTree->FillCentroidOf_STRUCT_IFCENTITY(st_IfcEntCS, db_IsoBar);
 	else
-		res = 4006;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
+		res = 4006;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÃ©ro de l'erreur dans cette routine
 
 	return res;
 }
@@ -287,7 +287,7 @@ int ifc_TreePostTreatment::RelimitSideBySideSurfaces()
 	std::map<STRUCT_IFCENTITY*, std::string>::iterator it_Elem;
 	for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 	{
-		//Traitement des IfcConnectionSurfaceGeometry ayant 2 côté à étendre
+		//Traitement des IfcConnectionSurfaceGeometry ayant 2 cÃ´tÃ© Ã  Ã©tendre
 		//Recherche des IfcConnectionSurfaceGeometry avec 2 SideBySide
 		if (it_Elem->second == "IfcConnectionSurfaceGeometry" /*&& it_Elem->first->st_SideBySide.size()==2*/)
 			res = RelimitSideBySideSurfacesOfMiddleIfcConnectionSurfaceGeometry(it_Elem->first);
@@ -302,11 +302,11 @@ int ifc_TreePostTreatment::RelimitSideBySideSurfacesOfMiddleIfcConnectionSurface
 {
 	int res = 0;
 
-	//Retrouver les 2 IfcConnectionSurfaceGeometry qui sont côte-à-côte avec l'IfcConnectionSurfaceGeometry en cours
+	//Retrouver les 2 IfcConnectionSurfaceGeometry qui sont cÃ´te-Ã -cÃ´te avec l'IfcConnectionSurfaceGeometry en cours
 	map <STRUCT_IFCENTITY*,bool> ::iterator it_SideBySideIfcEntCS;
 	for (it_SideBySideIfcEntCS = (st_IfcEntCS->mp_SideBySide).begin(); it_SideBySideIfcEntCS != (st_IfcEntCS->mp_SideBySide).end(); it_SideBySideIfcEntCS++)
 	{
-		//retrouver les paires de points les plus proches (chaque point appartenant à l'un ou l'autre des IfcConnectionSurfaceGeometry)
+		//retrouver les paires de points les plus proches (chaque point appartenant Ã  l'un ou l'autre des IfcConnectionSurfaceGeometry)
 		if (!(*it_SideBySideIfcEntCS).second)
 		{
 			RelimitOneSideBySideSurfaceOfMiddleIfcConnectionSurfaceGeometry(st_IfcEntCS, (*it_SideBySideIfcEntCS).first);
@@ -322,22 +322,22 @@ int ifc_TreePostTreatment::RelimitOneSideBySideSurfaceOfMiddleIfcConnectionSurfa
 {
 	int res = 0;
 
-	//Recup de toutes les coordonnées de tous les points du 1er contour
+	//Recup de toutes les coordonnÃ©es de tous les points du 1er contour
 	vector<double*> vc_PointCoordCtr1;
 	for (list<STRUCT_IFCENTITY *>::iterator it_lEnt = (st_IfcEntCS1->st_Contains).begin(); it_lEnt != (st_IfcEntCS1->st_Contains).end(); it_lEnt++)
 		for (list<list<double*>>::iterator it_llCtr = ((*it_lEnt)->st_PointsDesContours).begin(); it_llCtr != ((*it_lEnt)->st_PointsDesContours).end(); it_llCtr++)
 			vc_PointCoordCtr1.insert(vc_PointCoordCtr1.end(), (*it_llCtr).begin(), (*it_llCtr).end());
 
-	//Recup de toutes les coordonnées de tous les points du 2ème contour
+	//Recup de toutes les coordonnÃ©es de tous les points du 2Ã¨me contour
 	vector<double*> vc_PointCoordCtr2;
 	for (list<STRUCT_IFCENTITY *>::iterator it_lEnt = (st_IfcEntCS2->st_Contains).begin(); it_lEnt != (st_IfcEntCS2->st_Contains).end(); it_lEnt++)
 		for (list<list<double*>>::iterator it_llCtr = ((*it_lEnt)->st_PointsDesContours).begin(); it_llCtr != ((*it_lEnt)->st_PointsDesContours).end(); it_llCtr++)
 			vc_PointCoordCtr2.insert(vc_PointCoordCtr2.end(), (*it_llCtr).begin(), (*it_llCtr).end());
 
 	//
-	//Calcul des distances entre chaque paire de points appartenant à chacun des contours des IfcConnectionSurfaceGeometry
+	//Calcul des distances entre chaque paire de points appartenant Ã  chacun des contours des IfcConnectionSurfaceGeometry
 	//  li_IndPtCtr1_IndPtCtr2_Dist[iterateur debut Pt_J du contour1, iterateur debut Pt_J du contour2]=distance
-	//  Utilisation d'une liste pour profiter du tri optimisée "list::sort()"
+	//  Utilisation d'une liste pour profiter du tri optimisÃ©e "list::sort()"
 	list< pair< pair<vector<double*>::iterator, vector<double*>::iterator>, double>> li_IndPtCtr1_IndPtCtr2_Dist;
 	//Boucle sur st_Contains pour retrouver tous les IfcConnectionSurfaceGeometry
 	vector<double*>::iterator it_CoordCtr1;
@@ -359,13 +359,13 @@ int ifc_TreePostTreatment::RelimitOneSideBySideSurfaceOfMiddleIfcConnectionSurfa
 		}// for (vector<double*>::iterator it_CoordCtr2 = vc_PointCoordCtr2.begin(); it_CoordCtr2 != vc_PointCoordCtr2.end(); it_CoordCtr2++)
 	}// for (vector<double*>::iterator it_CoordCtr1 = vc_PointCoordCtr1.begin(); it_CoordCtr1 != vc_PointCoordCtr1.end(); it_CoordCtr1++)
 
-	//Trier les paires par proximité pour trouver les points à rejoindre
+	//Trier les paires par proximitÃ© pour trouver les points Ã  rejoindre
 	li_IndPtCtr1_IndPtCtr2_Dist.sort([](auto lhs, auto rhs) { return lhs.second < rhs.second; });
 
 	//QUE FAIRE SI des paires de points sont quasi l'un sur l'autre => merger les 2 IfcConnectionSurfaceGeometry?? 
 	//  ou verifier que l'une a une surface quasi nulle 
-	// => la retirer? => Traitement à faire dès le début après RemoveLastPointOfLoopContours() mais attention au retrait à faire dans IfcSpace et elmt cstruction (Wall,...)
-	// En tout cas si la 1ere paire de point est confondue on peut supposer que les 2 surfaces sont déjà connectées => pas de raccord à faire
+	// => la retirer? => Traitement Ã  faire dÃ¨s le dÃ©but aprÃ¨s RemoveLastPointOfLoopContours() mais attention au retrait Ã  faire dans IfcSpace et elmt cstruction (Wall,...)
+	// En tout cas si la 1ere paire de point est confondue on peut supposer que les 2 surfaces sont dÃ©jÃ  connectÃ©es => pas de raccord Ã  faire
 	list< pair< pair<vector<double*>::iterator, vector<double*>::iterator>, double>>::iterator it_IndPtCtr1_IndPtCtr2_Dist = li_IndPtCtr1_IndPtCtr2_Dist.begin();
 	if ((*it_IndPtCtr1_IndPtCtr2_Dist).second > db_eps)
 	{
@@ -374,13 +374,13 @@ int ifc_TreePostTreatment::RelimitOneSideBySideSurfaceOfMiddleIfcConnectionSurfa
 		for (it_IndPtCtr1_IndPtCtr2_Dist; it_IndPtCtr1_IndPtCtr2_Dist!= li_IndPtCtr1_IndPtCtr2_Dist.end();++it_IndPtCtr1_IndPtCtr2_Dist)
 		{
 			//
-			//Remplacement des points les plus proches appartenant à un même côté (par leur point milieu)
-			// HP: côté à peu près parallèle => les points d'un même côté sont les 1ères paires de même ordre de distance (arbitrairement au max 20% de plus que la 1ère distance)
+			//Remplacement des points les plus proches appartenant Ã  un mÃªme cÃ´tÃ© (par leur point milieu)
+			// HP: cÃ´tÃ© Ã  peu prÃ¨s parallÃ¨le => les points d'un mÃªme cÃ´tÃ© sont les 1Ã¨res paires de mÃªme ordre de distance (arbitrairement au max 20% de plus que la 1Ã¨re distance)
 			if ((*it_IndPtCtr1_IndPtCtr2_Dist).second < 1.2*db_Distref)
 			{
 				//
-				//Modification des 2 surfaces => remplacer les paires de points les plus proches par un même point milieu 
-				//HP: les côtés à modifier sont des droites parallèles => remplacement des premières paires repérées par une distance similaire
+				//Modification des 2 surfaces => remplacer les paires de points les plus proches par un mÃªme point milieu 
+				//HP: les cÃ´tÃ©s Ã  modifier sont des droites parallÃ¨les => remplacement des premiÃ¨res paires repÃ©rÃ©es par une distance similaire
 				it_CoordCtr1 = (*it_IndPtCtr1_IndPtCtr2_Dist).first.first;
 				it_CoordCtr2 = (*it_IndPtCtr1_IndPtCtr2_Dist).first.second;
 
@@ -412,13 +412,13 @@ int ifc_TreePostTreatment::TransformEntitiesToWorlCoordFrame()
 	{
 		if (it_Elem->first->st_PointsDesContours.size() != 0)
 		{
-			//Décompte du nombre de coord de points
+			//DÃ©compte du nombre de coord de points
 			size_t i_Size = 0;
 			list <list <double*>> ::iterator it_llPt;
 			for (it_llPt = (it_Elem->first->st_PointsDesContours).begin(); it_llPt != (it_Elem->first->st_PointsDesContours).end(); it_llPt++)
 				i_Size += it_llPt->size();
 
-			//Allocation mémoire pour recueillir les coordonnées des points à modifier
+			//Allocation mÃ©moire pour recueillir les coordonnÃ©es des points Ã  modifier
 			double * db_CoordPts = new double[i_Size];
 
 			//Boucle sur les listes de coord 
@@ -434,11 +434,11 @@ int ifc_TreePostTreatment::TransformEntitiesToWorlCoordFrame()
 				}// for (it_lPt = (*it_llPt).begin(); it_lPt != (*it_llPt).end(); it_lPt++)
 			}// for (it_llPt = (it_Elem->first->st_PointsDesContours).begin(); it_llPt != (it_Elem->first->st_PointsDesContours).end(); it_llPt++)
 
-			//Changer les coordonnées pour les mettre P/R au referentiel projet 
+			//Changer les coordonnÃ©es pour les mettre P/R au referentiel projet 
 			res = TransformEntityToWorlCoordFrame(it_Elem->first, db_CoordPts, i_Size);
 			if (res) return res;
 
-			//Mémoriser dans la structure les points modifiés
+			//MÃ©moriser dans la structure les points modifiÃ©s
 			//A FAIRE
 			//new liste de liste...
 			i = 0;
@@ -470,7 +470,7 @@ int ifc_TreePostTreatment::TransformEntityToWorlCoordFrame(STRUCT_IFCENTITY *st_
 {
 	int res = 0;
 	
-	//S'il existe db_RelativePlacement sur l'entité en cours on l'applique
+	//S'il existe db_RelativePlacement sur l'entitÃ© en cours on l'applique
 	if (st_IfcEnt->db_RelativePlacement.size() != 0)
 	{
 		list <double*> ::iterator it_val = (st_IfcEnt->db_RelativePlacement).begin();
@@ -491,7 +491,7 @@ int ifc_TreePostTreatment::TransformEntityToWorlCoordFrame(STRUCT_IFCENTITY *st_
 		O[1] = *(*it_val); it_val++;
 		O[2] = *(*it_val); it_val++;
 
-		//Coordonnées dans le nouveau repère
+		//CoordonnÃ©es dans le nouveau repÃ¨re
 		for (int iCoord = 0; iCoord < int_Size; iCoord += 3)
 		{
 			double db_NewCoordPts[3] = { 0, 0, 0 };
@@ -505,8 +505,8 @@ int ifc_TreePostTreatment::TransformEntityToWorlCoordFrame(STRUCT_IFCENTITY *st_
 		}// for (int iCoord = 0; iCoord < int_Size; iCoord += 3)
 	}// if (st_IfcEnt->db_RelativePlacement.size != 0)
 
-	//Remonter les BelongsTo pour appliquer à chaque pas le db_RelativePlacement s'il existe
-	//IMPORTANT: S'il existe 2 BelongsTo (on se trouve au niveau du IfcConnectionSurfaceGeometry) prendre le ifcSpace et non l'élément de construction
+	//Remonter les BelongsTo pour appliquer Ã  chaque pas le db_RelativePlacement s'il existe
+	//IMPORTANT: S'il existe 2 BelongsTo (on se trouve au niveau du IfcConnectionSurfaceGeometry) prendre le ifcSpace et non l'Ã©lÃ©ment de construction
 	if (st_IfcEnt->st_BelongsTo.size() == 1)
 	{
 		res = TransformEntityToWorlCoordFrame(*(st_IfcEnt->st_BelongsTo.begin()), db_CoordPts, int_Size);
@@ -529,16 +529,16 @@ int ifc_TreePostTreatment::TransformEntityToWorlCoordFrame(STRUCT_IFCENTITY *st_
 				if (res) return res;
 			}// if (string((*it_Elem)->ch_Type) == "IfcSpace")
 			else
-				res = 4008;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
+				res = 4008;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÃ©ro de l'erreur dans cette routine
 		}// else if ((*it_Elem)->ch_Type = "IfcSpace")
 	}// if (st_IfcEnt->st_BelongsTo.size == 1)
 	else if (st_IfcEnt->st_BelongsTo.size() > 2)
-		res = 4007;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numéro de l'erreur dans cette routine
+		res = 4007;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÃ©ro de l'erreur dans cette routine
 
 	return res;
 }
 
-//Recherche des surfaces IfcConnectionSurfaceGeometry en vis-à-vis et côte-à-côte
+//Recherche des surfaces IfcConnectionSurfaceGeometry en vis-Ã -vis et cÃ´te-Ã -cÃ´te
 int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfaces()
 {
 	int res = 0;
@@ -554,7 +554,7 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfaces()
 			list <STRUCT_IFCENTITY*> ::iterator it_Elem2;
 			for (it_Elem2 = (it_Elem1->first->st_Contains).begin(); it_Elem2 != (it_Elem1->first->st_Contains).end(); it_Elem2++)
 			{
-				//HP: Le contains des spaces est composé de IfcProductDefinitionShape, de IfcConnectionSurfaceGeometry et d'élément de construction
+				//HP: Le contains des spaces est composÃ© de IfcProductDefinitionShape, de IfcConnectionSurfaceGeometry et d'Ã©lÃ©ment de construction
 				if (string((*it_Elem2)->ch_Type) != "IfcConnectionSurfaceGeometry" && string((*it_Elem2)->ch_Type) != "IfcProductDefinitionShape")
 					map_BuildingElem_Type[(*it_Elem2)] = (*it_Elem2)->ch_Type;
 			}// for (it_Elem2 = (it_Elem1->first->st_Contains).begin(); it_Elem2 != (it_Elem1->first->st_Contains).end(); it_Elem2++)
@@ -572,18 +572,18 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfaces()
 	return res;
 }
 
-//Routine pour trouver sur un même élément de construction 
-//	les surfaces en vis à vis (chacun appartenant à un espace différent)
-//	les surfaces côte à côte (chacun appartenant à un même espace)
+//Routine pour trouver sur un mÃªme Ã©lÃ©ment de construction 
+//	les surfaces en vis Ã  vis (chacun appartenant Ã  un espace diffÃ©rent)
+//	les surfaces cÃ´te Ã  cÃ´te (chacun appartenant Ã  un mÃªme espace)
 int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfacesOfOneBuildingelement(STRUCT_IFCENTITY *st_IfcEntBE)
 {
 	int res = 0;
 	
 	//
-	//Préparations des éléments d'informations nécessaires aux algo de FaceToFace et SideBySide
+	//PrÃ©parations des Ã©lÃ©ments d'informations nÃ©cessaires aux algo de FaceToFace et SideBySide
 	//
 
-	//Mapping entre les IfcConnectionSurfaceGeometry de l'élément de construction et leur IfcSpace
+	//Mapping entre les IfcConnectionSurfaceGeometry de l'Ã©lÃ©ment de construction et leur IfcSpace
 	map<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *> map_IfcConn_IfcSpace;
 	map<STRUCT_IFCENTITY *, int> map_IfcSpace_NbIfcConn;
 	list <STRUCT_IFCENTITY*> ::iterator it_Elem1;
@@ -601,15 +601,15 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfacesOfOneBuildingeleme
 	}// for (it_Elem1 = (st_IfcEntBE->st_Contains).begin(); it_Elem1 != (st_IfcEntBE->st_Contains).end(); it_Elem1++)
 
 	//
-	//Calcul des distances entre centre de gravité de chaque paire de IfcConnectionSurfaceGeometry
+	//Calcul des distances entre centre de gravitÃ© de chaque paire de IfcConnectionSurfaceGeometry
 	//  li_IfcConn_IfcConn_Dist[IfcConnectionSurfaceGeometry1, IfcConnectionSurfaceGeometry2]=distance
-	//  Utilisation d'une liste pour profiter du tri optimisée "list::sort()"
+	//  Utilisation d'une liste pour profiter du tri optimisÃ©e "list::sort()"
 	list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>> li_IfcConn_IfcConn_Dist;
 	//Boucle sur st_Contains pour retrouver tous les IfcConnectionSurfaceGeometry
 	for (it_Elem1 = (st_IfcEntBE->st_Contains).begin(); it_Elem1 != (st_IfcEntBE->st_Contains).end(); it_Elem1++)
 	{
-		//Calculer distance entre chaque IfcConnectionSurfaceGeometry de l'élément de construction 
-		//	même si appartiennent à même ifcspace => utile pour les SideBySide
+		//Calculer distance entre chaque IfcConnectionSurfaceGeometry de l'Ã©lÃ©ment de construction 
+		//	mÃªme si appartiennent Ã  mÃªme ifcspace => utile pour les SideBySide
 		it_Elem1++;
 		for (it_Elem2 = it_Elem1, it_Elem1--; it_Elem2 != (st_IfcEntBE->st_Contains).end(); it_Elem2++)
 		{
@@ -618,7 +618,7 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfacesOfOneBuildingeleme
 			std::vector<double*> vc_CentroidElem2((*it_Elem2)->db_Centroid.begin(), (*it_Elem2)->db_Centroid.end());
 			double db_dist = ComputePtPtDistance(vc_CentroidElem1, vc_CentroidElem2);
 
-			//Init de la carte qui indiquera si la paire d'IfcConnectionSurfaceGeometry en index n'est pas cote à cote
+			//Init de la carte qui indiquera si la paire d'IfcConnectionSurfaceGeometry en index n'est pas cote Ã  cote
 			//map_CanBeSideBySide[std::make_pair((*it_Elem1), (*it_Elem2))] = true;
 			//Memo de la distance entre les 2 IfcConnectionSurfaceGeometry (*it_Elem1) et (*it_Elem2)
 			li_IfcConn_IfcConn_Dist.push_back(std::make_pair(std::make_pair((*it_Elem1), (*it_Elem2)), db_dist));
@@ -626,16 +626,16 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfacesOfOneBuildingeleme
 		}// for (it_Elem = (st_IfcEnt->st_Contains).begin(); it_Elem != (st_IfcEnt->st_Contains).end(); it_Elem++)
 	}// for (it_Elem = (st_IfcEnt->st_Contains).begin(); it_Elem != (st_IfcEnt->st_Contains).end(); it_Elem++)
 
-	//Trier les paires par proximité pour trouver les surfaces en "vis à vis" et celles "côte à côte" (sur un même élément de construction)
+	//Trier les paires par proximitÃ© pour trouver les surfaces en "vis Ã  vis" et celles "cÃ´te Ã  cÃ´te" (sur un mÃªme Ã©lÃ©ment de construction)
 	li_IfcConn_IfcConn_Dist.sort([](auto lhs, auto rhs) { return lhs.second < rhs.second; });
 
 	//
-	//Détection des IfcConnectionSurfaceGeometry en vis-à-vis
+	//DÃ©tection des IfcConnectionSurfaceGeometry en vis-Ã -vis
 	res = FindFaceToFaceSurfacesOfOneBuildingelement(st_IfcEntBE, map_IfcConn_IfcSpace, li_IfcConn_IfcConn_Dist);
 	if (res) return res;
 
 	//
-	//Détection des IfcConnectionSurfaceGeometry en côte-à-côte
+	//DÃ©tection des IfcConnectionSurfaceGeometry en cÃ´te-Ã -cÃ´te
 	res = FindSideBySideSurfacesOfOneBuildingelement(st_IfcEntBE, map_IfcConn_IfcSpace, li_IfcConn_IfcConn_Dist, map_IfcSpace_NbIfcConn);
 
 	return res;
@@ -649,28 +649,28 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfacesOfOneBuildingeleme
 //	return false;
 //}
 
-//Algo pour détecter les IfcConnectionSurfaceGeometry en vis-à-vis
-//  st_IfcEntBE est l'élément de construction en cours (on utilise son épaisseur pour éviter des faux positifs)
-//  map_IfcConn_IfcSpace associe un IfcConnectionSurfaceGeometry (de l'élément de construction en cours) avec son IfcSpace (utiliser pour ne pas associer 2 IfcConnectionSurfaceGeometry du même IfcSpace)
-//  li_IfcConn_IfcConn_Dist: liste de paire d'IfcConnectionSurfaceGeometry ORDONNEE en fonction de leur distance (permet de déterminer les vis-à-vis)
+//Algo pour dÃ©tecter les IfcConnectionSurfaceGeometry en vis-Ã -vis
+//  st_IfcEntBE est l'Ã©lÃ©ment de construction en cours (on utilise son Ã©paisseur pour Ã©viter des faux positifs)
+//  map_IfcConn_IfcSpace associe un IfcConnectionSurfaceGeometry (de l'Ã©lÃ©ment de construction en cours) avec son IfcSpace (utiliser pour ne pas associer 2 IfcConnectionSurfaceGeometry du mÃªme IfcSpace)
+//  li_IfcConn_IfcConn_Dist: liste de paire d'IfcConnectionSurfaceGeometry ORDONNEE en fonction de leur distance (permet de dÃ©terminer les vis-Ã -vis)
 int ifc_TreePostTreatment::FindFaceToFaceSurfacesOfOneBuildingelement(STRUCT_IFCENTITY *st_IfcEntBE, map<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *> &map_IfcConn_IfcSpace, list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>> &li_IfcConn_IfcConn_Dist)
 {
 	int res = 0;
 
-	//Surfaces en vis à vis (sur un même élément de construction) 
-	//Repérer les surfaces les plus proches et en vis à vis (=distance centre de gravite < 2*epaisseur mur)
+	//Surfaces en vis Ã  vis (sur un mÃªme Ã©lÃ©ment de construction) 
+	//RepÃ©rer les surfaces les plus proches et en vis Ã  vis (=distance centre de gravite < 2*epaisseur mur)
 	std::map<STRUCT_IFCENTITY*, bool> map_IsEntityFound;
 	for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
 	{
-		//Si les 2 IfcConnectionSurfaceGeometry appartiennent à des ifcspace différent=> on continue (sinon on passe à une autre pair)
+		//Si les 2 IfcConnectionSurfaceGeometry appartiennent Ã  des ifcspace diffÃ©rent=> on continue (sinon on passe Ã  une autre pair)
 		if (map_IfcConn_IfcSpace[(*it).first.first] != map_IfcConn_IfcSpace[(*it).first.second])
 		{
-			//Si les 2 IfcConnectionSurfaceGeometry n'ont pas encore touvé leur vis à vis => on continue (sinon on passe à une autre pair)
+			//Si les 2 IfcConnectionSurfaceGeometry n'ont pas encore touvÃ© leur vis Ã  vis => on continue (sinon on passe Ã  une autre pair)
 			if (!map_IsEntityFound[(*it).first.first] && !map_IsEntityFound[(*it).first.second])
 			{
 				//la distance entre 2 surfaces en vis a vis est environ l'epaisseur du mur
-				//par contre s'il n'y a pas de mur en vis a vis (mur exterieur) les plus proches peuvent etre des surface cote à cote et non en vis a vis
-				// => le "if" qui suit permet d'exclure ce genre de faux positifs (cra distance des centre de gravité sont de distance > à epaisseur)
+				//par contre s'il n'y a pas de mur en vis a vis (mur exterieur) les plus proches peuvent etre des surface cote Ã  cote et non en vis a vis
+				// => le "if" qui suit permet d'exclure ce genre de faux positifs (cra distance des centre de gravitÃ© sont de distance > Ã  epaisseur)
 				double db_cp = (*it).second;
 				double db_rd = std::stod(st_IfcEntBE->map_DefValues->at("Width"));
 				if ((*it).second < 2 * std::stod(st_IfcEntBE->map_DefValues->at("Width")))
@@ -688,25 +688,25 @@ int ifc_TreePostTreatment::FindFaceToFaceSurfacesOfOneBuildingelement(STRUCT_IFC
 	return res;
 }
 
-//Algo pour détecter les IfcConnectionSurfaceGeometry côte-à-côte
-//  st_IfcEntBE est l'élément de construction en cours (n'est pas utilisé mais si besoin pourrait l'être...)
-//  map_IfcConn_IfcSpace associe un IfcConnectionSurfaceGeometry (de l'élément de construction en cours) avec son IfcSpace (utiliser pour ne pas associer des IfcConnectionSurfaceGeometry d'IfcSpaces différents)
-//  li_IfcConn_IfcConn_Dist: liste de paire d'IfcConnectionSurfaceGeometry ORDONNEE en fonction de leur distance (permet de déterminer les côte-à-côte)
-//  map_IfcSpace_NbIfcConn détermine le nombre d'IfcConnectionSurfaceGeometry par IfcSpace (permet à la fois de boucler sur les ifcSpaces et de déterminer "l'algo" en fonction du nombre d'IfcConnectionSurfaceGeometry)
+//Algo pour dÃ©tecter les IfcConnectionSurfaceGeometry cÃ´te-Ã -cÃ´te
+//  st_IfcEntBE est l'Ã©lÃ©ment de construction en cours (n'est pas utilisÃ© mais si besoin pourrait l'Ãªtre...)
+//  map_IfcConn_IfcSpace associe un IfcConnectionSurfaceGeometry (de l'Ã©lÃ©ment de construction en cours) avec son IfcSpace (utiliser pour ne pas associer des IfcConnectionSurfaceGeometry d'IfcSpaces diffÃ©rents)
+//  li_IfcConn_IfcConn_Dist: liste de paire d'IfcConnectionSurfaceGeometry ORDONNEE en fonction de leur distance (permet de dÃ©terminer les cÃ´te-Ã -cÃ´te)
+//  map_IfcSpace_NbIfcConn dÃ©termine le nombre d'IfcConnectionSurfaceGeometry par IfcSpace (permet Ã  la fois de boucler sur les ifcSpaces et de dÃ©terminer "l'algo" en fonction du nombre d'IfcConnectionSurfaceGeometry)
 int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFCENTITY *st_IfcEntBE, map<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *> &map_IfcConn_IfcSpace, list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>> &li_IfcConn_IfcConn_Dist, map<STRUCT_IFCENTITY *, int> &map_IfcSpace_NbIfcConn)
 {
 	int res = 0;
 
-	//Surfaces côte à côte (sur un même élément de construction)
-	//Paires de Surfaces les plus proches qui ne soient pas en vis à vis et appartenant à un même espace
-	//Repérer les paires de surfaces appartenant à même espace
+	//Surfaces cÃ´te Ã  cÃ´te (sur un mÃªme Ã©lÃ©ment de construction)
+	//Paires de Surfaces les plus proches qui ne soient pas en vis Ã  vis et appartenant Ã  un mÃªme espace
+	//RepÃ©rer les paires de surfaces appartenant Ã  mÃªme espace
 	//Cas triviaux: 
-	//   - S'il n'y a que 1 surface pas de côte à côte
-	//   - S'il n'y a que 2 surfaces => 1 seule paire côte à côte
+	//   - S'il n'y a que 1 surface pas de cÃ´te Ã  cÃ´te
+	//   - S'il n'y a que 2 surfaces => 1 seule paire cÃ´te Ã  cÃ´te
 	//   - S'il y a strictement plus que 2 surfaces 
-	//      => A1) prendre la 1ere paire la plus proche à "iso-espace" = (S1 et S2)
-	//      => A2) prendre la 2ème paire la plus proche contenant S1 = (S1 et S3) 
-	//      => A3) prendre la 3ème paire (S2 et S3)
+	//      => A1) prendre la 1ere paire la plus proche Ã  "iso-espace" = (S1 et S2)
+	//      => A2) prendre la 2Ã¨me paire la plus proche contenant S1 = (S1 et S3) 
+	//      => A3) prendre la 3Ã¨me paire (S2 et S3)
 	//         A1 et A2 => dist (S1 et S3) > (S1 et S2)
 	//         A3 => soit dist (S2 et S3) > (S1 et S3) implique S1 au milieu de S2 et S3 
 	//            => soit dist (S2 et S3) < (S1 et S3) implique S2 au milieu de S1 et S3 (dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide)
@@ -715,21 +715,21 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 	//    A1)                    S1--S2
 	//    A2.2)         S3-------S1           => dans ce cas S1 aura 2 SideBySide, S2 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S2 et S3 peuvent avoir un autre SideBySide S4) 
 	//
-	//	Le processus A1, A2 et A3 est à répéter en excluant la surface ayant déjà ses 2 SideBySide
-	//   => a priori pour 3 surfaces d'un même espace processus à faire 1 fois, pour 4 surfaces 2 fois, pour N surfaces N-2 fois
+	//	Le processus A1, A2 et A3 est Ã  rÃ©pÃ©ter en excluant la surface ayant dÃ©jÃ  ses 2 SideBySide
+	//   => a priori pour 3 surfaces d'un mÃªme espace processus Ã  faire 1 fois, pour 4 surfaces 2 fois, pour N surfaces N-2 fois
 	map<STRUCT_IFCENTITY *, int> ::iterator mp_Space;
 	for (mp_Space = map_IfcSpace_NbIfcConn.begin(); mp_Space != map_IfcSpace_NbIfcConn.end(); mp_Space++)
 	{
 		//
-		//USECASE à 2 IfcConnectionSurfaceGeometry par ifcSpace
+		//USECASE Ã  2 IfcConnectionSurfaceGeometry par ifcSpace
 		if ((*mp_Space).second == 2)
 		{
 			for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
 			{
-				//Si les 2 IfcConnectionSurfaceGeometry appartiennent à 1 même ifcspace => on continue
+				//Si les 2 IfcConnectionSurfaceGeometry appartiennent Ã  1 mÃªme ifcspace => on continue
 				if (map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second])
 				{
-					//Si les 2 IfcConnectionSurfaceGeometry appartiennent au même ifcspace en cours => on continue
+					//Si les 2 IfcConnectionSurfaceGeometry appartiennent au mÃªme ifcspace en cours => on continue
 					if (map_IfcConn_IfcSpace[(*it).first.first] == (*mp_Space).first)
 					{
 						//(*it).first.first->st_SideBySide.push_back((*it).first.second);
@@ -738,17 +738,17 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 						(*it).first.first->mp_SideBySide[(*it).first.second]=false;
 						(*it).first.second->mp_SideBySide[(*it).first.first]=false;
 
-						//Il n'y a que 2 IfcConnectionSurfaceGeometry => on peut arrêter la boucle sur les pairs
+						//Il n'y a que 2 IfcConnectionSurfaceGeometry => on peut arrÃªter la boucle sur les pairs
 						break;
 					}// if (map_IfcConn_IfcSpace[(*it).first.first] == (*mp_Space).first)
 				}// if (map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second])
 			}//for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
 		}// if ((*mp_Space).second == 2)
 		 //
-		 //USECASE à plus de 2 IfcConnectionSurfaceGeometry par ifcSpace
+		 //USECASE Ã  plus de 2 IfcConnectionSurfaceGeometry par ifcSpace
 		else if ((*mp_Space).second > 2)
 		{
-			//Recherche des 3 pairs it, it2 et it3 d'IfcConnectionSurfaceGeometry appartenant au même IfcSpace en cours
+			//Recherche des 3 pairs it, it2 et it3 d'IfcConnectionSurfaceGeometry appartenant au mÃªme IfcSpace en cours
 			//BOUCLE POUR CHERCHER it
 			list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it;
 			list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it2;
@@ -757,7 +757,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 			{
 				bool bo_AreTheTwoPairsFound = false;
 				//it=S1-S2?
-				//Si les 2 IfcConnectionSurfaceGeometry appartiennent au même ifcspace en cours => on continue
+				//Si les 2 IfcConnectionSurfaceGeometry appartiennent au mÃªme ifcspace en cours => on continue
 				//bool bo_CanBeSideBySide = map_CanBeSideBySide[std::make_pair((*it).first.first, (*it).first.second)];
 				if ((map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second]) && (map_IfcConn_IfcSpace[(*it).first.first] == (*mp_Space).first))
 				{
@@ -768,7 +768,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 					for (it2 = li_IfcConn_IfcConn_Dist.begin(); it2 != li_IfcConn_IfcConn_Dist.end(); it2++)
 					{
 						//it2=S1-S3?
-						//Si la 1ere IfcConnectionSurfaceGeometry de it2 est S1 et si la 2nde IfcConn (S3) appartient au même ifcspace => on continue
+						//Si la 1ere IfcConnectionSurfaceGeometry de it2 est S1 et si la 2nde IfcConn (S3) appartient au mÃªme ifcspace => on continue
 						if ((it2 != it) && (*it2).first.first == (*it).first.first && map_IfcConn_IfcSpace[(*it2).first.second] == (*mp_Space).first)
 						{
 							//A ce stade, on a les 2 paires d'ifcConn it=S1-S2 et it2=S1-S3, on cherche la derniere paire it3=S2-S3 ou it3=S3-S2
@@ -813,7 +813,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 										//S3->sideBySide(S2)
 										(*it2).first.second->mp_SideBySide[(*it).first.second] = false;
 
-										//Indication que S1 et S3 ne peuvent pas être cote à cote
+										//Indication que S1 et S3 ne peuvent pas Ãªtre cote Ã  cote
 										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.second)] = false;
 										bo_AreTheTwoPairsFound = true;
 									}// if ((*it3).second<(*it2).second)
@@ -843,7 +843,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 										//S2->sideBySide(S1)
 										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
 
-										//Indication que S2 et S3 ne peuvent pas être cote à cote
+										//Indication que S2 et S3 ne peuvent pas Ãªtre cote Ã  cote
 										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.second)] = false;
 										bo_AreTheTwoPairsFound = true;
 									}// if ((*it3).second>(*it2).second)
@@ -883,7 +883,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 										//S3->sideBySide(S2)
 										(*it2).first.second->mp_SideBySide[(*it).first.second] = false;
 
-										//Indication que S1 et S3 ne peuvent pas être cote à cote
+										//Indication que S1 et S3 ne peuvent pas Ãªtre cote Ã  cote
 										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.second)] = false;
 										bo_AreTheTwoPairsFound = true;
 									}// if ((*it3).second<(*it2).second)
@@ -913,7 +913,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 										//S2->sideBySide(S1)
 										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
 
-										//Indication que S2 et S3 ne peuvent pas être cote à cote
+										//Indication que S2 et S3 ne peuvent pas Ãªtre cote Ã  cote
 										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.second)] = false;
 										bo_AreTheTwoPairsFound = true;
 									}// if ((*it3).second>(*it2).second)
@@ -923,7 +923,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 							}// for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it3 = it2, it2--; it3 != li_IfcConn_IfcConn_Dist.end(); ++it3)
 						}// if ((it2 != it) && (*it2).first.first == (*it).first.first && map_IfcConn_IfcSpace[(*it2).first.second] == (*mp_Space).first)
 						 //it2=S3-S1?
-						 //Si la 2nde IfcConnectionSurfaceGeometry de it2 est S1 et si la 1ere IfcConn (S3) appartient au même ifcspace => on continue
+						 //Si la 2nde IfcConnectionSurfaceGeometry de it2 est S1 et si la 1ere IfcConn (S3) appartient au mÃªme ifcspace => on continue
 						if ((it2 != it) && (*it2).first.second == (*it).first.first && map_IfcConn_IfcSpace[(*it2).first.first] == (*mp_Space).first)
 						{
 							//A ce stade, on a les 2 paires d'ifcConn it=S1-S2 et it2=S3-S1, on cherche la derniere paire it3=S2-S3 ou it3=S3-S2
@@ -966,7 +966,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 										//S3->sideBySide(S2)
 										(*it2).first.first->mp_SideBySide[(*it).first.second] = false;
 
-										//Indication que S1 et S3 ne peuvent pas être cote à cote
+										//Indication que S1 et S3 ne peuvent pas Ãªtre cote Ã  cote
 										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.first)] = false;
 										bo_AreTheTwoPairsFound = true;
 									}// if ((*it3).second<(*it2).second)
@@ -996,7 +996,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 										//S2->sideBySide(S1)
 										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
 
-										//Indication que S2 et S3 ne peuvent pas être cote à cote
+										//Indication que S2 et S3 ne peuvent pas Ãªtre cote Ã  cote
 										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.first)] = false;
 										bo_AreTheTwoPairsFound = true;
 									}// if ((*it3).second>(*it2).second)
@@ -1036,7 +1036,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 										//S3->sideBySide(S2)
 										(*it2).first.first->mp_SideBySide[(*it).first.second] = false;
 
-										//Indication que S1 et S3 ne peuvent pas être cote à cote
+										//Indication que S1 et S3 ne peuvent pas Ãªtre cote Ã  cote
 										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.first)] = false;
 										bo_AreTheTwoPairsFound = true;
 									}// if ((*it3).second<(*it2).second)
@@ -1066,7 +1066,7 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 										//S2->sideBySide(S1)
 										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
 
-										//Indication que S2 et S3 ne peuvent pas être cote à cote
+										//Indication que S2 et S3 ne peuvent pas Ãªtre cote Ã  cote
 										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.first)] = false;
 										bo_AreTheTwoPairsFound = true;
 									}// if ((*it3).second>(*it2).second)
