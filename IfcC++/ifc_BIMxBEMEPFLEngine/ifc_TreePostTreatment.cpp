@@ -1,6 +1,6 @@
 #include "ifc_TreePostTreatment.h"
 //#include <vector>
-#include <string>
+#include <cmath>
 
 const double db_eps= 0.00001;
 

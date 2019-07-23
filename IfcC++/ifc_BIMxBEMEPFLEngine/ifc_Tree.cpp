@@ -1,4 +1,5 @@
 #include "ifc_Tree.h"
+#include <string.h>
 
 
 
