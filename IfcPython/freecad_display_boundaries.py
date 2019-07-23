@@ -13,12 +13,12 @@ import Part
 def display_boundaries(ifc_path):
     ifc_file = ifcopenshell.open(ifc_path)
     settings = ifcopenshell.geom.settings()
-    settings.set(settings.USE_WORLD_COORDS, True)
     settings.set(settings.INCLUDE_CURVES, True)
     brep = False
     if brep:
         settings.set(settings.USE_PYTHON_OPENCASCADE, True)
         settings.set(settings.USE_BREP_DATA, True)
+        settings.set(settings.USE_WORLD_COORDS, True)
     else:
         settings.set(settings.USE_PYTHON_OPENCASCADE, False)
     space_boundaries = ifc_file.by_type("IfcRelSpaceBoundary")
@@ -87,5 +87,5 @@ if __name__ == "__main__":
     ptvsd.wait_for_attach()
     # breakpoint()
     display_boundaries(
-        ifc_path="/home/cyril/git/BIMxBEM/IfcPython/9000_BIMxBEM_TestModèle_R19.ifc"
+        ifc_path="/home/cyril/git/BIMxBEM/IfcPython/9000_BIMxBEM_TestModèle_ACAD.ifc"
     )
