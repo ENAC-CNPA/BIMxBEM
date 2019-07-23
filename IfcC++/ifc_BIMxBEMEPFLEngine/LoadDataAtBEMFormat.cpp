@@ -11,7 +11,7 @@ LoadDataAtBEMFormat::~LoadDataAtBEMFormat()
 {
 }
 
-//Convertit les structures attendues par Lesosai en chaine de caractères
+//Convertit les structures attendues par Lesosai en chaine de caractÃ¨res
 int LoadDataAtBEMFormat::GetLesosaiEntitiesDefinition(string *&str_EntDef)
 {
 	int res = 0;
@@ -32,27 +32,27 @@ int LoadDataAtBEMFormat::GetLesosaiEntitiesAttributesSize()
 }
 
 
-//Transforme la structure générique ifc_Tree en des structures attendues par Lesosai
+//Transforme la structure gÃ©nÃ©rique ifc_Tree en des structures attendues par Lesosai
 int LoadDataAtBEMFormat::LoadLesosaiFormat(ifc_Tree* CurrentIfcTree)
 {
 	int res = 0;
 
-	//Pour Post-traiter le tree => mettre l'arbre en rateau (sans duplication des entités)
+	//Pour Post-traiter le tree => mettre l'arbre en rateau (sans duplication des entitÃ©s)
 	ifc_TreePostTreatment *cl_PostTreatmt = new ifc_TreePostTreatment(CurrentIfcTree);
 
-	//Mise à plat de l'arbre (en rateau)
+	//Mise Ã  plat de l'arbre (en rateau)
 	Map_Basified_Tree *map_BasifTree=nullptr;
 	if(cl_PostTreatmt)
 		cl_PostTreatmt->BasifyTree(map_BasifTree);
 
-	//Certains contours sont définis avec en dernier point le 1er points (loop)
-	//Pour la suite des traitements, cela nous gêne (calcul du centre de gravité=CentroidsComputation, détection des points les plus proche=RelimitSideBySideSurfaces)
-	//Retrait dans les contours (st_PointsDesContours) du derniers point lorsqu'il est égal au 1er (+ consigne bool bo_IsItLoop=true)
+	//Certains contours sont dÃ©finis avec en dernier point le 1er points (loop)
+	//Pour la suite des traitements, cela nous gÃªne (calcul du centre de gravitÃ©=CentroidsComputation, dÃ©tection des points les plus proche=RelimitSideBySideSurfaces)
+	//Retrait dans les contours (st_PointsDesContours) du derniers point lorsqu'il est Ã©gal au 1er (+ consigne bool bo_IsItLoop=true)
 	if (cl_PostTreatmt)
 		cl_PostTreatmt->RemoveLastPointOfLoopContours();
 
 	//Calcul des surfaces IfcConnectionSurfaceGeometry 
-	//  => à faire avant changement de coord car algo fonctionne en 2D => si la 3ème coord est la même pour toute!
+	//  => Ã  faire avant changement de coord car algo fonctionne en 2D => si la 3Ã¨me coord est la mÃªme pour toute!
 	if (cl_PostTreatmt)
 		cl_PostTreatmt->ComputeIfcConnectionSurfaceGeometrySurface();
 
@@ -60,30 +60,30 @@ int LoadDataAtBEMFormat::LoadLesosaiFormat(ifc_Tree* CurrentIfcTree)
 	if (cl_PostTreatmt)
 		cl_PostTreatmt->TransformEntitiesToWorlCoordFrame();
 
-	//Calcul des centres de gravité de chaque IfcConnectionSurfaceGeometry
+	//Calcul des centres de gravitÃ© de chaque IfcConnectionSurfaceGeometry
 	if (cl_PostTreatmt)
 		cl_PostTreatmt->CentroidsComputation();
 
-	//Repérage des IfcConnectionSurfaceGeometry en vis-à-vis et côte-à-côte
+	//RepÃ©rage des IfcConnectionSurfaceGeometry en vis-Ã -vis et cÃ´te-Ã -cÃ´te
 	if (cl_PostTreatmt)
 		cl_PostTreatmt->FindFaceToFaceAndSideBySideSurfaces();
 
-	//Raccord des IfcConnectionSurfaceGeometry en côte-à-côte
+	//Raccord des IfcConnectionSurfaceGeometry en cÃ´te-Ã -cÃ´te
 	if (cl_PostTreatmt)
 		cl_PostTreatmt->RelimitSideBySideSurfaces();
 
-	//Raccord des IfcConnectionSurfaceGeometry en côte-à-côte
+	//Raccord des IfcConnectionSurfaceGeometry en cÃ´te-Ã -cÃ´te
 	if (cl_PostTreatmt)
 		cl_PostTreatmt->CreateTIFCSurfaces();
 
-	//Ajout des TIFCSurfaces à ifc_TreePostTreatment::_map_BasifTree
+	//Ajout des TIFCSurfaces Ã  ifc_TreePostTreatment::_map_BasifTree
 	if (cl_PostTreatmt)
 		cl_PostTreatmt->CompleteBasifiedTreeFromByTIFCSurfaces();
 
-	// Allocation de la chaine de caractere (fourniture des données du Tree via cette chaine de caractere)
+	// Allocation de la chaine de caractere (fourniture des donnÃ©es du Tree via cette chaine de caractere)
 	_str_EntitiesDefinitions = new string();
 
-	//Conversion des entités dans la chaine de caractere _str_EntitiesDefinitions (membre de la classe)
+	//Conversion des entitÃ©s dans la chaine de caractere _str_EntitiesDefinitions (membre de la classe)
 	ConvertBasifiedTree(map_BasifTree);
 
 	return res;
@@ -92,9 +92,9 @@ int LoadDataAtBEMFormat::LoadLesosaiFormat(ifc_Tree* CurrentIfcTree)
 //int LoadDataAtBEMFormat::BasifyTreeFrom(STRUCT_IFCENTITY *&st_IfcTree, Map_Basified_Tree &map_BasifTree)
 //{
 //	int res = 0;
-//	//Memo adresse pointeur (si existe pas ajouté) et son type "Ifc" 
-//	// => la map permet de ne pas référencer de multiple fois une même entité 
-//	//    dans l'arbre, des entités sont référencés plusieurs fois car elles appartiennent à plusieurs objets
+//	//Memo adresse pointeur (si existe pas ajoutÃ©) et son type "Ifc" 
+//	// => la map permet de ne pas rÃ©fÃ©rencer de multiple fois une mÃªme entitÃ© 
+//	//    dans l'arbre, des entitÃ©s sont rÃ©fÃ©rencÃ©s plusieurs fois car elles appartiennent Ã  plusieurs objets
 //	map_BasifTree[st_IfcTree] = st_IfcTree->ch_Type;
 //
 //	list <STRUCT_IFCENTITY*> ::iterator it_Elem;
@@ -157,7 +157,7 @@ int LoadDataAtBEMFormat::ConvertBasifiedTree(Map_Basified_Tree *&map_BasifTree)
 
 	//Retrait fin du paragraphe </Set_Of_TIFCPolygons>
 	_str_FacesDefinitions = _str_FacesDefinitions.substr(0, _str_FacesDefinitions.length() - str_Fin.length());
-	//Retrait début du paragraphe <Set_Of_TIFCPolygons>
+	//Retrait dÃ©but du paragraphe <Set_Of_TIFCPolygons>
 	_str_SubFacesDefinitions = _str_SubFacesDefinitions.substr(str_Deb.length(), _str_SubFacesDefinitions.length() - str_Deb.length());
 
 	int_Level = 0;
@@ -293,7 +293,7 @@ int LoadDataAtBEMFormat::ConvertIfcEnt(STRUCT_IFCENTITY *&st_IfcEnt, string &str
 {
 	int res = 0;
 
-	// Entête Début
+	// EntÃªte DÃ©but
 	int int_Level = 20;
 	string str_KW = str_Balise;
 	string str_ValKW = "";
@@ -303,7 +303,7 @@ int LoadDataAtBEMFormat::ConvertIfcEnt(STRUCT_IFCENTITY *&st_IfcEnt, string &str
 	// Id, Name, Contains
 	GenericConversion(st_IfcEnt, str_EntsDefinitions, str_ContainsName, str_InsideContainsName);
 
-	// Entête Fin
+	// EntÃªte Fin
 	int_Level = 21;
 	LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
 	//str_EntsDefinitions = str_EntsDefinitions + FIN_KW1_L + str_Balise + KW_R;
@@ -513,7 +513,7 @@ int LoadDataAtBEMFormat::SpecificConversionOfContainsForTIFCSurface(STRUCT_IFCEN
 	list <STRUCT_IFCENTITY*> ::iterator it_Elem;
 	for (it_Elem = (st_IfcEnt->st_Contains).begin(); it_Elem != (st_IfcEnt->st_Contains).end(); it_Elem++)
 	{
-		// geoInt1 et geoInt2 (geoInt2 est vide si c'est une TIFCsurface en vis-à-vis avec extérieur)
+		// geoInt1 et geoInt2 (geoInt2 est vide si c'est une TIFCsurface en vis-Ã -vis avec extÃ©rieur)
 		int int_Level = 30;
 		string str_KW = "geoInt" + std::to_string(i_Ind);
 		string str_ValKW = (*it_Elem)->ch_Id;
@@ -554,7 +554,7 @@ int LoadDataAtBEMFormat::SpecificConversionOfContainsBuilding(STRUCT_IFCENTITY *
 
 	res = SpecificConversionOfContains(st_IfcEnt, str_EntsDefinitions, str_ContainsName, str_InsideContainsName);
 
-	// boucle à partir du building sur ses storey, puis les espaces puis les ifconnecturface puis les TIFCSurface
+	// boucle Ã  partir du building sur ses storey, puis les espaces puis les ifconnecturface puis les TIFCSurface
 	//	pour recuperer tous les TIFCSurface du building(de maniere unique) = > map ou liste(+unique()) puis lire les id des TIFCSurface
 	list <STRUCT_IFCENTITY*> li_TIFCSurfaceByBuilding;
 	list <STRUCT_IFCENTITY*> ::iterator it_ElemStorey;
@@ -658,7 +658,7 @@ int LoadDataAtBEMFormat::SpecificConversionOfContainsForSpace(STRUCT_IFCENTITY *
 	{
 		if (string((*it_Elem)->ch_Type) == string("IfcProductDefinitionShape"))
 		{
-			//on saute l'étage "IfcProductDefinitionShape" pour descendre sur les faces
+			//on saute l'Ã©tage "IfcProductDefinitionShape" pour descendre sur les faces
 			list <STRUCT_IFCENTITY*> ::iterator it_SsElem;
 			for (it_SsElem = ((*it_Elem)->st_Contains).begin(); it_SsElem != ((*it_Elem)->st_Contains).end(); it_SsElem++)
 			{
