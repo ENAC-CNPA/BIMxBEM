@@ -9,8 +9,13 @@ int ifc_Tree::BuildTreeFromRoot(Type_Elmt_Of_Source *&pElem/*, STRUCT_IFCENTITY 
 	if (res) return res;
 
 	//Recup du positionnement relatif
+	Type_Elmt_Of_Source *lpObjectGeomrepCtx = nullptr;
+	res = ifcXmlFile->FindIfcGeometricRepresentationContext(pElem, lpObjectGeomrepCtx);
+	if (res) return res;
+
+	//Recup du positionnement relatif
 	Type_Elmt_Of_Source *lpObjectPlac = nullptr;
-	res = ifcXmlFile->FindIfcGeometricRepresentationContext(pElem, lpObjectPlac);
+	res = ifcXmlFile->FindIfcAxis2Placement3D(lpObjectGeomrepCtx, lpObjectPlac);
 	if (res) return res;
 
 	//Recup de la matrice de position
@@ -18,9 +23,17 @@ int ifc_Tree::BuildTreeFromRoot(Type_Elmt_Of_Source *&pElem/*, STRUCT_IFCENTITY 
 	res = ifcXmlFile->ReadIfcAxis2Placement3DMatrix(lpObjectPlac, db_LocalMat);
 	if (res) return res;
 
+	//Recup du vecteur Nord géographique
+	double db_GeoNorth[3];
+	res = ifcXmlFile->ReadIfcDirectionVector(lpObjectGeomrepCtx, db_GeoNorth);
+	if (res) return res;
+
 	//Création et Remplissage de la structure de "IfcProject"
 	_st_IfcTree = new STRUCT_IFCENTITY();
 	FillAttributeOf_STRUCT_IFCENTITY(_st_IfcTree, m_messages, db_LocalMat);
+
+	//On met le Nord Géographique dans l'attribut "Centroid" de l'ifcProject 
+	FillCentroidOf_STRUCT_IFCENTITY(_st_IfcTree, db_GeoNorth);
 
 	//Recupération chainée des entités successives de "IfcProject"
 	res = BuildTreeFrom(pElem, ifcXmlFile, _st_IfcTree);
@@ -52,6 +65,10 @@ int ifc_Tree::BuildTreeFromRelAggregates(list<Type_Elmt_Of_Source*> &lpRelatedOb
 		double db_LocalMat[3][4];
 		res = ifcXmlFile->ReadIfcAxis2Placement3DMatrix(lpObjectPlac, db_LocalMat);
 		if (res) return res;
+
+		////Recup du PredefinedType (soit sous ifcEntity soit sous ifcEntityType via IfcRelDefinesByType de l'ifcEntity)
+		//res = ifcXmlFile->ReadPredefinedTypeOfAnEntity(*it_Elem, map_messages);
+		//if (res) return res;
 
 		//Création et Remplissage de la structure de "IfcEntity"
 		STRUCT_IFCENTITY * st_IfcContain = new STRUCT_IFCENTITY;

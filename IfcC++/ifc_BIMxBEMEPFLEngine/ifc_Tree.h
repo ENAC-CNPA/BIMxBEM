@@ -4,6 +4,8 @@
 #include <map>
 
 #include <list>
+#include <functional>
+#include <set>
 using namespace std;
 
 
@@ -13,6 +15,7 @@ typedef map<string, string> Map_String_String;
 struct STRUCT_IFCENTITY {
 	const char *ch_GlobalId = nullptr;
 	const char *ch_Type = nullptr;
+	const char *ch_PredifinedType = nullptr;
 	const char *ch_Id = nullptr;
 	const char *ch_Name = nullptr;
 	list<STRUCT_IFCENTITY*> st_BelongsTo;
@@ -20,7 +23,10 @@ struct STRUCT_IFCENTITY {
 	list<STRUCT_IFCENTITY*> st_FaceToFace;
 	//list<STRUCT_IFCENTITY*> st_SideBySide;
 	STRUCT_IFCENTITY* st_TIFCSurface = nullptr;
-	map<STRUCT_IFCENTITY*, bool> mp_SideBySide;
+	set<pair<STRUCT_IFCENTITY*, pair<double,bool>>, function<bool(pair<STRUCT_IFCENTITY*, pair<double, bool>>, pair<STRUCT_IFCENTITY*, pair<double, bool>>)>> mp_SideBySide;
+//	set<pair<STRUCT_IFCENTITY*, pair<double,bool>>> mp_SideBySide;
+	//map<STRUCT_IFCENTITY*, pair<double,bool>> mp_SideBySide;
+	//map<STRUCT_IFCENTITY*, bool> mp_SideBySide;
 	list<double*> db_RelativePlacement;
 	list<list<double*>> st_PointsDesContours;
 	bool bo_ArePointsDesContoursALoop = false;//Si true = les 1er et dernier points de st_PointsDesContours sont identiques 
@@ -28,8 +34,15 @@ struct STRUCT_IFCENTITY {
 	Map_String_String* map_DefValues = nullptr;// tableau des noms des attributs géométriques (Length, Width,...) et de leur valeur (en string)
 };
 
+typedef function<bool(pair<STRUCT_IFCENTITY*, pair<double, bool>>, pair<STRUCT_IFCENTITY*, pair<double, bool>>)> Comparator;
 typedef map<string, STRUCT_IFCENTITY*> Map_String_ptrSTRUCT_IFCENTITY;
 
+//extern Comparator compFunctor;
+//Comparator compFunctor =
+//	[](pair<STRUCT_IFCENTITY*, pair<double, bool>> elem1, pair<STRUCT_IFCENTITY*, pair<double, bool>> elem2)
+//{
+//	return elem1.second.first < elem2.second.first;
+//};
 
 class ifc_Tree
 {
@@ -48,6 +61,12 @@ public:
 
 	//Creation d'entité (TIFCSurface) à partir des autres entités STRUCT_IFCENTITY (IfcConnectionSurfaceGeometry) déjà définies (pas à partir des entités xml comme dans ifc_Tree.template.h) 
 	int BuildTIFCSurfaceTreeFrom_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_IfcTree);
+
+	Comparator compFunctor =
+		[](pair<STRUCT_IFCENTITY*, pair<double, bool>> elem1, pair<STRUCT_IFCENTITY*, pair<double, bool>> elem2)
+	{
+		return elem1.second.first < elem2.second.first;
+	};
 
 #include "ifc_Tree.template.h"
 	STRUCT_IFCENTITY *&Getstruct();

@@ -2,8 +2,9 @@
 
 #include <string>
 
-LoadDataAtBEMFormat::LoadDataAtBEMFormat()
+LoadDataAtBEMFormat::LoadDataAtBEMFormat(double dbl_Minisurf)
 {
+	_dbl_MinimalSurface = dbl_Minisurf;
 }
 
 
@@ -16,6 +17,13 @@ int LoadDataAtBEMFormat::GetLesosaiEntitiesDefinition(string *&str_EntDef)
 {
 	int res = 0;
 	str_EntDef = _str_EntitiesDefinitions;
+	return res;
+}
+
+int LoadDataAtBEMFormat::GetLesosaiLogFile(string *&str_LogFile)
+{
+	int res = 0;
+	str_LogFile = _str_LogFile;
 	return res;
 }
 
@@ -37,6 +45,9 @@ int LoadDataAtBEMFormat::LoadLesosaiFormat(ifc_Tree* CurrentIfcTree)
 {
 	int res = 0;
 
+	// Allocation de la chaine de caractere (log pour consigner certaines infos: retrait des surfaces quasi-nulles par exple)
+	_str_LogFile = new string();
+
 	//Pour Post-traiter le tree => mettre l'arbre en rateau (sans duplication des entités)
 	ifc_TreePostTreatment *cl_PostTreatmt = new ifc_TreePostTreatment(CurrentIfcTree);
 
@@ -49,12 +60,18 @@ int LoadDataAtBEMFormat::LoadLesosaiFormat(ifc_Tree* CurrentIfcTree)
 	//Pour la suite des traitements, cela nous gêne (calcul du centre de gravité=CentroidsComputation, détection des points les plus proche=RelimitSideBySideSurfaces)
 	//Retrait dans les contours (st_PointsDesContours) du derniers point lorsqu'il est égal au 1er (+ consigne bool bo_IsItLoop=true)
 	if (cl_PostTreatmt)
-		cl_PostTreatmt->RemoveLastPointOfLoopContours();
+		cl_PostTreatmt->RemoveLastPointOfLoopContours(_str_LogFile);
 
 	//Calcul des surfaces IfcConnectionSurfaceGeometry 
 	//  => à faire avant changement de coord car algo fonctionne en 2D => si la 3ème coord est la même pour toute!
 	if (cl_PostTreatmt)
 		cl_PostTreatmt->ComputeIfcConnectionSurfaceGeometrySurface();
+
+	if (cl_PostTreatmt)
+		cl_PostTreatmt->RemoveQuasiNullIfcConnectionSurfaceGeometrySurface(_dbl_MinimalSurface, _str_LogFile);
+	//Relance pour nettoyer map_BasifTree
+	if (cl_PostTreatmt)
+		cl_PostTreatmt->BasifyTree(map_BasifTree);
 
 	//Changement repere => repere projet
 	if (cl_PostTreatmt)
@@ -70,7 +87,7 @@ int LoadDataAtBEMFormat::LoadLesosaiFormat(ifc_Tree* CurrentIfcTree)
 
 	//Raccord des IfcConnectionSurfaceGeometry en côte-à-côte
 	if (cl_PostTreatmt)
-		cl_PostTreatmt->RelimitSideBySideSurfaces();
+		cl_PostTreatmt->RelimitSideBySideSurfaces(_str_LogFile);
 
 	//Raccord des IfcConnectionSurfaceGeometry en côte-à-côte
 	if (cl_PostTreatmt)
@@ -364,6 +381,9 @@ int LoadDataAtBEMFormat::GenericConversion(STRUCT_IFCENTITY *&st_IfcEnt, string 
 	}// else if (string(st_IfcEnt->ch_Type) == string("TIFCSurface"))
 	else
 	{
+		if (string(st_IfcEnt->ch_Type) == string("IfcProject"))
+			res = SpecificConversionOfNorthProject(st_IfcEnt, str_EntsDefinitions/*, str_ContainsName, str_InsideContainsName*/);
+
 		res = SpecificConversionOfContains(st_IfcEnt, str_EntsDefinitions, str_ContainsName, str_InsideContainsName);
 	}// else if (string(st_IfcEnt->ch_Type) == string("IfcFace"))
 
@@ -377,15 +397,18 @@ int LoadDataAtBEMFormat::SpecificConversionOfContainsForTIFCGeo2D(STRUCT_IFCENTI
 	// Contains
 	res = SpecificConversionOfContains(st_IfcEnt, str_EntsDefinitions, str_ContainsName, str_InsideContainsName);
 
-	Map_String_String::iterator it_MapVal;
-	for (it_MapVal = (st_IfcEnt->map_DefValues)->begin(); it_MapVal != (st_IfcEnt->map_DefValues)->end(); it_MapVal++)
+	//Map_String_String::iterator it_MapVal;
+	if (st_IfcEnt->map_DefValues)
 	{
-		int int_Level = 30;
-		string str_KW = (*it_MapVal).first;
-		string str_ValKW = (*it_MapVal).second;
-		LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
-		//str_EntsDefinitions = str_EntsDefinitions + DEB_KW2_L + (*it_MapVal).first + "=" + (*it_MapVal).second + KW_R;
-	}// for (it_MapVal = (st_IfcEnt->map_DefValues)->begin(); it_MapVal != (st_IfcEnt->map_DefValues)->end(); it_MapVal++)
+		for (Map_String_String::iterator it_MapVal = (st_IfcEnt->map_DefValues)->begin(); it_MapVal != (st_IfcEnt->map_DefValues)->end(); it_MapVal++)
+		{
+			int int_Level = 30;
+			string str_KW = (*it_MapVal).first;
+			string str_ValKW = (*it_MapVal).second;
+			LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
+			//str_EntsDefinitions = str_EntsDefinitions + DEB_KW2_L + (*it_MapVal).first + "=" + (*it_MapVal).second + KW_R;
+		}// for (it_MapVal = (st_IfcEnt->map_DefValues)->begin(); it_MapVal != (st_IfcEnt->map_DefValues)->end(); it_MapVal++)
+	}// if (st_IfcEnt->map_DefValues)
 
 	return res;
 }
@@ -397,15 +420,18 @@ int LoadDataAtBEMFormat::SpecificConversionOfContainsForConnectionSurfaceGeometr
 	// Contains
 	res = SpecificConversionOfContains(st_IfcEnt, str_EntsDefinitions, str_ContainsName, str_InsideContainsName);
 
-	Map_String_String::iterator it_MapVal;
-	for (it_MapVal = (st_IfcEnt->map_DefValues)->begin(); it_MapVal != (st_IfcEnt->map_DefValues)->end(); it_MapVal++)
+	//Map_String_String::iterator it_MapVal;
+	if (st_IfcEnt->map_DefValues)
 	{
-		int int_Level = 30;
-		string str_KW = (*it_MapVal).first;
-		string str_ValKW = (*it_MapVal).second;
-		LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
-		//str_EntsDefinitions = str_EntsDefinitions + DEB_KW2_L + (*it_MapVal).first + "=" + (*it_MapVal).second + KW_R;
-	}// for (it_MapVal = (st_IfcEnt->map_DefValues)->begin(); it_MapVal != (st_IfcEnt->map_DefValues)->end(); it_MapVal++)
+		for (Map_String_String::iterator it_MapVal = (st_IfcEnt->map_DefValues)->begin(); it_MapVal != (st_IfcEnt->map_DefValues)->end(); it_MapVal++)
+		{
+			int int_Level = 30;
+			string str_KW = (*it_MapVal).first;
+			string str_ValKW = (*it_MapVal).second;
+			LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
+			//str_EntsDefinitions = str_EntsDefinitions + DEB_KW2_L + (*it_MapVal).first + "=" + (*it_MapVal).second + KW_R;
+		}// for (it_MapVal = (st_IfcEnt->map_DefValues)->begin(); it_MapVal != (st_IfcEnt->map_DefValues)->end(); it_MapVal++)
+	}// if (st_IfcEnt->map_DefValues)
 
 	// FaceToface
 	int int_Level = 32;
@@ -414,8 +440,8 @@ int LoadDataAtBEMFormat::SpecificConversionOfContainsForConnectionSurfaceGeometr
 	LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
 	//string str_Balise = str_FaceToFaceName;
 	//str_EntsDefinitions = str_EntsDefinitions + DEB_KW2_L + str_Balise + KW_R;
-	list <STRUCT_IFCENTITY*> ::iterator it_Elem;
-	for (it_Elem = (st_IfcEnt->st_FaceToFace).begin(); it_Elem != (st_IfcEnt->st_FaceToFace).end(); it_Elem++)
+	//list <STRUCT_IFCENTITY*> ::iterator it_Elem;
+	for (list <STRUCT_IFCENTITY*> ::iterator it_Elem = (st_IfcEnt->st_FaceToFace).begin(); it_Elem != (st_IfcEnt->st_FaceToFace).end(); it_Elem++)
 	{
 		int_Level = 40;
 		str_KW = "";
@@ -438,11 +464,12 @@ int LoadDataAtBEMFormat::SpecificConversionOfContainsForConnectionSurfaceGeometr
 	//str_EntsDefinitions = str_EntsDefinitions + DEB_KW2_L + str_Balise + KW_R;
 	//list <STRUCT_IFCENTITY*> ::iterator it_Elem;
 	//for (it_Elem = (st_IfcEnt->st_SideBySide).begin(); it_Elem != (st_IfcEnt->st_SideBySide).end(); it_Elem++)
-	map <STRUCT_IFCENTITY*,bool> ::iterator it_ElemBool;
-	for (it_ElemBool = (st_IfcEnt->mp_SideBySide).begin(); it_ElemBool != (st_IfcEnt->mp_SideBySide).end(); it_ElemBool++)
+	//map <STRUCT_IFCENTITY*,bool> ::iterator it_ElemBool;
+	//for (map <STRUCT_IFCENTITY*, pair<double, bool>> ::iterator it_ElemBool = (st_IfcEnt->mp_SideBySide).begin(); it_ElemBool != (st_IfcEnt->mp_SideBySide).end(); it_ElemBool++)
+	for (set <pair<STRUCT_IFCENTITY*, pair<double, bool>>> ::iterator it_ElemBool = (st_IfcEnt->mp_SideBySide).begin(); it_ElemBool != (st_IfcEnt->mp_SideBySide).end(); it_ElemBool++)
 	{
-		string bo_val="><PAS RACCORDEE";
-		if((*it_ElemBool).second) bo_val="><RACCORDEE";
+		string bo_val = "><PAS RACCORDEE";
+		if ((*it_ElemBool).second.second) bo_val = "><RACCORDEE";
 
 		int_Level = 40;
 		str_KW = "";
@@ -463,8 +490,8 @@ int LoadDataAtBEMFormat::SpecificConversionOfContainsForConnectionSurfaceGeometr
 	LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
 	//str_Balise = str_Centroid;
 	//str_EntsDefinitions = str_EntsDefinitions + DEB_KW2_L + str_Balise + KW_R;
-	list <double*> ::iterator it_DbVal;
-	for (it_DbVal = (st_IfcEnt->db_Centroid).begin(); it_DbVal != (st_IfcEnt->db_Centroid).end(); it_DbVal++)
+	//list <double*> ::iterator it_DbVal;
+	for (list <double*> ::iterator it_DbVal = (st_IfcEnt->db_Centroid).begin(); it_DbVal != (st_IfcEnt->db_Centroid).end(); it_DbVal++)
 	{
 		int_Level = 40;
 		str_KW = "";
@@ -536,7 +563,10 @@ int LoadDataAtBEMFormat::SpecificConversionOfContainsForTIFCSurface(STRUCT_IFCEN
 			{
 				int_Level = 30;
 				str_KW = "surfType";
-				str_ValKW = (*it_Elem2)->ch_Type;
+				if ((*it_Elem2)->ch_PredifinedType != nullptr /*&& (*it_Elem2)->ch_PredifinedType != "notdefined"*/)
+					str_ValKW = (*it_Elem2)->ch_PredifinedType;
+				else
+					str_ValKW = (*it_Elem2)->ch_Type;
 				LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
 				//str_EntsDefinitions = str_EntsDefinitions + DEB_KW2_L + "surfType" + "=" + (*it_Elem2)->ch_Type + KW_R;
 			}// else if (i_Ind == 1)
@@ -719,6 +749,43 @@ int LoadDataAtBEMFormat::SpecificConversionOfContainsForFaceAndSubFace(STRUCT_IF
 	}// for (it_llPt = (st_IfcEnt->st_PointsDesContours).begin(); it_llPt != (st_IfcEnt->st_PointsDesContours).end(); it_llPt++)
 	int_Level = 33;
 	str_KW = str_ContainsName;
+	str_ValKW = "";
+	LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
+	//str_EntsDefinitions = str_EntsDefinitions + FIN_KW2_L + str_Balise + KW_R;
+
+	return res;
+}
+
+int LoadDataAtBEMFormat::SpecificConversionOfNorthProject(STRUCT_IFCENTITY *&st_IfcEnt, string &str_EntsDefinitions/*, string &str_ContainsName, string &str_InsideContainsName*/)
+{
+	//lire la liste des points et non contains
+	int res = 0;
+	string str_North = "north";
+	// Contains
+	int int_Level = 32;
+	string str_KW = str_North;
+	string str_ValKW = str_North;
+	LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
+	//string str_Balise = str_ContainsName;
+	//str_EntsDefinitions = str_EntsDefinitions + DEB_KW2_L + str_Balise + KW_R;
+	list <double*> ::iterator it_lPt;
+	for (it_lPt = (st_IfcEnt->db_Centroid).begin(); it_lPt != (st_IfcEnt->db_Centroid).end(); it_lPt++)
+	{
+		//list <double*> ::iterator it_lPt;
+		//for (it_lPt = (*it_llPt).begin(); it_lPt != (*it_llPt).end(); it_lPt++)
+		//{
+			int_Level = 42;
+			str_KW = "";
+			str_ValKW = "point x=\"" + std::to_string(*(*it_lPt)) + "\""; it_lPt++;
+			str_ValKW += " y=\"" + std::to_string(*(*it_lPt)) + "\""; it_lPt++;
+			str_ValKW += " z=\"" + std::to_string(*(*it_lPt)) + "\"";
+			//str_ValKW = std::to_string(*(*it_lPt));
+			LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
+			//str_EntsDefinitions = str_EntsDefinitions + DEB_KW3_L + std::to_string(*(*it_lPt)) + KW_R;
+		//}// for (it_lPt = (*it_llPt).begin(); it_lPt != (*it_llPt).end(); it_lPt++)
+	}// for (it_llPt = (st_IfcEnt->st_PointsDesContours).begin(); it_llPt != (st_IfcEnt->st_PointsDesContours).end(); it_llPt++)
+	int_Level = 33;
+	str_KW = str_North;
 	str_ValKW = "";
 	LineForLevel(int_Level, str_EntsDefinitions, str_KW, str_ValKW);
 	//str_EntsDefinitions = str_EntsDefinitions + FIN_KW2_L + str_Balise + KW_R;

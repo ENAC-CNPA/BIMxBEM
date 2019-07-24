@@ -1,8 +1,11 @@
 #include "ifc_TreePostTreatment.h"
 //#include <vector>
 #include <string>
+#include <functional>
+//#include <set>
 
 const double db_eps= 0.00001;
+const double db_ep_mur_max = 0.3;
 
 ifc_TreePostTreatment::ifc_TreePostTreatment(ifc_Tree* CurrentIfcTree)
 {
@@ -17,6 +20,9 @@ ifc_TreePostTreatment::~ifc_TreePostTreatment()
 int ifc_TreePostTreatment::BasifyTree(Map_Basified_Tree *&map_BasifTree)
 {
 	int res = 0;
+
+	if (_map_BasifTree.size() != 0)
+		_map_BasifTree.clear();
 
 	STRUCT_IFCENTITY* st_IfcTree = nullptr;
 	if (_CurrentIfcTree)
@@ -68,8 +74,8 @@ int ifc_TreePostTreatment::CompleteBasifiedTreeFromByTIFCSurfaces()
 	return res;
 }
 
-//Retrait dans les contours (st_PointsDesContours) du derniers point lorsqu'il est égal au 1er (+ consigne bool bo_IsItLoop=true)
-int ifc_TreePostTreatment::RemoveLastPointOfLoopContours()
+//Retrait dans les contours (st_PointsDesContours) du dernier point lorsqu'il est égal au 1er (+ consigne bool bo_IsItLoop=true)
+int ifc_TreePostTreatment::RemoveLastPointOfLoopContours(string *&str_LogFile)
 {
 	int res = 0;
 
@@ -77,7 +83,7 @@ int ifc_TreePostTreatment::RemoveLastPointOfLoopContours()
 	for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 	{
 		if (it_Elem->first->st_PointsDesContours.size() != 0)
-			res = RemoveLastPointOfOneLoopContour(it_Elem->first);
+			res = RemoveLastPointOfOneLoopContour(it_Elem->first,str_LogFile);
 		if (res) return res;
 	}// for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 
@@ -85,7 +91,7 @@ int ifc_TreePostTreatment::RemoveLastPointOfLoopContours()
 }
 
 //Retrait dans le contour (st_PointsDesContours) du derniers point lorsqu'il est égal au 1er (+ consigne bool bo_IsItLoop=true)
-int ifc_TreePostTreatment::RemoveLastPointOfOneLoopContour(STRUCT_IFCENTITY *st_IfcEnt)
+int ifc_TreePostTreatment::RemoveLastPointOfOneLoopContour(STRUCT_IFCENTITY *st_IfcEnt, string *&str_LogFile)
 {
 	int res = 0;
 
@@ -112,6 +118,12 @@ int ifc_TreePostTreatment::RemoveLastPointOfOneLoopContour(STRUCT_IFCENTITY *st_
 			(*it_llPt).pop_back();
 
 			st_IfcEnt->bo_ArePointsDesContoursALoop = true;
+
+			//Consigner l'effacement du dernier point enlever dans un fichier "log" (ou mettre en mémoire => même principe que pour le fichier bimxbem)
+			int int_Step = 0;
+			string str_Header = "Remove Last Point If Equal First Point :";
+			RecordLog(int_Step, *str_LogFile, str_Header, st_IfcEnt);
+
 		}// if (db_Dist < 0.0000001)
 	}// for (it_llPt = (st_IfcEnt->st_PointsDesContours).begin(); it_llPt != (st_IfcEnt->st_PointsDesContours).end(); it_llPt++)
 
@@ -184,6 +196,68 @@ double ifc_TreePostTreatment::ComputeSurfaceFromAContour(vector<double*> &vc_Poi
 	}// for (it_Coord1Pt1 = vc_PointCoordCtr.begin(); it_Coord1Pt1 != vc_PointCoordCtr.end(); ++(++(++it_Coord1Pt1)))
 
 	return db_Surf;
+}
+
+//Retrait des IfcConnectionSurfaceGeometry de surfaces inférieures à dbl_Minisurf
+int ifc_TreePostTreatment::RemoveQuasiNullIfcConnectionSurfaceGeometrySurface(double dbl_Minisurf, string *&str_LogFile)
+{
+	int res = 0;
+
+	std::map<STRUCT_IFCENTITY*, std::string>::iterator it_Elem;
+	for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
+	{
+		if (it_Elem->second == "IfcConnectionSurfaceGeometry")
+			res = RemoveOneQuasiNullIfcConnectionSurfaceGeometrySurface(it_Elem->first,dbl_Minisurf, str_LogFile);
+		if (res) return res;
+	}// for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
+
+	return res;
+}
+
+void ifc_TreePostTreatment::RecordLog(int &int_Step, string &str_LogFile, string &str_Header, STRUCT_IFCENTITY *&st_IfcEnt)
+{
+	switch (int_Step)
+	{
+	case 0: 
+		str_LogFile = str_LogFile /*+ "\n"*/ + str_Header + "\n";
+		str_LogFile = str_LogFile + "\t" + st_IfcEnt->ch_Id + "\n";
+		break;
+	case 1: 
+		str_LogFile = str_LogFile /*+ "\n" */ + str_Header + "\n";
+		str_LogFile = str_LogFile + "\t" + st_IfcEnt->ch_Id + " (Surf = " + st_IfcEnt->map_DefValues->at("ComputedArea") + ")\n";
+		break;
+	case 2: 
+		str_LogFile = str_LogFile /*+ "\n" */ + str_Header + "\n";
+		break;
+	default: return;
+	}// switch (int_Step)
+
+	return;
+}
+
+int ifc_TreePostTreatment::RemoveOneQuasiNullIfcConnectionSurfaceGeometrySurface(STRUCT_IFCENTITY *st_IfcEntCS, double dbl_Minisurf, string *&str_LogFile)
+{
+	int res = 0;
+
+	double dbl_Surf = abs(std::stod(st_IfcEntCS->map_DefValues->at("ComputedArea")));
+	if (dbl_Surf<dbl_Minisurf)
+	{
+		//
+		//Consigner l'effacement de l'IfcConnectionSurfaceGeometry dans un fichier "log" (ou mettre en mémoire => même principe que pour le fichier bimxbem)
+		int int_Step = 1;
+		string str_Header = "Remove Quasi Null Surface < "+ std::to_string(dbl_Minisurf)+ ":";
+		RecordLog(int_Step, *str_LogFile, str_Header, st_IfcEntCS);
+		//
+		// Nettoyage des listes référencant l'objet que l'on est en train de détruire
+		// Pour les liens non binaires (ternaires ou plus) la structure en cours d'effacement (st_IfcTree) est référencée dans les Contains de plusieurs pères
+		// Afin déviter un crash mémoire par la désallocation d'une structure déjà détruite, il faut déréférencer la structure 
+		// en cours d'effacement des listes de BelongsTo des autres pères (que celui en cours = st_IfcCurrentFather)
+		// Exemple: IfcConnectionSurfaceGeometry est référencé à la fois dans le st_Contains de IfSpace et des BuildingElements (IfcWall,...)
+		_CurrentIfcTree->delete_STRUCT_IFCENTITY(st_IfcEntCS);
+		st_IfcEntCS = nullptr;
+	}
+
+	return res;
 }
 
 //Creation des TIFCSurfaces par concatenation des IfcConnectionSurfaceGeometry en vis-à-vis
@@ -280,55 +354,70 @@ int ifc_TreePostTreatment::CentroidComputation(STRUCT_IFCENTITY *st_IfcEntCS)
 	return res;
 }
 
-int ifc_TreePostTreatment::RelimitSideBySideSurfaces()
+//Recherche des IfcConnectionSurfaceGeometry pouvant avoir des côtés à étendre (i.e. qui ont au moins 1 SideBySide) 
+int ifc_TreePostTreatment::RelimitSideBySideSurfaces(string *&str_LogFile)
 {
 	int res = 0;
 
+	//Traitement des IfcConnectionSurfaceGeometry pouvant avoir des côtés à étendre
 	std::map<STRUCT_IFCENTITY*, std::string>::iterator it_Elem;
 	for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 	{
-		//Traitement des IfcConnectionSurfaceGeometry ayant 2 côté à étendre
-		//Recherche des IfcConnectionSurfaceGeometry avec 2 SideBySide
-		if (it_Elem->second == "IfcConnectionSurfaceGeometry" /*&& it_Elem->first->st_SideBySide.size()==2*/)
-			res = RelimitSideBySideSurfacesOfMiddleIfcConnectionSurfaceGeometry(it_Elem->first);
+		//Recherche des IfcConnectionSurfaceGeometry qui ont au moins 1 SideBySide
+		if (it_Elem->second == "IfcConnectionSurfaceGeometry" && it_Elem->first->mp_SideBySide.size() != 0)
+			res = RelimitSideBySideSurfacesOfOneIfcConnectionSurfaceGeometry(it_Elem->first, str_LogFile);
 		if (res) return res;
 	}// for (it_Elem = _map_BasifTree.begin(); it_Elem != _map_BasifTree.end(); it_Elem++)
 
 	return res;
 }
 
-//Raccord du IfcConnectionSurfaceGeometry milieu PAS SEULEMENT!!! (entre 2 autres IfcConnectionSurfaceGeometry)
-int ifc_TreePostTreatment::RelimitSideBySideSurfacesOfMiddleIfcConnectionSurfaceGeometry(STRUCT_IFCENTITY *st_IfcEntCS)
+//Boucles sur les IfcConnectionSurfaceGeometry côte-àcôte avec l'IfcConnectionSurfaceGeometry en cours (pour extension du IfcConnectionSurfaceGeometry si nécessaire)
+int ifc_TreePostTreatment::RelimitSideBySideSurfacesOfOneIfcConnectionSurfaceGeometry(STRUCT_IFCENTITY *st_IfcEntCS, string *&str_LogFile)
 {
 	int res = 0;
 
-	//Retrouver les 2 IfcConnectionSurfaceGeometry qui sont côte-à-côte avec l'IfcConnectionSurfaceGeometry en cours
-	map <STRUCT_IFCENTITY*,bool> ::iterator it_SideBySideIfcEntCS;
+	//Retrouver les IfcConnectionSurfaceGeometry qui sont côte-à-côte avec l'IfcConnectionSurfaceGeometry en cours
+	set<pair<STRUCT_IFCENTITY*, pair<double, bool>>>::iterator it_SideBySideIfcEntCS;
+	//set<pair<STRUCT_IFCENTITY*, pair<double, bool>>, Comparator>::iterator it_SideBySideIfcEntCS;
 	for (it_SideBySideIfcEntCS = (st_IfcEntCS->mp_SideBySide).begin(); it_SideBySideIfcEntCS != (st_IfcEntCS->mp_SideBySide).end(); it_SideBySideIfcEntCS++)
 	{
-		//retrouver les paires de points les plus proches (chaque point appartenant à l'un ou l'autre des IfcConnectionSurfaceGeometry)
-		if (!(*it_SideBySideIfcEntCS).second)
+		//retrouver les paires de points les plus proches (chaque point appartenant à l'un ou l'autre des IfcConnectionSurfaceGeometry côte-à-côtes)
+		if (!(*it_SideBySideIfcEntCS).second.second)
 		{
-			RelimitOneSideBySideSurfaceOfMiddleIfcConnectionSurfaceGeometry(st_IfcEntCS, (*it_SideBySideIfcEntCS).first);
-			(*it_SideBySideIfcEntCS).second = true;
-			(*it_SideBySideIfcEntCS).first->mp_SideBySide[st_IfcEntCS] = true;
+			RelimitOneSideBySideSurfaceOfOneIfcConnectionSurfaceGeometry(st_IfcEntCS, (*it_SideBySideIfcEntCS).first, str_LogFile);
+			//(*it_SideBySideIfcEntCS).second.second = true;
+			//(*it_SideBySideIfcEntCS).first->mp_SideBySide[st_IfcEntCS].second = true;
 		}// if (!(*it_SideBySideIfcEntCS).second)
 	}// for (it_Elem2 = (it_Elem1->first->st_Contains).begin(); it_Elem2 != (it_Elem1->first->st_Contains).end(); it_Elem2++)
 
 	return res;
 }
 
-int ifc_TreePostTreatment::RelimitOneSideBySideSurfaceOfMiddleIfcConnectionSurfaceGeometry(STRUCT_IFCENTITY *&st_IfcEntCS1, STRUCT_IFCENTITY *st_IfcEntCS2)
+//Extension si besoin de l'IfcConnectionSurfaceGeometry en cours et d'un des IfcConnectionSurfaceGeometry côte-à-côtes 
+//A priori on a 3 cas: 
+// les IfcConnectionSurfaceGeometry en cours et côte-à-côte sont "coller" (Dist des pairs de pts les + proches = 0) => ne rien faire
+// les IfcConnectionSurfaceGeometry en cours et côte-à-côte sont "disjoints" avec Dist des pairs de pts les + proches >> épaisseurs murs => ne rien faire
+// les IfcConnectionSurfaceGeometry en cours et côte-à-côte sont "disjoints" avec Dist des pairs de pts les + proches ~ épaisseurs murs => jonction par milieu de la dist (cf. schéma):
+//
+// 2 ifcConn séparées     Raccord des 2 ifcconn 
+//  par epaisseur mur        par leur milieu
+//      ---  ---                --------
+//        |  |          =>         |
+//        |  |                     |
+//      ---  ---                --------
+int ifc_TreePostTreatment::RelimitOneSideBySideSurfaceOfOneIfcConnectionSurfaceGeometry(STRUCT_IFCENTITY *&st_IfcEntCS1, STRUCT_IFCENTITY *st_IfcEntCS2, string *&str_LogFile)
 {
 	int res = 0;
 
-	//Recup de toutes les coordonnées de tous les points du 1er contour
+	//ATTENTION: ne pas lire les pts du ctr1 dans la routine précédente car les coordonnées sont suceptibles d'être modifiées => il faut les relire à chaque passage!
+	//Recup de toutes les coordonnées de tous les points du 1er contour (IfcConnectionSurfaceGeometry en cours)
 	vector<double*> vc_PointCoordCtr1;
 	for (list<STRUCT_IFCENTITY *>::iterator it_lEnt = (st_IfcEntCS1->st_Contains).begin(); it_lEnt != (st_IfcEntCS1->st_Contains).end(); it_lEnt++)
 		for (list<list<double*>>::iterator it_llCtr = ((*it_lEnt)->st_PointsDesContours).begin(); it_llCtr != ((*it_lEnt)->st_PointsDesContours).end(); it_llCtr++)
 			vc_PointCoordCtr1.insert(vc_PointCoordCtr1.end(), (*it_llCtr).begin(), (*it_llCtr).end());
 
-	//Recup de toutes les coordonnées de tous les points du 2ème contour
+	//Recup de toutes les coordonnées de tous les points du 2ème contour (IfcConnectionSurfaceGeometry côte-à-côte)
 	vector<double*> vc_PointCoordCtr2;
 	for (list<STRUCT_IFCENTITY *>::iterator it_lEnt = (st_IfcEntCS2->st_Contains).begin(); it_lEnt != (st_IfcEntCS2->st_Contains).end(); it_lEnt++)
 		for (list<list<double*>>::iterator it_llCtr = ((*it_lEnt)->st_PointsDesContours).begin(); it_llCtr != ((*it_lEnt)->st_PointsDesContours).end(); it_llCtr++)
@@ -339,16 +428,17 @@ int ifc_TreePostTreatment::RelimitOneSideBySideSurfaceOfMiddleIfcConnectionSurfa
 	//  li_IndPtCtr1_IndPtCtr2_Dist[iterateur debut Pt_J du contour1, iterateur debut Pt_J du contour2]=distance
 	//  Utilisation d'une liste pour profiter du tri optimisée "list::sort()"
 	list< pair< pair<vector<double*>::iterator, vector<double*>::iterator>, double>> li_IndPtCtr1_IndPtCtr2_Dist;
-	//Boucle sur st_Contains pour retrouver tous les IfcConnectionSurfaceGeometry
+	//Boucle sur tous les points de chacun des contours des IfcConnectionSurfaceGeometry en cours et côte-à-côte
 	vector<double*>::iterator it_CoordCtr1;
 	vector<double*>::iterator it_CoordCtr2;
 	for (it_CoordCtr1 = vc_PointCoordCtr1.begin(); it_CoordCtr1 != vc_PointCoordCtr1.end(); ++(++(++it_CoordCtr1)))
 	{
+		vector<double*>::iterator it_CoordCtr1_end = it_CoordCtr1; ++++++it_CoordCtr1_end;
+		vector<double*> vc_Point1(it_CoordCtr1, it_CoordCtr1_end);
+
 		for (it_CoordCtr2 = vc_PointCoordCtr2.begin(); it_CoordCtr2 != vc_PointCoordCtr2.end(); ++(++(++it_CoordCtr2)))
 		{
-			vector<double*>::iterator it_CoordCtr1_end = it_CoordCtr1; ++++++it_CoordCtr1_end;
 			vector<double*>::iterator it_CoordCtr2_end = it_CoordCtr2; ++++++it_CoordCtr2_end;
-			vector<double*> vc_Point1(it_CoordCtr1, it_CoordCtr1_end);
 			vector<double*> vc_Point2(it_CoordCtr2, it_CoordCtr2_end);
 			
 			//Calculer distance entre les 2 points des 2 IfcConnectionSurfaceGeometry 
@@ -367,38 +457,142 @@ int ifc_TreePostTreatment::RelimitOneSideBySideSurfaceOfMiddleIfcConnectionSurfa
 	// => la retirer? => Traitement à faire dès le début après RemoveLastPointOfLoopContours() mais attention au retrait à faire dans IfcSpace et elmt cstruction (Wall,...)
 	// En tout cas si la 1ere paire de point est confondue on peut supposer que les 2 surfaces sont déjà connectées => pas de raccord à faire
 	list< pair< pair<vector<double*>::iterator, vector<double*>::iterator>, double>>::iterator it_IndPtCtr1_IndPtCtr2_Dist = li_IndPtCtr1_IndPtCtr2_Dist.begin();
-	if ((*it_IndPtCtr1_IndPtCtr2_Dist).second > db_eps)
+	//Si les contours ne sont pas "coller" (Dist > db_eps) et pas "disjoints" avec Dist >> épaisseurs murs max
+	//  => on fait la jonction par le milieu des pairs de points distants les plus proches (jusqu'à distance arbitrairement au max 20% de plus que la 1ère distance la plus proche)
+	//
+	//Si Dist mini > épaisseurs murs max => rien à raccorder (il y a certainement une surface entre l'Ifcconn en cours et celle côte-à-côte) => voir un autre côte-à-côte
+	if ((*it_IndPtCtr1_IndPtCtr2_Dist).second < db_ep_mur_max)
 	{
-		//Memo de la distance de reference
-		double db_Distref = (*it_IndPtCtr1_IndPtCtr2_Dist).second;
-		for (it_IndPtCtr1_IndPtCtr2_Dist; it_IndPtCtr1_IndPtCtr2_Dist!= li_IndPtCtr1_IndPtCtr2_Dist.end();++it_IndPtCtr1_IndPtCtr2_Dist)
+		//
+		//Si Dist mini < db_eps => rien à raccorder (les 2 surfaces sont connectées)  => voir un autre côte-à-côte
+		if ((*it_IndPtCtr1_IndPtCtr2_Dist).second > db_eps)
 		{
-			//
-			//Remplacement des points les plus proches appartenant à un même côté (par leur point milieu)
-			// HP: côté à peu près parallèle => les points d'un même côté sont les 1ères paires de même ordre de distance (arbitrairement au max 20% de plus que la 1ère distance)
-			if ((*it_IndPtCtr1_IndPtCtr2_Dist).second < 1.2*db_Distref)
+			//Memo de la distance de reference
+			double db_Distref = (*it_IndPtCtr1_IndPtCtr2_Dist).second;
+
+			//ATTENTION: il faut aussi voir si au moins les 2 premières paires de points ont à peu près la même distance:
+			// sinon c'est un coin de surf qui est proche d'un autre coin d'une autre surf (pas côte-àcôte sur tout un côté) => ne pas raccorder dans ce cas
+			list< pair< pair<vector<double*>::iterator, vector<double*>::iterator>, double>>::iterator it_IndPtCtr1_IndPtCtr2_Dist_Next = it_IndPtCtr1_IndPtCtr2_Dist;
+			it_IndPtCtr1_IndPtCtr2_Dist_Next++;
+			if ((*it_IndPtCtr1_IndPtCtr2_Dist_Next).second < 1.2*db_Distref)
 			{
-				//
-				//Modification des 2 surfaces => remplacer les paires de points les plus proches par un même point milieu 
-				//HP: les côtés à modifier sont des droites parallèles => remplacement des premières paires repérées par une distance similaire
-				it_CoordCtr1 = (*it_IndPtCtr1_IndPtCtr2_Dist).first.first;
-				it_CoordCtr2 = (*it_IndPtCtr1_IndPtCtr2_Dist).first.second;
+				//ATTENTION: il faut aussi voir si les 2 paires de points les plus proches ont bien des points distincts entre paires:
+				//	pour (P1,P2) et (P3,P4) il faut P1 différent de P3 et P2 different de P4 
+				//  sinon comme précédemment c'est un coin de surf qui est proche d'un autre coin d'une autre surf (pas côte-àcôte sur tout un côté) et 
+				//  qui en plus est une minuscule surface (quasi-ligne) d'où un 2nd point proche du même coin => ne pas raccorder dans ce cas
+				if ((*it_IndPtCtr1_IndPtCtr2_Dist).first.first != (*it_IndPtCtr1_IndPtCtr2_Dist_Next).first.first
+					&& (*it_IndPtCtr1_IndPtCtr2_Dist).first.second != (*it_IndPtCtr1_IndPtCtr2_Dist_Next).first.second)
+				{
+					//
+					//ATTENTION: Lorsqu'on a 2 minuscules surfaces (quasi-ligne) en côte-à-côte, on peut avoir en plus des 2 paires les plus proches
+					// 2 autres paires qui sont en fait la croisée des points précédents => il ne faut pas modifier les points de ces paires!
+					//   ------ ------   ------ ------      
+					//        | |      et      X        
+					//   ------ ------   ------ ------  
+					// Si les points des paires suivants les 2 premières reprennent les points précédents => stopper le raccord
+					// test à faire paire après paire (et non par doublons de paires) car par exemple il peut y avoir 3 points côte-à-côtes qui se raccordent)
+					// => on compte le nombre de pairs modifiables (ne reprenant pas un des points des paires précédentes)
+					int i_MaxNbModifiablePt = 1;
 
-				double db_NewCoord_X = ((*it_CoordCtr1)[0] + (*it_CoordCtr2)[0]) / 2.0; ++it_CoordCtr1; ++it_CoordCtr2;
-				double db_NewCoord_Y = ((*it_CoordCtr1)[0] + (*it_CoordCtr2)[0]) / 2.0; ++it_CoordCtr1; ++it_CoordCtr2;
-				double db_NewCoord_Z = ((*it_CoordCtr1)[0] + (*it_CoordCtr2)[0]) / 2.0;
+					//
+					//REMARQUE: Ce test pourrait peut-être servir aussi au test prcdt équivalent mais en terme 
+					//de cas concret le 1er test correspond à un cas identifié un peu différent de celui-ci. 
+					//ici côté en côte-à-côte mais hauteur minuscule, dans cas prcdt ce sont les coins qui sont proches
+					//De plus le test ici verifie "a posteriori" les raccords, alors que le test prcdt verifie "a priori" pour éviter de commencer un raccord 
+					bool bo_IsModifiable = true;
+					list< pair< pair<vector<double*>::iterator, vector<double*>::iterator>, double>>::iterator it_IndPtCtr1_IndPtCtr2_Dist_Cur_Tst = it_IndPtCtr1_IndPtCtr2_Dist;
+					it_IndPtCtr1_IndPtCtr2_Dist_Cur_Tst++;
+					for (it_IndPtCtr1_IndPtCtr2_Dist_Cur_Tst; it_IndPtCtr1_IndPtCtr2_Dist_Cur_Tst != li_IndPtCtr1_IndPtCtr2_Dist.end(); ++it_IndPtCtr1_IndPtCtr2_Dist_Cur_Tst)
+					{
+						list< pair< pair<vector<double*>::iterator, vector<double*>::iterator>, double>>::iterator it_IndPtCtr1_IndPtCtr2_Dist_Prev_Tst = it_IndPtCtr1_IndPtCtr2_Dist;
+						for (it_IndPtCtr1_IndPtCtr2_Dist_Prev_Tst; it_IndPtCtr1_IndPtCtr2_Dist_Prev_Tst != it_IndPtCtr1_IndPtCtr2_Dist_Cur_Tst; ++it_IndPtCtr1_IndPtCtr2_Dist_Prev_Tst)
+						{
+							if ((*it_IndPtCtr1_IndPtCtr2_Dist_Cur_Tst).first.first == (*it_IndPtCtr1_IndPtCtr2_Dist_Prev_Tst).first.first
+								|| (*it_IndPtCtr1_IndPtCtr2_Dist_Cur_Tst).first.second == (*it_IndPtCtr1_IndPtCtr2_Dist_Prev_Tst).first.second)
+							{
+								bo_IsModifiable = false;
+								break;
+							}// if ((*it_IndPtCtr1_IndPtCtr2_Dist_Cur_Tst).first.first == (*it_IndPtCtr1_IndPtCtr2_Dist_Prev_Tst).first.first
+							//	|| (*it_IndPtCtr1_IndPtCtr2_Dist_Cur_Tst).first.second == (*it_IndPtCtr1_IndPtCtr2_Dist_Prev_Tst).first.second)
+						}//for (it_IndPtCtr1_IndPtCtr2_Dist_Prev_Tst; it_IndPtCtr1_IndPtCtr2_Dist_Prev_Tst != it_IndPtCtr1_IndPtCtr2_Dist_Cur_Tst; ++it_IndPtCtr1_IndPtCtr2_Dist_Prev_Tst)
+					
+						if (bo_IsModifiable)
+							i_MaxNbModifiablePt++;
+						else 
+							break;
+					}// for (int icpt = 1; icpt < i_NbModifiedPt; i_NbModifiedPt++)
 
-				*(*((*it_IndPtCtr1_IndPtCtr2_Dist).first.first)) = db_NewCoord_X;
-				*(*((*it_IndPtCtr1_IndPtCtr2_Dist).first.second)) = db_NewCoord_X;
-				*(*(++(*it_IndPtCtr1_IndPtCtr2_Dist).first.first)) = db_NewCoord_Y;
-				*(*(++(*it_IndPtCtr1_IndPtCtr2_Dist).first.second)) = db_NewCoord_Y;
-				*(*(++(*it_IndPtCtr1_IndPtCtr2_Dist).first.first)) = db_NewCoord_Z;
-				*(*(++(*it_IndPtCtr1_IndPtCtr2_Dist).first.second)) = db_NewCoord_Z;
-			}// if ((*it_IndPtCtr1_IndPtCtr2_Dist).second < 1.2*db_Distref)
-			else
-				break;
-		}// for (it_IndPtCtr1_IndPtCtr2_Dist; it_IndPtCtr1_IndPtCtr2_Dist!= li_IndPtCtr1_IndPtCtr2_Dist.end;++it_IndPtCtr1_IndPtCtr2_Dist)
-	}// if ((*it_IndPtCtr1_IndPtCtr2_Dist).second > db_eps)
+					//Variable pour compter le nombre de paires de points modifiées
+					int i_NbModifiedPt = 0;
+					string str_Header = "Join 2 Surfaces <" + std::string(st_IfcEntCS1->ch_Id) + ">--<" + st_IfcEntCS2->ch_Id + "> :";
+					for (it_IndPtCtr1_IndPtCtr2_Dist; it_IndPtCtr1_IndPtCtr2_Dist!= li_IndPtCtr1_IndPtCtr2_Dist.end();++it_IndPtCtr1_IndPtCtr2_Dist)
+					{
+						//
+						// 2 ifcConn séparées     Raccord des 2 ifcconn 
+						//  par epaisseur mur        par leur milieu
+						//      ---  ---                --------
+						//        |  |          =>         |
+						//        |  |                     |
+						//      ---  ---                --------
+						//
+						//Remplacement des points les plus proches appartenant à un même côté (par leur point milieu)
+						// HP: côté à peu près parallèle => les points d'un même côté sont les 1ères paires de même ordre de distance (arbitrairement au max 20% de plus que la 1ère distance)
+						if ((*it_IndPtCtr1_IndPtCtr2_Dist).second < 1.2*db_Distref)
+						{
+							//
+							// On incrémente le nombre de paires de points modifiées
+							i_NbModifiedPt++;
+
+							//On applique la relimitation sur les pts milieux que sur les pairs modifiables (ne reprenant pas un des points des paires précédentes)
+							if (i_NbModifiedPt<=i_MaxNbModifiablePt)
+							{
+								//On prend un itérateur intermédiaire pour ne pas interférer avec celui (it_IndPtCtr1_IndPtCtr2_Dist) qui est utilisé pour les tests
+								list< pair< pair<vector<double*>::iterator, vector<double*>::iterator>, double>>::iterator it_IndPtCtr1_IndPtCtr2_Dist_Cur = it_IndPtCtr1_IndPtCtr2_Dist;
+								
+								//Modification des 2 surfaces => remplacer les paires de points les plus proches par un même point milieu 
+								//HP: les côtés à modifier sont des droites parallèles => remplacement des premières paires repérées par une distance similaire
+								it_CoordCtr1 = (*it_IndPtCtr1_IndPtCtr2_Dist_Cur).first.first;
+								it_CoordCtr2 = (*it_IndPtCtr1_IndPtCtr2_Dist_Cur).first.second;
+
+								double db_NewCoord_X = ((*it_CoordCtr1)[0] + (*it_CoordCtr2)[0]) / 2.0; ++it_CoordCtr1; ++it_CoordCtr2;
+								double db_NewCoord_Y = ((*it_CoordCtr1)[0] + (*it_CoordCtr2)[0]) / 2.0; ++it_CoordCtr1; ++it_CoordCtr2;
+								double db_NewCoord_Z = ((*it_CoordCtr1)[0] + (*it_CoordCtr2)[0]) / 2.0;
+
+								*(*((*it_IndPtCtr1_IndPtCtr2_Dist_Cur).first.first)) = db_NewCoord_X;
+								*(*((*it_IndPtCtr1_IndPtCtr2_Dist_Cur).first.second)) = db_NewCoord_X;
+								*(*(++(*it_IndPtCtr1_IndPtCtr2_Dist_Cur).first.first)) = db_NewCoord_Y;
+								*(*(++(*it_IndPtCtr1_IndPtCtr2_Dist_Cur).first.second)) = db_NewCoord_Y;
+								*(*(++(*it_IndPtCtr1_IndPtCtr2_Dist_Cur).first.first)) = db_NewCoord_Z;
+								*(*(++(*it_IndPtCtr1_IndPtCtr2_Dist_Cur).first.second)) = db_NewCoord_Z;
+
+								str_Header += "\n\tDist(P1,P2)=" + std::to_string((*it_IndPtCtr1_IndPtCtr2_Dist).second) + ";";
+
+							}// if (bo_DoContinue)
+							else
+							{
+								//
+								//Consigner le raccord de l'IfcConnectionSurfaceGeometry dans un fichier "log" (ou mettre en mémoire => même principe que pour le fichier bimxbem)
+								int int_Step = 2;
+								RecordLog(int_Step, *str_LogFile, str_Header, st_IfcEntCS1);
+
+								break;
+							}// else if (bo_DoContinue)
+						}// if ((*it_IndPtCtr1_IndPtCtr2_Dist).second < 1.2*db_Distref)
+						else
+						{
+							//
+							//Consigner le raccord de l'IfcConnectionSurfaceGeometry dans un fichier "log" (ou mettre en mémoire => même principe que pour le fichier bimxbem)
+							int int_Step = 2;
+							RecordLog(int_Step, *str_LogFile, str_Header, st_IfcEntCS1);
+
+							break;
+						}// else if ((*it_IndPtCtr1_IndPtCtr2_Dist).second < 1.2*db_Distref)
+					}// for (it_IndPtCtr1_IndPtCtr2_Dist; it_IndPtCtr1_IndPtCtr2_Dist!= li_IndPtCtr1_IndPtCtr2_Dist.end();++it_IndPtCtr1_IndPtCtr2_Dist)
+				}//if ((*it_IndPtCtr1_IndPtCtr2_Dist).first.first != (*it_IndPtCtr1_IndPtCtr2_Dist_Next).first.first
+				// && (*it_IndPtCtr1_IndPtCtr2_Dist).first.second != (*it_IndPtCtr1_IndPtCtr2_Dist_Next).first.second)
+			}// if ((*it_IndPtCtr1_IndPtCtr2_Dist_Next).second < 1.2*db_Distref)
+		}// if ((*it_IndPtCtr1_IndPtCtr2_Dist).second > db_eps)
+	}// if ((*it_IndPtCtr1_IndPtCtr2_Dist).second < db_ep_mur_max)
 
 	return res;
 }
@@ -555,14 +749,24 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfaces()
 			for (it_Elem2 = (it_Elem1->first->st_Contains).begin(); it_Elem2 != (it_Elem1->first->st_Contains).end(); it_Elem2++)
 			{
 				//HP: Le contains des spaces est composé de IfcProductDefinitionShape, de IfcConnectionSurfaceGeometry et d'élément de construction
-				if (string((*it_Elem2)->ch_Type) != "IfcConnectionSurfaceGeometry" && string((*it_Elem2)->ch_Type) != "IfcProductDefinitionShape")
-					map_BuildingElem_Type[(*it_Elem2)] = (*it_Elem2)->ch_Type;
+				//Recup des Elements de Construction
+				if (string((*it_Elem2)->ch_Type) != "IfcConnectionSurfaceGeometry")
+				{
+					if(string((*it_Elem2)->ch_Type) != "IfcProductDefinitionShape")
+						map_BuildingElem_Type[(*it_Elem2)] = (*it_Elem2)->ch_Type;
+				}//
+				else
+				{
+					//On initialise le set mp_SideBySide pour y mettre le comparatur qui ordonne selon la distance croissante
+					set<pair<STRUCT_IFCENTITY*, pair<double, bool>>, Comparator> setOfIfcConnSideBySide_Init(_CurrentIfcTree->compFunctor);
+					(*it_Elem2)->mp_SideBySide = setOfIfcConnSideBySide_Init;
+				}
 			}// for (it_Elem2 = (it_Elem1->first->st_Contains).begin(); it_Elem2 != (it_Elem1->first->st_Contains).end(); it_Elem2++)
 		}// if (it_Elem1->second == "IfcSpace")
 	}// for (it_Elem1 = _map_BasifTree.begin(); it_Elem1 != _map_BasifTree.end(); it_Elem1++)
 
 	//Boucle sur les elements de construction 
-	std::map<STRUCT_IFCENTITY*, std::string>::iterator it_BuildingElem;
+	map<STRUCT_IFCENTITY*, std::string>::iterator it_BuildingElem;
 	for (it_BuildingElem = map_BuildingElem_Type.begin(); it_BuildingElem != map_BuildingElem_Type.end(); it_BuildingElem++)
 	{
 		res = FindFaceToFaceAndSideBySideSurfacesOfOneBuildingelement(it_BuildingElem->first);
@@ -641,14 +845,6 @@ int ifc_TreePostTreatment::FindFaceToFaceAndSideBySideSurfacesOfOneBuildingeleme
 	return res;
 }
 
-//bool compare_dist(const pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double> &first, const pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double> &second)
-//bool ifc_TreePostTreatment::compare_dist(const pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double> &first, const pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double> &second)
-//{
-//	if (first.second < second.second)
-//		return true;
-//	return false;
-//}
-
 //Algo pour détecter les IfcConnectionSurfaceGeometry en vis-à-vis
 //  st_IfcEntBE est l'élément de construction en cours (on utilise son épaisseur pour éviter des faux positifs)
 //  map_IfcConn_IfcSpace associe un IfcConnectionSurfaceGeometry (de l'élément de construction en cours) avec son IfcSpace (utiliser pour ne pas associer 2 IfcConnectionSurfaceGeometry du même IfcSpace)
@@ -691,7 +887,7 @@ int ifc_TreePostTreatment::FindFaceToFaceSurfacesOfOneBuildingelement(STRUCT_IFC
 //Algo pour détecter les IfcConnectionSurfaceGeometry côte-à-côte
 //  st_IfcEntBE est l'élément de construction en cours (n'est pas utilisé mais si besoin pourrait l'être...)
 //  map_IfcConn_IfcSpace associe un IfcConnectionSurfaceGeometry (de l'élément de construction en cours) avec son IfcSpace (utiliser pour ne pas associer des IfcConnectionSurfaceGeometry d'IfcSpaces différents)
-//  li_IfcConn_IfcConn_Dist: liste de paire d'IfcConnectionSurfaceGeometry ORDONNEE en fonction de leur distance (permet de déterminer les côte-à-côte)
+//  li_IfcConn_IfcConn_Dist: liste de paire d'IfcConnectionSurfaceGeometry (de l'élément de construction en cours) ORDONNEE en fonction de leur distance (permet de déterminer les côte-à-côte)
 //  map_IfcSpace_NbIfcConn détermine le nombre d'IfcConnectionSurfaceGeometry par IfcSpace (permet à la fois de boucler sur les ifcSpaces et de déterminer "l'algo" en fonction du nombre d'IfcConnectionSurfaceGeometry)
 int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFCENTITY *st_IfcEntBE, map<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *> &map_IfcConn_IfcSpace, list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>> &li_IfcConn_IfcConn_Dist, map<STRUCT_IFCENTITY *, int> &map_IfcSpace_NbIfcConn)
 {
@@ -700,387 +896,28 @@ int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFC
 	//Surfaces côte à côte (sur un même élément de construction)
 	//Paires de Surfaces les plus proches qui ne soient pas en vis à vis et appartenant à un même espace
 	//Repérer les paires de surfaces appartenant à même espace
-	//Cas triviaux: 
-	//   - S'il n'y a que 1 surface pas de côte à côte
-	//   - S'il n'y a que 2 surfaces => 1 seule paire côte à côte
-	//   - S'il y a strictement plus que 2 surfaces 
-	//      => A1) prendre la 1ere paire la plus proche à "iso-espace" = (S1 et S2)
-	//      => A2) prendre la 2ème paire la plus proche contenant S1 = (S1 et S3) 
-	//      => A3) prendre la 3ème paire (S2 et S3)
-	//         A1 et A2 => dist (S1 et S3) > (S1 et S2)
-	//         A3 => soit dist (S2 et S3) > (S1 et S3) implique S1 au milieu de S2 et S3 
-	//            => soit dist (S2 et S3) < (S1 et S3) implique S2 au milieu de S1 et S3 (dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide)
-	//
-	//    A2.1)                  S1-------S3  => dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S1 et S3 peuvent avoir un autre SideBySide S4) 
-	//    A1)                    S1--S2
-	//    A2.2)         S3-------S1           => dans ce cas S1 aura 2 SideBySide, S2 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S2 et S3 peuvent avoir un autre SideBySide S4) 
-	//
-	//	Le processus A1, A2 et A3 est à répéter en excluant la surface ayant déjà ses 2 SideBySide
-	//   => a priori pour 3 surfaces d'un même espace processus à faire 1 fois, pour 4 surfaces 2 fois, pour N surfaces N-2 fois
 	map<STRUCT_IFCENTITY *, int> ::iterator mp_Space;
 	for (mp_Space = map_IfcSpace_NbIfcConn.begin(); mp_Space != map_IfcSpace_NbIfcConn.end(); mp_Space++)
 	{
-		//
-		//USECASE à 2 IfcConnectionSurfaceGeometry par ifcSpace
-		if ((*mp_Space).second == 2)
+		for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
 		{
-			for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
+			//Si les 2 IfcConnectionSurfaceGeometry appartiennent à 1 même ifcspace => on continue
+			if (map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second])
 			{
-				//Si les 2 IfcConnectionSurfaceGeometry appartiennent à 1 même ifcspace => on continue
-				if (map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second])
-				{
-					//Si les 2 IfcConnectionSurfaceGeometry appartiennent au même ifcspace en cours => on continue
-					if (map_IfcConn_IfcSpace[(*it).first.first] == (*mp_Space).first)
-					{
-						//(*it).first.first->st_SideBySide.push_back((*it).first.second);
-						//(*it).first.second->st_SideBySide.push_back((*it).first.first);
-
-						(*it).first.first->mp_SideBySide[(*it).first.second]=false;
-						(*it).first.second->mp_SideBySide[(*it).first.first]=false;
-
-						//Il n'y a que 2 IfcConnectionSurfaceGeometry => on peut arrêter la boucle sur les pairs
-						break;
-					}// if (map_IfcConn_IfcSpace[(*it).first.first] == (*mp_Space).first)
-				}// if (map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second])
-			}//for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
-		}// if ((*mp_Space).second == 2)
-		 //
-		 //USECASE à plus de 2 IfcConnectionSurfaceGeometry par ifcSpace
-		else if ((*mp_Space).second > 2)
-		{
-			//Recherche des 3 pairs it, it2 et it3 d'IfcConnectionSurfaceGeometry appartenant au même IfcSpace en cours
-			//BOUCLE POUR CHERCHER it
-			list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it;
-			list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it2;
-			list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it3;
-			for (it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); it++)
-			{
-				bool bo_AreTheTwoPairsFound = false;
-				//it=S1-S2?
 				//Si les 2 IfcConnectionSurfaceGeometry appartiennent au même ifcspace en cours => on continue
-				//bool bo_CanBeSideBySide = map_CanBeSideBySide[std::make_pair((*it).first.first, (*it).first.second)];
-				if ((map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second]) && (map_IfcConn_IfcSpace[(*it).first.first] == (*mp_Space).first))
+				if (map_IfcConn_IfcSpace[(*it).first.first] == (*mp_Space).first)
 				{
-					//A ce stade, on a la 1ere paire d'ifcConn it=S1-S2, on cherche la prochaine paire la plus proche (it2=S1-S3 ou it2=S3-S1)
-					//BOUCLE POUR CHERCHER it2
-					//it++;
-					//for (it2 = it, it--; it2 != li_IfcConn_IfcConn_Dist.end(); it2++)
-					for (it2 = li_IfcConn_IfcConn_Dist.begin(); it2 != li_IfcConn_IfcConn_Dist.end(); it2++)
-					{
-						//it2=S1-S3?
-						//Si la 1ere IfcConnectionSurfaceGeometry de it2 est S1 et si la 2nde IfcConn (S3) appartient au même ifcspace => on continue
-						if ((it2 != it) && (*it2).first.first == (*it).first.first && map_IfcConn_IfcSpace[(*it2).first.second] == (*mp_Space).first)
-						{
-							//A ce stade, on a les 2 paires d'ifcConn it=S1-S2 et it2=S1-S3, on cherche la derniere paire it3=S2-S3 ou it3=S3-S2
-							//BOUCLE POUR CHERCHER it3
-							//it2++;
-							//for (it3 = it2, it2--; it3 != li_IfcConn_IfcConn_Dist.end(); it3++)
-							for (it3 = li_IfcConn_IfcConn_Dist.begin(); it3 != li_IfcConn_IfcConn_Dist.end(); it3++)
-							{
-								//it3=S2-S3?
-								//Si la 1ere IfcConnectionSurfaceGeometry de it3 est S2 et la 2nde de it3 est S3 => on a les 3 paires pour renseigner les SideBySide
-								if ((*it3).first.first == (*it).first.second && (*it3).first.second == (*it2).first.second)
-								{
-									//A ce stade, on a les 3 paires d'ifcConn it=S1-S2 , it2=S1-S3, it3=S2-S3 
-									//avec les conditions: S1-S2 < S1-S3 
-									//    A2.1)                  S1-------S3  => dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S1 et S3 peuvent avoir un autre SideBySide S4) 
-									//    A1)                    S1--S2
-									//    A2.2)         S3-------S1           => dans ce cas S1 aura 2 SideBySide, S2 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S2 et S3 peuvent avoir un autre SideBySide S4) 
+					(*it).first.first->mp_SideBySide.insert(std::make_pair((*it).first.second, std::make_pair((*it).second, false)));
+					(*it).first.second->mp_SideBySide.insert(std::make_pair((*it).first.first, std::make_pair((*it).second, false)));
 
-									// Si S2-S3 < S1-S3 => S2 entre S1 et S3 (S1-S2-S3)
-									if ((*it3).second<(*it2).second)
-									{
-
-										////S1->sideBySide(S2)
-										//(*it).first.first->st_SideBySide.push_back((*it).first.second);
-
-										////S2->sideBySide(S1)
-										//(*it).first.second->st_SideBySide.push_back((*it).first.first);
-										////S2->sideBySide(S3)
-										//(*it).first.second->st_SideBySide.push_back((*it2).first.second);
-
-										////S3->sideBySide(S2)
-										//(*it2).first.second->st_SideBySide.push_back((*it).first.second);
-
-										//S1->sideBySide(S2)
-										(*it).first.first->mp_SideBySide[(*it).first.second]=false;
-
-										//S2->sideBySide(S1)
-										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
-										//S2->sideBySide(S3)
-										(*it).first.second->mp_SideBySide[(*it2).first.second] = false;
-
-										//S3->sideBySide(S2)
-										(*it2).first.second->mp_SideBySide[(*it).first.second] = false;
-
-										//Indication que S1 et S3 ne peuvent pas être cote à cote
-										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.second)] = false;
-										bo_AreTheTwoPairsFound = true;
-									}// if ((*it3).second<(*it2).second)
-
-									 // Si S2-S3 > S1-S3 => S1 entre S2 et S3 (S3-S1-S2)
-									if ((*it3).second>(*it2).second)
-									{
-										////S3->sideBySide(S1)
-										//(*it2).first.second->st_SideBySide.push_back((*it).first.first);
-
-										////S1->sideBySide(S3)
-										//(*it).first.first->st_SideBySide.push_back((*it2).first.second);
-										////S1->sideBySide(S2)
-										//(*it).first.first->st_SideBySide.push_back((*it).first.second);
-
-										////S2->sideBySide(S1)
-										//(*it).first.second->st_SideBySide.push_back((*it).first.first);
-
-										//S3->sideBySide(S1)
-										(*it2).first.second->mp_SideBySide[(*it).first.first] = false;
-
-										//S1->sideBySide(S3)
-										(*it).first.first->mp_SideBySide[(*it2).first.second] = false;
-										//S1->sideBySide(S2)
-										(*it).first.first->mp_SideBySide[(*it).first.second] = false;
-
-										//S2->sideBySide(S1)
-										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
-
-										//Indication que S2 et S3 ne peuvent pas être cote à cote
-										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.second)] = false;
-										bo_AreTheTwoPairsFound = true;
-									}// if ((*it3).second>(*it2).second)
-								}// if ((*it3).first.first == (*it).first.second && (*it3).first.second == (*it2).first.second)
-								 //it3=S3-S2?
-								 //Si la 1ere IfcConnectionSurfaceGeometry de it3 est S3 et la 2nde de it3 est S2 => on a les 3 paires pour renseigner les SideBySide
-								if ((*it3).first.first == (*it2).first.second && (*it3).first.second == (*it).first.second)
-								{
-									//A ce stade, on a les 3 paires d'ifcConn it=S1-S2 , it2=S1-S3, it3=S3-S2 
-									//avec les conditions: S1-S2 < S1-S3 
-									//    A2.1)                  S1-------S3  => dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S1 et S3 peuvent avoir un autre SideBySide S4) 
-									//    A1)                    S1--S2
-									//    A2.2)         S3-------S1           => dans ce cas S1 aura 2 SideBySide, S2 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S2 et S3 peuvent avoir un autre SideBySide S4)
-
-									// Si S3-S2 < S1-S3 => S2 entre S1 et S3 (S1-S2-S3)
-									if ((*it3).second<(*it2).second)
-									{
-										////S1->sideBySide(S2)
-										//(*it).first.first->st_SideBySide.push_back((*it).first.second);
-
-										////S2->sideBySide(S1)
-										//(*it).first.second->st_SideBySide.push_back((*it).first.first);
-										////S2->sideBySide(S3)
-										//(*it).first.second->st_SideBySide.push_back((*it2).first.second);
-
-										////S3->sideBySide(S2)
-										//(*it2).first.second->st_SideBySide.push_back((*it).first.second);
-
-										//S1->sideBySide(S2)
-										(*it).first.first->mp_SideBySide[(*it).first.second] = false;
-
-										//S2->sideBySide(S1)
-										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
-										//S2->sideBySide(S3)
-										(*it).first.second->mp_SideBySide[(*it2).first.second] = false;
-
-										//S3->sideBySide(S2)
-										(*it2).first.second->mp_SideBySide[(*it).first.second] = false;
-
-										//Indication que S1 et S3 ne peuvent pas être cote à cote
-										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.second)] = false;
-										bo_AreTheTwoPairsFound = true;
-									}// if ((*it3).second<(*it2).second)
-
-									 // Si S3-S2 > S1-S3 => S1 entre S2 et S3 (S3-S1-S2)
-									if ((*it3).second>(*it2).second)
-									{
-										////S3->sideBySide(S1)
-										//(*it2).first.second->st_SideBySide.push_back((*it).first.first);
-
-										////S1->sideBySide(S3)
-										//(*it).first.first->st_SideBySide.push_back((*it2).first.second);
-										////S1->sideBySide(S2)
-										//(*it).first.first->st_SideBySide.push_back((*it).first.second);
-
-										////S2->sideBySide(S1)
-										//(*it).first.second->st_SideBySide.push_back((*it).first.first);
-
-										//S3->sideBySide(S1)
-										(*it2).first.second->mp_SideBySide[(*it).first.first] = false;
-
-										//S1->sideBySide(S3)
-										(*it).first.first->mp_SideBySide[(*it2).first.second] = false;
-										//S1->sideBySide(S2)
-										(*it).first.first->mp_SideBySide[(*it).first.second] = false;
-
-										//S2->sideBySide(S1)
-										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
-
-										//Indication que S2 et S3 ne peuvent pas être cote à cote
-										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.second)] = false;
-										bo_AreTheTwoPairsFound = true;
-									}// if ((*it3).second>(*it2).second)
-								}// if ((*it3).first.first == (*it2).first.second && (*it3).first.second == (*it).first.second)
-
-								if (bo_AreTheTwoPairsFound) break;
-							}// for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it3 = it2, it2--; it3 != li_IfcConn_IfcConn_Dist.end(); ++it3)
-						}// if ((it2 != it) && (*it2).first.first == (*it).first.first && map_IfcConn_IfcSpace[(*it2).first.second] == (*mp_Space).first)
-						 //it2=S3-S1?
-						 //Si la 2nde IfcConnectionSurfaceGeometry de it2 est S1 et si la 1ere IfcConn (S3) appartient au même ifcspace => on continue
-						if ((it2 != it) && (*it2).first.second == (*it).first.first && map_IfcConn_IfcSpace[(*it2).first.first] == (*mp_Space).first)
-						{
-							//A ce stade, on a les 2 paires d'ifcConn it=S1-S2 et it2=S3-S1, on cherche la derniere paire it3=S2-S3 ou it3=S3-S2
-							//BOUCLE POUR CHERCHER it3
-							it2++;
-							for (it3 = it2, it2--; it3 != li_IfcConn_IfcConn_Dist.end(); it3++)
-							{
-								//it3=S2-S3?
-								//Si la 1ere IfcConnectionSurfaceGeometry de it3 est S2 et la 2nde de it3 est S3 => on a les 3 paires pour renseigner les SideBySide
-								if ((*it3).first.first == (*it).first.second && (*it3).first.second == (*it2).first.first)
-								{
-									//A ce stade, on a les 3 paires d'ifcConn it=S1-S2 , it2=S3-S1, it3=S2-S3 
-									//avec les conditions: S1-S2 < S3-S1 
-									//    A2.1)                  S1-------S3  => dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S1 et S3 peuvent avoir un autre SideBySide S4) 
-									//    A1)                    S1--S2
-									//    A2.2)         S3-------S1           => dans ce cas S1 aura 2 SideBySide, S2 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S2 et S3 peuvent avoir un autre SideBySide S4) 
-
-									// Si S2-S3 < S3-S1 => S2 entre S1 et S3 (S1-S2-S3)
-									if ((*it3).second<(*it2).second)
-									{
-										////S1->sideBySide(S2)
-										//(*it).first.first->st_SideBySide.push_back((*it).first.second);
-
-										////S2->sideBySide(S1)
-										//(*it).first.second->st_SideBySide.push_back((*it).first.first);
-										////S2->sideBySide(S3)
-										//(*it).first.second->st_SideBySide.push_back((*it2).first.first);
-
-										////S3->sideBySide(S2)
-										//(*it2).first.first->st_SideBySide.push_back((*it).first.second);
-
-										//S1->sideBySide(S2)
-										(*it).first.first->mp_SideBySide[(*it).first.second] = false;
-
-										//S2->sideBySide(S1)
-										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
-										//S2->sideBySide(S3)
-										(*it).first.second->mp_SideBySide[(*it2).first.first] = false;
-
-										//S3->sideBySide(S2)
-										(*it2).first.first->mp_SideBySide[(*it).first.second] = false;
-
-										//Indication que S1 et S3 ne peuvent pas être cote à cote
-										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.first)] = false;
-										bo_AreTheTwoPairsFound = true;
-									}// if ((*it3).second<(*it2).second)
-
-									 // Si S2-S3 > S3-S1 => S1 entre S2 et S3 (S3-S1-S2)
-									if ((*it3).second>(*it2).second)
-									{
-										////S3->sideBySide(S1)
-										//(*it2).first.first->st_SideBySide.push_back((*it).first.first);
-
-										////S1->sideBySide(S3)
-										//(*it).first.first->st_SideBySide.push_back((*it2).first.first);
-										////S1->sideBySide(S2)
-										//(*it).first.first->st_SideBySide.push_back((*it).first.second);
-
-										////S2->sideBySide(S1)
-										//(*it).first.second->st_SideBySide.push_back((*it).first.first);
-
-										//S3->sideBySide(S1)
-										(*it2).first.first->mp_SideBySide[(*it).first.first] = false;
-
-										//S1->sideBySide(S3)
-										(*it).first.first->mp_SideBySide[(*it2).first.first] = false;
-										//S1->sideBySide(S2)
-										(*it).first.first->mp_SideBySide[(*it).first.second] = false;
-
-										//S2->sideBySide(S1)
-										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
-
-										//Indication que S2 et S3 ne peuvent pas être cote à cote
-										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.first)] = false;
-										bo_AreTheTwoPairsFound = true;
-									}// if ((*it3).second>(*it2).second)
-								}// if ((*it3).first.first == (*it).first.second && (*it3).first.second == (*it2).first.first)
-								 //it3=S3-S2?
-								 //Si la 1ere IfcConnectionSurfaceGeometry de it3 est S3 et la 2nde de it3 est S2 => on a les 3 paires pour renseigner les SideBySide
-								if ((*it3).first.first == (*it2).first.first && (*it3).first.second == (*it).first.second)
-								{
-									//A ce stade, on a les 3 paires d'ifcConn it=S1-S2 , it2=S3-S1, it3=S3-S2 
-									//avec les conditions: S1-S2 < S3-S1 
-									//    A2.1)                  S1-------S3  => dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S1 et S3 peuvent avoir un autre SideBySide S4) 
-									//    A1)                    S1--S2
-									//    A2.2)         S3-------S1           => dans ce cas S1 aura 2 SideBySide, S2 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S2 et S3 peuvent avoir un autre SideBySide S4)
-
-									// Si S3-S2 < S3-S1 => S2 entre S1 et S3 (S1-S2-S3)
-									if ((*it3).second<(*it2).second)
-									{
-										////S1->sideBySide(S2)
-										//(*it).first.first->st_SideBySide.push_back((*it).first.second);
-
-										////S2->sideBySide(S1)
-										//(*it).first.second->st_SideBySide.push_back((*it).first.first);
-										////S2->sideBySide(S3)
-										//(*it).first.second->st_SideBySide.push_back((*it2).first.first);
-
-										////S3->sideBySide(S2)
-										//(*it2).first.first->st_SideBySide.push_back((*it).first.second);
-
-										//S1->sideBySide(S2)
-										(*it).first.first->mp_SideBySide[(*it).first.second] = false;
-
-										//S2->sideBySide(S1)
-										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
-										//S2->sideBySide(S3)
-										(*it).first.second->mp_SideBySide[(*it2).first.first] = false;
-
-										//S3->sideBySide(S2)
-										(*it2).first.first->mp_SideBySide[(*it).first.second] = false;
-
-										//Indication que S1 et S3 ne peuvent pas être cote à cote
-										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.first)] = false;
-										bo_AreTheTwoPairsFound = true;
-									}// if ((*it3).second<(*it2).second)
-
-									 // Si S3-S2 > S3-S1 => S1 entre S2 et S3 (S3-S1-S2)
-									if ((*it3).second>(*it2).second)
-									{
-										////S3->sideBySide(S1)
-										//(*it2).first.first->st_SideBySide.push_back((*it).first.first);
-
-										////S1->sideBySide(S3)
-										//(*it).first.first->st_SideBySide.push_back((*it2).first.first);
-										////S1->sideBySide(S2)
-										//(*it).first.first->st_SideBySide.push_back((*it).first.second);
-
-										////S2->sideBySide(S1)
-										//(*it).first.second->st_SideBySide.push_back((*it).first.first);
-
-										//S3->sideBySide(S1)
-										(*it2).first.first->mp_SideBySide[(*it).first.first] = false;
-
-										//S1->sideBySide(S3)
-										(*it).first.first->mp_SideBySide[(*it2).first.first] = false;
-										//S1->sideBySide(S2)
-										(*it).first.first->mp_SideBySide[(*it).first.second] = false;
-
-										//S2->sideBySide(S1)
-										(*it).first.second->mp_SideBySide[(*it).first.first] = false;
-
-										//Indication que S2 et S3 ne peuvent pas être cote à cote
-										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.first)] = false;
-										bo_AreTheTwoPairsFound = true;
-									}// if ((*it3).second>(*it2).second)
-								}// if ((*it3).first.first == (*it2).first.first && (*it3).first.second == (*it).first.second)
-
-								if (bo_AreTheTwoPairsFound) break;
-							}// for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it3 = it2, it2--; it3 != li_IfcConn_IfcConn_Dist.end(); ++it3)
-						}// if ((*it2).first.second == (*it).first.first && map_IfcConn_IfcSpace[(*it2).first.first] == (*mp_Space).first)
-
-						if (bo_AreTheTwoPairsFound) break;
-					}// for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it2 = it, it--; it2 != li_IfcConn_IfcConn_Dist.end(); ++it2)
-				}// if (map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second])
-			}//for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
-		}// else if ((*mp_Space).second > 2)
+					//REMARQUE:
+					// Si besoin d'optimiser on peut mettre un compteur ici pour compter le nombre de pairs trouvées.
+					// et mettre un test, pour faire un break, sur le nombre de pairs car il doit y en avoir : ((*mp_Space).second-1)*(*mp_Space).second)/2 
+					// Pour rappel, map_IfcConn_IfcSpace contient les ifcConn appartenant à un seul mur
+					//break;
+				}// if (map_IfcConn_IfcSpace[(*it).first.first] == (*mp_Space).first)
+			}// if (map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second])
+		}//for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
 	}// for (mp_Elem1 = map_IfcSpace_NbIfcConn.begin(); mp_Elem1 != map_IfcSpace_NbIfcConn.end(); mp_Elem1++)
 
 	return res;
@@ -1093,3 +930,345 @@ double ifc_TreePostTreatment::ComputePtPtDistance(vector<double*> &vc_Point1, ve
 						+ (*vc_Point2[2] - *vc_Point1[2])*(*vc_Point2[2] - *vc_Point1[2]));
 	return db_dist;
 }
+
+map<STRUCT_IFCENTITY*, pair<bool, double>>::iterator ifc_TreePostTreatment::get_Index_Of_Max(map<STRUCT_IFCENTITY*, pair<bool, double>> &x)
+{
+	map<STRUCT_IFCENTITY*, pair<bool, double>>::iterator first = x.begin();
+	map<STRUCT_IFCENTITY*, pair<bool, double>>::iterator last = x.end();
+
+	map<STRUCT_IFCENTITY*, pair<bool, double>>::iterator largest = first;
+	if (first == last) return largest;
+	while (++first != last)
+		if ((*largest).second.second<(*first).second.second)
+			largest = first;
+	return largest;
+}
+
+//int ifc_TreePostTreatment::SortSideBySideSurfacesOfIfcConnectionSurfaceGeometry(STRUCT_IFCENTITY *st_IfcEntCS)
+//{
+//	int i_Res = 0;
+//
+//	// Declaring the type of Predicate that accepts 2 pairs and return a bool
+//	//typedef function<bool(pair<STRUCT_IFCENTITY*, pair<double, bool>>, pair<STRUCT_IFCENTITY*, pair<double, bool>>)> Comparator;
+//
+//	// Defining a lambda function to compare two pairs. It will compare two pairs using second field
+//	//Comparator compFunctor =
+//	//	[](pair<STRUCT_IFCENTITY*, pair<double, bool>> elem1, pair<STRUCT_IFCENTITY*, pair<double, bool>> elem2)
+//	//{
+//	//	return elem1.second.first < elem2.second.first;
+//	//};
+//
+//	// Declaring a set that will store the pairs using above comparision logic
+//	//map<STRUCT_IFCENTITY*, pair<double, bool>, Comparator> mapOfIfcConnSideBySide(st_IfcEntCS->mp_SideBySide.begin(), st_IfcEntCS->mp_SideBySide.end(), compFunctor);
+//	set<pair<STRUCT_IFCENTITY*, pair<double, bool>>, Comparator> setOfIfcConnSideBySide(st_IfcEntCS->mp_SideBySide.begin(), st_IfcEntCS->mp_SideBySide.end(), _CurrentIfcTree->compFunctor);
+//
+//	st_IfcEntCS->mp_SideBySide.swap(setOfIfcConnSideBySide);
+//
+//	// Iterate over a set using range base for loop
+//	// It will display the items in sorted order of values
+//	//for (pair<STRUCT_IFCENTITY*, pair<double, bool>> element : setOfIfcConnSideBySide)
+//	//{
+//	//	st_IfcEntCS->mp_SideBySide.insert(element);
+//	//}// for (pair<STRUCT_IFCENTITY*, pair<double, bool>> element : setOfIfcConnSideBySide)
+//
+//	return i_Res;
+//}
+
+////
+//// POUR MEMO (1/2)...
+////
+//
+//Algo pour détecter les côte-à-côtes (cette détection permet de repérer les surfaces qui sont espacé de l'épaisseurs d'un mur pour les prolonger l'un vers l'autre)
+// => ATTENTION: Algo pas fiable si les surfaces ne sont pas distribuer "selon une direction" i.e. s'il y a des surfaces à droite/gauche (1 direction) mais aussi en haut/en bas (2nde direction)!!!
+// Par exemple le problème arrive avec les "surfaces quasi-nulles" qui sont bien souvent des quasi-lignes sur différents bords!
+//int ifc_TreePostTreatment::FillSideBySideSurfacesOfOneBuildingelement(STRUCT_IFCENTITY *st_IfcConn_Left, STRUCT_IFCENTITY *st_IfcConn_Middle, STRUCT_IFCENTITY *st_IfcConn_Right, double dbl_Dist_Left_Mid, double dbl_Dist_Mid_Right)
+//{
+//	int iRes = 0;
+//
+//	// ajouter systematiquement les 2 plus proches et retirer les max si plus de 2 proches!
+//	//S1->sideBySide(S2)
+//	st_IfcConn_Left->mp_SideBySide[st_IfcConn_Middle] = std::make_pair(false, dbl_Dist_Left_Mid);
+//	//S2->sideBySide(S1)
+//	st_IfcConn_Middle->mp_SideBySide[st_IfcConn_Left] = std::make_pair(false, dbl_Dist_Left_Mid);
+//	//S2->sideBySide(S3)
+//	st_IfcConn_Middle->mp_SideBySide[st_IfcConn_Right] = std::make_pair(false, dbl_Dist_Mid_Right);
+//	//S3->sideBySide(S2)
+//	st_IfcConn_Right->mp_SideBySide[st_IfcConn_Middle] = std::make_pair(false, dbl_Dist_Mid_Right);
+//
+//	//retirer le max si plus de 2 proches!
+//	if (st_IfcConn_Middle->mp_SideBySide.size() > 2)
+//	{
+//		map<STRUCT_IFCENTITY*, pair<bool, double>>::iterator max_it_f_s = get_Index_Of_Max(st_IfcConn_Middle->mp_SideBySide);
+//		(*max_it_f_s).first->mp_SideBySide.erase(st_IfcConn_Middle);
+//		st_IfcConn_Middle->mp_SideBySide.erase(max_it_f_s);
+//	}// if (st_IfcConn_Middle->mp_SideBySide.size() > 1)
+//
+//	 //retirer le max si plus de 2 proches!
+//	if (st_IfcConn_Left->mp_SideBySide.size() > 2)
+//	{
+//		map<STRUCT_IFCENTITY*, pair<bool, double>>::iterator max_it_f_s = get_Index_Of_Max(st_IfcConn_Left->mp_SideBySide);
+//		(*max_it_f_s).first->mp_SideBySide.erase(st_IfcConn_Left);
+//		st_IfcConn_Left->mp_SideBySide.erase(max_it_f_s);
+//	}// if (st_IfcConn_Left->mp_SideBySide.size() > 1)
+//
+//	 //retirer le max si plus de 2 proches!
+//	if (st_IfcConn_Right->mp_SideBySide.size() > 2)
+//	{
+//		map<STRUCT_IFCENTITY*, pair<bool, double>>::iterator max_it_f_s = get_Index_Of_Max(st_IfcConn_Right->mp_SideBySide);
+//		(*max_it_f_s).first->mp_SideBySide.erase(st_IfcConn_Right);
+//		st_IfcConn_Right->mp_SideBySide.erase(max_it_f_s);
+//	}// if (st_IfcConn_Right->mp_SideBySide.size() > 1)
+//
+//	return iRes;
+//}
+////
+//// POUR MEMO (2/2)...
+////
+////Algo pour détecter les IfcConnectionSurfaceGeometry côte-à-côte
+////  st_IfcEntBE est l'élément de construction en cours (n'est pas utilisé mais si besoin pourrait l'être...)
+////  map_IfcConn_IfcSpace associe un IfcConnectionSurfaceGeometry (de l'élément de construction en cours) avec son IfcSpace (utiliser pour ne pas associer des IfcConnectionSurfaceGeometry d'IfcSpaces différents)
+////  li_IfcConn_IfcConn_Dist: liste de paire d'IfcConnectionSurfaceGeometry (de l'élément de construction en cours) ORDONNEE en fonction de leur distance (permet de déterminer les côte-à-côte)
+////  map_IfcSpace_NbIfcConn détermine le nombre d'IfcConnectionSurfaceGeometry par IfcSpace (permet à la fois de boucler sur les ifcSpaces et de déterminer "l'algo" en fonction du nombre d'IfcConnectionSurfaceGeometry)
+//int ifc_TreePostTreatment::FindSideBySideSurfacesOfOneBuildingelement(STRUCT_IFCENTITY *st_IfcEntBE, map<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *> &map_IfcConn_IfcSpace, list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>> &li_IfcConn_IfcConn_Dist, map<STRUCT_IFCENTITY *, int> &map_IfcSpace_NbIfcConn)
+//{
+//	int res = 0;
+//
+//	//Surfaces côte à côte (sur un même élément de construction)
+//	//Paires de Surfaces les plus proches qui ne soient pas en vis à vis et appartenant à un même espace
+//	//Repérer les paires de surfaces appartenant à même espace
+//	//Cas triviaux: 
+//	//   - S'il n'y a que 1 surface pas de côte à côte
+//	//   - S'il n'y a que 2 surfaces => 1 seule paire côte à côte
+//	//   - S'il y a strictement plus que 2 surfaces 
+//	//      => A1) prendre la 1ere paire la plus proche à "iso-espace" = (S1 et S2)
+//	//      => A2) prendre la 2ème paire la plus proche contenant S1 = (S1 et S3) 
+//	//      => A3) prendre la 3ème paire (S2 et S3)
+//	//         A1 et A2 => dist (S1 et S3) > (S1 et S2)
+//	//         A3 => soit dist (S2 et S3) > (S1 et S3) implique S1 au milieu de S2 et S3 
+//	//            => soit dist (S2 et S3) < (S1 et S3) implique S2 au milieu de S1 et S3 (dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide)
+//	//
+//	//    A2.1)                  S1-------S3  => dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S1 et S3 peuvent avoir un autre SideBySide S4) 
+//	//    A1)                    S1--S2
+//	//    A2.2)         S3-------S1           => dans ce cas S1 aura 2 SideBySide, S2 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S2 et S3 peuvent avoir un autre SideBySide S4) 
+//	//
+//	//	Le processus A1, A2 et A3 est à répéter en excluant la surface ayant déjà ses 2 SideBySide
+//	//   => a priori pour 3 surfaces d'un même espace processus à faire 1 fois, pour 4 surfaces 2 fois, pour N surfaces N-2 fois
+//	map<STRUCT_IFCENTITY *, int> ::iterator mp_Space;
+//	for (mp_Space = map_IfcSpace_NbIfcConn.begin(); mp_Space != map_IfcSpace_NbIfcConn.end(); mp_Space++)
+//	{
+//		//
+//		//USECASE à 2 IfcConnectionSurfaceGeometry par ifcSpace
+//		if ((*mp_Space).second == 2)
+//		{
+//			for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
+//			{
+//				//Si les 2 IfcConnectionSurfaceGeometry appartiennent à 1 même ifcspace => on continue
+//				if (map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second])
+//				{
+//					//Si les 2 IfcConnectionSurfaceGeometry appartiennent au même ifcspace en cours => on continue
+//					if (map_IfcConn_IfcSpace[(*it).first.first] == (*mp_Space).first)
+//					{
+//						//(*it).first.first->st_SideBySide.push_back((*it).first.second);
+//						//(*it).first.second->st_SideBySide.push_back((*it).first.first);
+//
+//						(*it).first.first->mp_SideBySide[(*it).first.second] = std::make_pair(false, (*it).second);
+//						(*it).first.second->mp_SideBySide[(*it).first.first] = std::make_pair(false, (*it).second);
+//
+//						//Il n'y a que 2 IfcConnectionSurfaceGeometry => on peut arrêter la boucle sur les pairs
+//						break;
+//					}// if (map_IfcConn_IfcSpace[(*it).first.first] == (*mp_Space).first)
+//				}// if (map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second])
+//			}//for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
+//		}// if ((*mp_Space).second == 2)
+//		 //
+//		 //USECASE à plus de 2 IfcConnectionSurfaceGeometry par ifcSpace
+//		else if ((*mp_Space).second > 2)
+//		{
+//			//Recherche des 3 pairs it, it2 et it3 d'IfcConnectionSurfaceGeometry appartenant au même IfcSpace en cours
+//			//BOUCLE POUR CHERCHER it
+//			list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it;
+//			list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it2;
+//			list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it3;
+//			for (it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); it++)
+//			{
+//				bool bo_AreTheTwoPairsFound = false;
+//				//it=S1-S2?
+//				//Si les 2 IfcConnectionSurfaceGeometry appartiennent au même ifcspace en cours => on continue
+//				//bool bo_CanBeSideBySide = map_CanBeSideBySide[std::make_pair((*it).first.first, (*it).first.second)];
+//				if ((map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second]) && (map_IfcConn_IfcSpace[(*it).first.first] == (*mp_Space).first))
+//				{
+//					//A ce stade, on a la 1ere paire d'ifcConn it=S1-S2, on cherche la prochaine paire la plus proche (it2=S1-S3 ou it2=S3-S1)
+//					//BOUCLE POUR CHERCHER it2
+//					//it++;
+//					//for (it2 = it, it--; it2 != li_IfcConn_IfcConn_Dist.end(); it2++)
+//					for (it2 = li_IfcConn_IfcConn_Dist.begin(); it2 != li_IfcConn_IfcConn_Dist.end(); it2++)
+//					{
+//						//it2=S1-S3?
+//						//Si la 1ere IfcConnectionSurfaceGeometry de it2 est S1 et si la 2nde IfcConn (S3) appartient au même ifcspace => on continue
+//						if ((it2 != it) && (*it2).first.first == (*it).first.first && map_IfcConn_IfcSpace[(*it2).first.second] == (*mp_Space).first)
+//						{
+//							//A ce stade, on a les 2 paires d'ifcConn it=S1-S2 et it2=S1-S3, on cherche la derniere paire it3=S2-S3 ou it3=S3-S2
+//							//BOUCLE POUR CHERCHER it3
+//							//it2++;
+//							//for (it3 = it2, it2--; it3 != li_IfcConn_IfcConn_Dist.end(); it3++)
+//							for (it3 = li_IfcConn_IfcConn_Dist.begin(); it3 != li_IfcConn_IfcConn_Dist.end(); it3++)
+//							{
+//								//it3=S2-S3?
+//								//Si la 1ere IfcConnectionSurfaceGeometry de it3 est S2 et la 2nde de it3 est S3 => on a les 3 paires pour renseigner les SideBySide
+//								if ((*it3).first.first == (*it).first.second && (*it3).first.second == (*it2).first.second)
+//								{
+//									//A ce stade, on a les 3 paires d'ifcConn it=S1-S2 , it2=S1-S3, it3=S2-S3 
+//									//avec les conditions: S1-S2 < S1-S3 
+//									//    A2.1)                  S1-------S3  => dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S1 et S3 peuvent avoir un autre SideBySide S4) 
+//									//    A1)                    S1--S2
+//									//    A2.2)         S3-------S1           => dans ce cas S1 aura 2 SideBySide, S2 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S2 et S3 peuvent avoir un autre SideBySide S4) 
+//
+//									// Si S2-S3 < S1-S3 => S2 entre S1 et S3 (S1-S2-S3)
+//									if ((*it3).second < (*it2).second)
+//									{
+//										//S1---S2---S3
+//										int res = FillSideBySideSurfacesOfOneBuildingelement((*it).first.first, (*it).first.second, (*it2).first.second, (*it).second, (*it3).second);
+//
+//										//Indication que S1 et S3 ne peuvent pas être cote à cote
+//										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.second)] = false;
+//										bo_AreTheTwoPairsFound = true;
+//									}// if ((*it3).second<(*it2).second)
+//
+//									 // Si S2-S3 > S1-S3 => S1 entre S2 et S3 (S3-S1-S2)
+//									if ((*it3).second>(*it2).second)
+//									{
+//										//S3---S1---S2
+//										int res = FillSideBySideSurfacesOfOneBuildingelement((*it2).first.second, (*it).first.first, (*it).first.second, (*it2).second, (*it).second);
+//
+//										//Indication que S2 et S3 ne peuvent pas être cote à cote
+//										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.second)] = false;
+//										bo_AreTheTwoPairsFound = true;
+//									}// if ((*it3).second>(*it2).second)
+//								}// if ((*it3).first.first == (*it).first.second && (*it3).first.second == (*it2).first.second)
+//
+//								 //it3=S3-S2?
+//								 //Si la 1ere IfcConnectionSurfaceGeometry de it3 est S3 et la 2nde de it3 est S2 => on a les 3 paires pour renseigner les SideBySide
+//								if ((*it3).first.first == (*it2).first.second && (*it3).first.second == (*it).first.second)
+//								{
+//									//A ce stade, on a les 3 paires d'ifcConn it=S1-S2 , it2=S1-S3, it3=S3-S2 
+//									//avec les conditions: S1-S2 < S1-S3 
+//									//    A2.1)                  S1-------S3  => dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S1 et S3 peuvent avoir un autre SideBySide S4) 
+//									//    A1)                    S1--S2
+//									//    A2.2)         S3-------S1           => dans ce cas S1 aura 2 SideBySide, S2 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S2 et S3 peuvent avoir un autre SideBySide S4)
+//
+//									// Si S3-S2 < S1-S3 => S2 entre S1 et S3 (S1-S2-S3)
+//									if ((*it3).second<(*it2).second)
+//									{
+//										//S1---S2---S3
+//										int res = FillSideBySideSurfacesOfOneBuildingelement((*it).first.first, (*it).first.second, (*it2).first.second, (*it).second, (*it3).second);
+//
+//										//Indication que S1 et S3 ne peuvent pas être cote à cote
+//										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.second)] = false;
+//										bo_AreTheTwoPairsFound = true;
+//									}// if ((*it3).second<(*it2).second)
+//
+//									 // Si S3-S2 > S1-S3 => S1 entre S2 et S3 (S3-S1-S2)
+//									if ((*it3).second>(*it2).second)
+//									{
+//										//S3---S1---S2
+//										int res = FillSideBySideSurfacesOfOneBuildingelement((*it2).first.second, (*it).first.first, (*it).first.second, (*it2).second, (*it).second);
+//
+//										//Indication que S2 et S3 ne peuvent pas être cote à cote
+//										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.second)] = false;
+//										bo_AreTheTwoPairsFound = true;
+//									}// if ((*it3).second>(*it2).second)
+//								}// if ((*it3).first.first == (*it2).first.second && (*it3).first.second == (*it).first.second)
+//
+//								if (bo_AreTheTwoPairsFound) break;
+//							}// for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it3 = it2, it2--; it3 != li_IfcConn_IfcConn_Dist.end(); ++it3)
+//						}// if ((it2 != it) && (*it2).first.first == (*it).first.first && map_IfcConn_IfcSpace[(*it2).first.second] == (*mp_Space).first)
+//
+//						 //it2=S3-S1?
+//						 //Si la 2nde IfcConnectionSurfaceGeometry de it2 est S1 et si la 1ere IfcConn (S3) appartient au même ifcspace => on continue
+//						if ((it2 != it) && (*it2).first.second == (*it).first.first && map_IfcConn_IfcSpace[(*it2).first.first] == (*mp_Space).first)
+//						{
+//							//A ce stade, on a les 2 paires d'ifcConn it=S1-S2 et it2=S3-S1, on cherche la derniere paire it3=S2-S3 ou it3=S3-S2
+//							//BOUCLE POUR CHERCHER it3
+//							it2++;
+//							for (it3 = it2, it2--; it3 != li_IfcConn_IfcConn_Dist.end(); it3++)
+//							{
+//								//it3=S2-S3?
+//								//Si la 1ere IfcConnectionSurfaceGeometry de it3 est S2 et la 2nde de it3 est S3 => on a les 3 paires pour renseigner les SideBySide
+//								if ((*it3).first.first == (*it).first.second && (*it3).first.second == (*it2).first.first)
+//								{
+//									//A ce stade, on a les 3 paires d'ifcConn it=S1-S2 , it2=S3-S1, it3=S2-S3 
+//									//avec les conditions: S1-S2 < S3-S1 
+//									//    A2.1)                  S1-------S3  => dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S1 et S3 peuvent avoir un autre SideBySide S4) 
+//									//    A1)                    S1--S2
+//									//    A2.2)         S3-------S1           => dans ce cas S1 aura 2 SideBySide, S2 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S2 et S3 peuvent avoir un autre SideBySide S4) 
+//
+//									// Si S2-S3 < S3-S1 => S2 entre S1 et S3 (S1-S2-S3)
+//									if ((*it3).second<(*it2).second)
+//									{
+//										//S1---S2---S3
+//										int res = FillSideBySideSurfacesOfOneBuildingelement((*it).first.first, (*it).first.second, (*it2).first.first, (*it).second, (*it3).second);
+//
+//										//Indication que S1 et S3 ne peuvent pas être cote à cote
+//										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.first)] = false;
+//										bo_AreTheTwoPairsFound = true;
+//									}// if ((*it3).second<(*it2).second)
+//
+//									 // Si S2-S3 > S3-S1 => S1 entre S2 et S3 (S3-S1-S2)
+//									if ((*it3).second>(*it2).second)
+//									{
+//										//S3---S1---S2
+//										int res = FillSideBySideSurfacesOfOneBuildingelement((*it2).first.first, (*it).first.first, (*it).first.second, (*it2).second, (*it).second);
+//
+//										//Indication que S2 et S3 ne peuvent pas être cote à cote
+//										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.first)] = false;
+//										bo_AreTheTwoPairsFound = true;
+//									}// if ((*it3).second>(*it2).second)
+//								}// if ((*it3).first.first == (*it).first.second && (*it3).first.second == (*it2).first.first)
+//								 //it3=S3-S2?
+//								 //Si la 1ere IfcConnectionSurfaceGeometry de it3 est S3 et la 2nde de it3 est S2 => on a les 3 paires pour renseigner les SideBySide
+//								if ((*it3).first.first == (*it2).first.first && (*it3).first.second == (*it).first.second)
+//								{
+//									//A ce stade, on a les 3 paires d'ifcConn it=S1-S2 , it2=S3-S1, it3=S3-S2 
+//									//avec les conditions: S1-S2 < S3-S1 
+//									//    A2.1)                  S1-------S3  => dans ce cas S2 aura 2 SideBySide, S1 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S1 et S3 peuvent avoir un autre SideBySide S4) 
+//									//    A1)                    S1--S2
+//									//    A2.2)         S3-------S1           => dans ce cas S1 aura 2 SideBySide, S2 et S3 1 SideBySide (ATTENTION: il faut ajouter les sideBySide car S2 et S3 peuvent avoir un autre SideBySide S4)
+//
+//									// Si S3-S2 < S3-S1 => S2 entre S1 et S3 (S1-S2-S3)
+//									if ((*it3).second<(*it2).second)
+//									{
+//										//S1---S2---S3
+//										int res = FillSideBySideSurfacesOfOneBuildingelement((*it).first.first, (*it).first.second, (*it2).first.first, (*it).second, (*it3).second);
+//
+//										//Indication que S1 et S3 ne peuvent pas être cote à cote
+//										//map_CanBeSideBySide[std::make_pair((*it).first.first, (*it2).first.first)] = false;
+//										bo_AreTheTwoPairsFound = true;
+//									}// if ((*it3).second<(*it2).second)
+//
+//									 // Si S3-S2 > S3-S1 => S1 entre S2 et S3 (S3-S1-S2)
+//									if ((*it3).second>(*it2).second)
+//									{
+//										//S3---S1---S2
+//										int res = FillSideBySideSurfacesOfOneBuildingelement((*it2).first.first, (*it).first.first, (*it).first.second, (*it2).second, (*it).second);
+//
+//										//Indication que S2 et S3 ne peuvent pas être cote à cote
+//										//map_CanBeSideBySide[std::make_pair((*it).first.second, (*it2).first.first)] = false;
+//										bo_AreTheTwoPairsFound = true;
+//									}// if ((*it3).second>(*it2).second)
+//								}// if ((*it3).first.first == (*it2).first.first && (*it3).first.second == (*it).first.second)
+//
+//								if (bo_AreTheTwoPairsFound) break;
+//							}// for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it3 = it2, it2--; it3 != li_IfcConn_IfcConn_Dist.end(); ++it3)
+//						}// if ((*it2).first.second == (*it).first.first && map_IfcConn_IfcSpace[(*it2).first.first] == (*mp_Space).first)
+//
+//						if (bo_AreTheTwoPairsFound) break;
+//					}// for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it2 = it, it--; it2 != li_IfcConn_IfcConn_Dist.end(); ++it2)
+//				}// if (map_IfcConn_IfcSpace[(*it).first.first] == map_IfcConn_IfcSpace[(*it).first.second])
+//			}//for (list< pair< pair<STRUCT_IFCENTITY *, STRUCT_IFCENTITY *>, double>>::iterator it = li_IfcConn_IfcConn_Dist.begin(); it != li_IfcConn_IfcConn_Dist.end(); ++it)
+//		}// else if ((*mp_Space).second > 2)
+//	}// for (mp_Elem1 = map_IfcSpace_NbIfcConn.begin(); mp_Elem1 != map_IfcSpace_NbIfcConn.end(); mp_Elem1++)
+//
+//	return res;
+//}
+
+

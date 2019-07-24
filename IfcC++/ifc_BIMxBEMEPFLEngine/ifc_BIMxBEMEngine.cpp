@@ -41,13 +41,13 @@ void __stdcall ifcxml_BIMxBEMEPFL_UnLoadXMLFileForBEM()
 }
 
 //Fournit la structure dans une chaine de caractères
-int __stdcall ifcxml_BIMxBEMEPFL_GetEntitiesDefinition(const char *&chr_EntDef)
+int __stdcall ifcxml_BIMxBEMEPFL_GetEntitiesDefinition(const char *&chr_EntDef, const char *&chr_Logfile, double dbl_Minisurf) //Surface mini vue comme nulle pour Lesosai 
 {
 	int res = 0;
 
 	//
 	//Conversion de la structure générique de données typés BEM (optimisée pour modification) au format attendu par Lesosai
-	_iLesosaiFormat = new LoadDataAtBEMFormat();
+	_iLesosaiFormat = new LoadDataAtBEMFormat(dbl_Minisurf);
 	res = _iLesosaiFormat->LoadLesosaiFormat(_iFile->GetData());
 	if (res) return res;
 
@@ -59,6 +59,15 @@ int __stdcall ifcxml_BIMxBEMEPFL_GetEntitiesDefinition(const char *&chr_EntDef)
 	//Conversion string en const char*
 	if (str_EntDef)
 		chr_EntDef=str_EntDef->c_str();
+
+	//Lecture de la Log 
+	string *str_LogFile = nullptr;
+	res = _iLesosaiFormat->GetLesosaiLogFile(str_LogFile);
+	if (res) return res;
+
+	//Conversion string en const char*
+	if (str_LogFile)
+		chr_Logfile = str_LogFile->c_str();
 
 	return res;
 }
