@@ -16,16 +16,16 @@ public:
 	int BasifyTree(Map_Basified_Tree *&map_BasifTree);
 	int CompleteBasifiedTreeFromByTIFCSurfaces();
 
-	//Retrait dans les contours (st_PointsDesContours) du derniers point lorsqu'il est égal au 1er (+ consigne bool bo_IsItLoop=true)
+	//Retrait dans les contours (st_PointsDesContours) du derniers point lorsqu'il est Ã©gal au 1er (+ consigne bool bo_IsItLoop=true)
 	int RemoveLastPointOfLoopContours(string *&str_LogFile);
 
 	//Calcul des isobarycentres des IfcConnectionSurfaceGeometry
 	int CentroidsComputation();
 
-	//Recherche des IfcConnectionSurfaceGeometry en vis-à-vis et côte-à-côte
+	//Recherche des IfcConnectionSurfaceGeometry en vis-Ã -vis et cÃ´te-Ã -cÃ´te
 	int FindFaceToFaceAndSideBySideSurfaces();
 
-	//Relimitation des IfcConnectionSurfaceGeometry en côte-à-côte
+	//Relimitation des IfcConnectionSurfaceGeometry en cÃ´te-Ã -cÃ´te
 	int RelimitSideBySideSurfaces(string *&str_LogFile);
 
 	//Passer dasn le ref du projet
@@ -34,10 +34,10 @@ public:
 	//Calcul des surfaces IfcConnectionSurfaceGeometry
 	int ComputeIfcConnectionSurfaceGeometrySurface();
 
-	//Creation des TIFCSurfaces (décomposition des éléments de construction en leurs surfaces IfcConnectionSurfaceGeometry vis-à-vis)
+	//Creation des TIFCSurfaces (dÃ©composition des Ã©lÃ©ments de construction en leurs surfaces IfcConnectionSurfaceGeometry vis-Ã -vis)
 	int CreateTIFCSurfaces();
 
-	//Retrait des IfcConnectionSurfaceGeometry de surfaces inférieures à dbl_Minisurf
+	//Retrait des IfcConnectionSurfaceGeometry de surfaces infÃ©rieures Ã  dbl_Minisurf
 	int RemoveQuasiNullIfcConnectionSurfaceGeometrySurface(double dbl_Minisurf, string *&str_LogFile);
 
 private:

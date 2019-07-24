@@ -22,7 +22,7 @@ int __stdcall ifcxml_BIMxBEMEPFL_LoadXMLFileForBEM(char *chr_FilePath)
 	int res = 0;
 
 	//
-	//Chargement en mémoire d'une structure générique de données typés BEM (optimisée pour modification)
+	//Chargement en mÃ©moire d'une structure gÃ©nÃ©rique de donnÃ©es typÃ©s BEM (optimisÃ©e pour modification)
 	_iFile = new ifcXML_File();
 	res = _iFile->LoadFile(chr_FilePath);
 
@@ -32,7 +32,7 @@ int __stdcall ifcxml_BIMxBEMEPFL_LoadXMLFileForBEM(char *chr_FilePath)
 void __stdcall ifcxml_BIMxBEMEPFL_UnLoadXMLFileForBEM()
 {
 	//
-	//Desalloc des données membres ifc_BIMxBEMEngine
+	//Desalloc des donnÃ©es membres ifc_BIMxBEMEngine
 	if (_iFile)
 		delete _iFile;
 	_iFile = nullptr;
@@ -40,13 +40,13 @@ void __stdcall ifcxml_BIMxBEMEPFL_UnLoadXMLFileForBEM()
 	return;
 }
 
-//Fournit la structure dans une chaine de caractères
+//Fournit la structure dans une chaine de caractÃ¨res
 int __stdcall ifcxml_BIMxBEMEPFL_GetEntitiesDefinition(const char *&chr_EntDef, const char *&chr_Logfile, double dbl_Minisurf) //Surface mini vue comme nulle pour Lesosai 
 {
 	int res = 0;
 
 	//
-	//Conversion de la structure générique de données typés BEM (optimisée pour modification) au format attendu par Lesosai
+	//Conversion de la structure gÃ©nÃ©rique de donnÃ©es typÃ©s BEM (optimisÃ©e pour modification) au format attendu par Lesosai
 	_iLesosaiFormat = new LoadDataAtBEMFormat(dbl_Minisurf);
 	res = _iLesosaiFormat->LoadLesosaiFormat(_iFile->GetData());
 	if (res) return res;
