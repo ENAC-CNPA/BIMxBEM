@@ -49,7 +49,7 @@ public:
 private:
 	int LineForLevel(int &int_Level, string &str_EntsDefinitions, string &str_KW, string &str_ValKW);
 
-	// Compilation de toutes les entités d'un même type
+	// Compilation de toutes les entitÃ©s d'un mÃªme type
 	string _str_ProjectsDefinitions;
 	string _str_SitesDefinitions;
 	string _str_BuildingsDefinitions;
@@ -62,7 +62,7 @@ private:
 	string _str_TIFCSurfacesDefinitions;
 	string _str_TIFCGeo2DDefinitions;
 
-	// Initialisation des différents mots-clés lexicaux
+	// Initialisation des diffÃ©rents mots-clÃ©s lexicaux
 	string _str_LESOSAI_SetsRoot = "bimbem"; //Root_Of_TIFCSets
 	string _str_LESOSAI_ProjetsSet = "Set_Of_TIFCProjects";		string _str_LESOSAI_Projets = "TIFCProjects";	string _str_LESOSAI_Projet = "TIFCProject";
 	string _str_LESOSAI_SitesSet = "Set_Of_TIFCSites";			string _str_LESOSAI_Sites = "TIFCSites";		string _str_LESOSAI_Site = "TIFCSite";
@@ -75,7 +75,7 @@ private:
 	string _str_LESOSAI_PointsSet = "Set_Of_TIFCPoints";		string _str_LESOSAI_Points = "TIFCPoints";		string _str_LESOSAI_Point = "TIFCPoint";
 	string _str_LESOSAI_Geo2DSet = "Set_Of_TIFCGeo2Ds";			string _str_LESOSAI_Geo2Ds = "TIFCGeo2Ds";		string _str_LESOSAI_Geo2D = "TIFCGeo2D";
 
-	// Initialisation des différents mots-clés grammaticaux
+	// Initialisation des diffÃ©rents mots-clÃ©s grammaticaux
 	string DEB_KW0_L = "<";
 	string DEB_KW1_L = "\t<";
 	string DEB_KW2_L = "\t\t<";
@@ -92,10 +92,10 @@ private:
 	string FIN_KW3_L = "\t\t\t</";
 	string FIN_KW4_L = "\t\t\t\t</";
 
-	//Param Géométrique: Surface minimale à partir de laquelle Lesosai considère la surface nulle
+	//Param GÃ©omÃ©trique: Surface minimale Ã  partir de laquelle Lesosai considÃ¨re la surface nulle
 	double _dbl_MinimalSurface;
 
-	// Compilation de toutes les entités (variable utilisée pour passer l'info au code appelant)
+	// Compilation de toutes les entitÃ©s (variable utilisÃ©e pour passer l'info au code appelant)
 	string *_str_EntitiesDefinitions;
 	string *_str_LogFile;
 };

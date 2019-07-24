@@ -1,4 +1,5 @@
 #include "ifc_Tree.h"
+#include <string.h>
 
 
 ifc_Tree::ifc_Tree(): _st_IfcTree(nullptr)
@@ -9,7 +10,7 @@ ifc_Tree::ifc_Tree(): _st_IfcTree(nullptr)
 ifc_Tree::~ifc_Tree()
 {
 	//
-	//Desalloc des donnÈes membres de ifc_Tree
+	//Desalloc des donn√©es membres de ifc_Tree
 	if (_st_IfcTree)
 		delete_STRUCT_IFCENTITY(_st_IfcTree);
 	_st_IfcTree = nullptr;
@@ -23,7 +24,7 @@ STRUCT_IFCENTITY *&ifc_Tree::Getstruct()
 void ifc_Tree::delete_STRUCT_IFCENTITY(STRUCT_IFCENTITY* &st_IfcTree, STRUCT_IFCENTITY* st_IfcCurrentFather)
 {
 	//
-	//Descente dans l'arborescence jusqu'aux ÈlÈment sans enfants (membre "st_Contains" vide)
+	//Descente dans l'arborescence jusqu'aux √©l√©ment sans enfants (membre "st_Contains" vide)
 	list <STRUCT_IFCENTITY*> ::iterator it_Elem;
 	for (it_Elem = (st_IfcTree->st_Contains).begin(); it_Elem != (st_IfcTree->st_Contains).end(); it_Elem++)
 	{
@@ -33,7 +34,7 @@ void ifc_Tree::delete_STRUCT_IFCENTITY(STRUCT_IFCENTITY* &st_IfcTree, STRUCT_IFC
 	st_IfcTree->st_Contains.clear();
 
 	//
-	//DÈsallocations effectives
+	//D√©sallocations effectives
 	//
 	delete[] st_IfcTree->ch_GlobalId; st_IfcTree->ch_GlobalId = nullptr;
 	delete[] st_IfcTree->ch_Id; st_IfcTree->ch_Id = nullptr;
@@ -70,11 +71,11 @@ void ifc_Tree::delete_STRUCT_IFCENTITY(STRUCT_IFCENTITY* &st_IfcTree, STRUCT_IFC
 	st_IfcTree->st_PointsDesContours.clear();
 
 	//
-	// Nettoyage des listes rÈfÈrencant l'objet que l'on est en train de dÈtruire
-	// Pour les liens non binaires (ternaires ou plus) la structure en cours d'effacement (st_IfcTree) est rÈfÈrencÈe dans les Contains de plusieurs pËres
-	// Afin dÈviter un crash mÈmoire par la dÈsallocation d'une structure dÈj‡ dÈtruite, il faut dÈrÈfÈrencer la structure 
-	// en cours d'effacement des listes de BelongsTo des autres pËres (que celui en cours = st_IfcCurrentFather)
-	// Exemple: IfcConnectionSurfaceGeometry est rÈfÈrencÈ ‡ la fois dans le st_Contains de IfSpace et des BuildingElements (IfcWall,...)
+	// Nettoyage des listes r√©f√©rencant l'objet que l'on est en train de d√©truire
+	// Pour les liens non binaires (ternaires ou plus) la structure en cours d'effacement (st_IfcTree) est r√©f√©renc√©e dans les Contains de plusieurs p√®res
+	// Afin d√©viter un crash m√©moire par la d√©sallocation d'une structure d√©j√† d√©truite, il faut d√©r√©f√©rencer la structure 
+	// en cours d'effacement des listes de BelongsTo des autres p√®res (que celui en cours = st_IfcCurrentFather)
+	// Exemple: IfcConnectionSurfaceGeometry est r√©f√©renc√© √† la fois dans le st_Contains de IfSpace et des BuildingElements (IfcWall,...)
 	list <STRUCT_IFCENTITY*> ::iterator it_ElemInBelong;
 	for (it_ElemInBelong = (st_IfcTree->st_BelongsTo).begin(); it_ElemInBelong != (st_IfcTree->st_BelongsTo).end(); it_ElemInBelong++)
 	{
@@ -93,7 +94,7 @@ void ifc_Tree::delete_STRUCT_IFCENTITY(STRUCT_IFCENTITY* &st_IfcTree, STRUCT_IFC
 	}// for (it_ElemInBelong = (st_IfcTree->st_BelongsTo).begin(); it_ElemInBelong != (st_IfcTree->st_BelongsTo).end(); it_ElemInBelong++)
 	st_IfcTree->st_BelongsTo.clear();
 
-	//La liste st_FaceToFace rÈfÈrence des objets dÈsallouÈs par ailleurs, du coup pas d'action de dÈsallocation spÈcifique 
+	//La liste st_FaceToFace r√©f√©rence des objets d√©sallou√©s par ailleurs, du coup pas d'action de d√©sallocation sp√©cifique 
 
 	//TIFCSurface
 	list <STRUCT_IFCENTITY*> ::iterator it_ElemInTIFCSurfaceContain;
@@ -118,7 +119,7 @@ void ifc_Tree::FillAttributeOf_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_IfcTree, Ma
 {
 	//la structure st_IfcTree est celle que l'on initialise/renseigne dans cette routine
 	//les structure st_IfcBelongTo est un pere de st_IfcTree (=> vient de la relation binaire ifcRelAggregates)
-	//les structure st_IfcBelongTo2 est un 2nd pËre de st_IfcTree (=> vient de la relation ternaire IfcRelSpaceBoundary)
+	//les structure st_IfcBelongTo2 est un 2nd p√®re de st_IfcTree (=> vient de la relation ternaire IfcRelSpaceBoundary)
 	if (st_IfcTree)
 	{
 		// Pour les tailles: http://www.buildingsmart-tech.org/ifc/IFC2x3/TC1/html/
@@ -144,7 +145,7 @@ void ifc_Tree::FillAttributeOfExisting_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_Ifc
 {
 	//la structure st_IfcTree est celle que l'on initialise/renseigne dans cette routine
 	//les structure st_IfcBelongTo est un pere de st_IfcTree (=> vient de la relation binaire ifcRelAggregates)
-	//les structure st_IfcBelongTo2 est un 2nd pËre de st_IfcTree (=> vient de la relation ternaire IfcRelSpaceBoundary)
+	//les structure st_IfcBelongTo2 est un 2nd p√®re de st_IfcTree (=> vient de la relation ternaire IfcRelSpaceBoundary)
 	if (st_IfcTree)
 	{
 		if (st_IfcBelongTo)
@@ -217,7 +218,7 @@ void ifc_Tree::FillRelativePlacementOf_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_Ifc
 {
 	//la structure st_IfcTree est celle que l'on initialise/renseigne dans cette routine
 	//les structure st_IfcBelongTo est un pere de st_IfcTree (=> vient de la relation binaire ifcRelAggregates)
-	//les structure st_IfcBelongTo2 est un 2nd pËre de st_IfcTree (=> vient de la relation ternaire IfcRelSpaceBoundary)
+	//les structure st_IfcBelongTo2 est un 2nd p√®re de st_IfcTree (=> vient de la relation ternaire IfcRelSpaceBoundary)
 	if (st_IfcTree)
 	{
 		// Pour les tailles: http://www.buildingsmart-tech.org/ifc/IFC2x3/TC1/html/
@@ -240,7 +241,7 @@ void ifc_Tree::FillCentroidOf_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_IfcTree, dou
 {
 	//la structure st_IfcTree est celle que l'on initialise/renseigne dans cette routine
 	//les structure st_IfcBelongTo est un pere de st_IfcTree (=> vient de la relation binaire ifcRelAggregates)
-	//les structure st_IfcBelongTo2 est un 2nd pËre de st_IfcTree (=> vient de la relation ternaire IfcRelSpaceBoundary)
+	//les structure st_IfcBelongTo2 est un 2nd p√®re de st_IfcTree (=> vient de la relation ternaire IfcRelSpaceBoundary)
 	if (st_IfcTree)
 	{
 		// Pour les tailles: http://www.buildingsmart-tech.org/ifc/IFC2x3/TC1/html/
@@ -284,26 +285,26 @@ int ifc_Tree::BuildTIFCSurfaceTreeFrom_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_Ifc
 {
 	int res = 0;
 	
-	//On vÈrifie qu'il n'y a qu'une IfcConnectionSurfaceGeometry en vis-‡-vis
+	//On v√©rifie qu'il n'y a qu'une IfcConnectionSurfaceGeometry en vis-√†-vis
 	// car la TIFCSurface associe des paires de IfcConnectionSurfaceGeometry (pas plus)
-	//A REVOIR: Par contre il peut ne pas y avoir de vis-‡-vis (dans ce cas, c'est geoExt = mur exterieur, il est quand mÍme en vis-‡-vis?????) 
+	//A REVOIR: Par contre il peut ne pas y avoir de vis-√†-vis (dans ce cas, c'est geoExt = mur exterieur, il est quand m√™me en vis-√†-vis?????) 
 	if (st_IfcEntCS1 && st_IfcEntCS1->st_FaceToFace.size()==1)
 	{
-		//Recup de la 2nde IfcConnectionSurfaceGeometry (en vis-‡-vis)
+		//Recup de la 2nde IfcConnectionSurfaceGeometry (en vis-√†-vis)
 		STRUCT_IFCENTITY* st_IfcEntCS2 = *(st_IfcEntCS1->st_FaceToFace.begin());
 
-		//On vÈrifie que cette IfcConnectionSurfaceGeometry (st_IfcEntCS2) n'a pas dÈj‡ sa TIFCSurface 
-		//car ‡ sa crÈation la mÍme TIFCSurface est associÈe ‡ 2 IfcConnectionSurfaceGeometry
+		//On v√©rifie que cette IfcConnectionSurfaceGeometry (st_IfcEntCS2) n'a pas d√©j√† sa TIFCSurface 
+		//car √† sa cr√©ation la m√™me TIFCSurface est associ√©e √† 2 IfcConnectionSurfaceGeometry
 		// => sinon erreur
 		if (st_IfcEntCS2 && st_IfcEntCS2->st_TIFCSurface == nullptr)
 		{
-			// ATTENTION: la taille du nom "Ch_Id" est limitÈ ‡ 16 dans FillNameAndIDAttributeOf_STRUCT_IFCENTITY
+			// ATTENTION: la taille du nom "Ch_Id" est limit√© √† 16 dans FillNameAndIDAttributeOf_STRUCT_IFCENTITY
 			Map_String_String map_messages;
 			map_messages["Id"] = string(st_IfcEntCS1->ch_Id) + string(st_IfcEntCS2->ch_Id);
 			map_messages["Type"] = "TIFCSurface";
 			// Indiquer le type du TIFCSurface (ifcWall...) : map_messages["Type"] = ...
 
-			//CrÈation et Remplissage de la structure de "TIFCSurface"
+			//Cr√©ation et Remplissage de la structure de "TIFCSurface"
 			STRUCT_IFCENTITY * st_TIFCSurface = new STRUCT_IFCENTITY;
 			FillNameAndIDAttributeOf_STRUCT_IFCENTITY(st_TIFCSurface, map_messages);
 
@@ -318,22 +319,22 @@ int ifc_Tree::BuildTIFCSurfaceTreeFrom_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_Ifc
 
 		}// if (st_IfcEntCS2 && st_IfcEntCS2->st_TIFCSurface==nullptr)
 		else
-			res = 3001;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=numÈro de l'erreur dans cette routine
+			res = 3001;//Format erreur: XXXYYY XXX=numero identifiant la routine , YYY=num√©ro de l'erreur dans cette routine
 	}// if (st_IfcEntCS1 && st_IfcEntCS1->st_FaceToFace.size()==1)
 	else 
 	{
 		if (st_IfcEntCS1 && st_IfcEntCS1->st_FaceToFace.size() == 0)
 		{
 			//SOIT MUR exterieur 
-			//SOIT dalle entre Ètage => pas s˚r car dalles devraientt se traiter comme les murs intÈrieurs??!!?? 
+			//SOIT dalle entre √©tage => pas s√ªr car dalles devraientt se traiter comme les murs int√©rieurs??!!?? 
 
-			// ATTENTION: la taille du nom "Ch_Id" est limitÈ ‡ 16 dans FillNameAndIDAttributeOf_STRUCT_IFCENTITY
+			// ATTENTION: la taille du nom "Ch_Id" est limit√© √† 16 dans FillNameAndIDAttributeOf_STRUCT_IFCENTITY
 			Map_String_String map_messages;
 			map_messages["Id"] = string(st_IfcEntCS1->ch_Id) + "------";
 			map_messages["Type"] = "TIFCSurface";
 			// Indiquer le type du TIFCSurface (ifcWall...) : map_messages["Type"] = ...
 
-			//CrÈation et Remplissage de la structure de "TIFCSurface"
+			//Cr√©ation et Remplissage de la structure de "TIFCSurface"
 			STRUCT_IFCENTITY * st_TIFCSurface = new STRUCT_IFCENTITY;
 			FillNameAndIDAttributeOf_STRUCT_IFCENTITY(st_TIFCSurface, map_messages);
 

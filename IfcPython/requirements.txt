@@ -1,0 +1,4 @@
+ifcopenshell
+OCC
+black
+pylint
