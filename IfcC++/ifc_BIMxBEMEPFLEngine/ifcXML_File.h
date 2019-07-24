@@ -38,6 +38,7 @@ public:
 	int FindAllLinkedObjectsFromFirstLinkPath(TiXmlElement* pElement, string &st_Path, list<TiXmlElement*> &lpObject);
 
 	int FindIfcLocalPlacement(TiXmlElement* pElement, TiXmlElement* &lpObject);
+	int FindIfcAxis2Placement3D(TiXmlElement* pElement, TiXmlElement* &lpObject);
 	int FindIfcGeometricRepresentationContext(TiXmlElement* pElement, TiXmlElement* &lpObject);
 	int FindIfcGeometricRepresentationSubContext(TiXmlElement* pElement, TiXmlElement* &lpObject);
 	int FindIfcCurveBoundedPlanePlacemcent(TiXmlElement* pElement, TiXmlElement* &lpObject);
@@ -47,6 +48,7 @@ public:
 	int ReadIdAndTypeOfAnEntity(TiXmlElement* pElement, Map_String_String &m_messages);
 	int ReadAllValuesOfAnEntity(TiXmlElement* pIfcEntity, list<string> &li_messages);
 	int ReadIfcAxis2Placement3DMatrix(TiXmlElement* pElement, double Matrix[3][4]);
+	int ReadIfcDirectionVector(TiXmlElement* pElement, double Vector[3]);
 	int ReadPtsDefiningPolyloopOrPolyline(list <TiXmlElement*> &llBoundsOfOneCFsFace_Face, list<list<double*>> &FacePtsCoord);
 	int ReadKeyWordsAndValuesOfIfcElementQuantity(TiXmlElement* pElement, Map_String_String &m_messages);
 

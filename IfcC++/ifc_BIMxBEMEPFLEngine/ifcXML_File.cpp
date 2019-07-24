@@ -155,6 +155,54 @@ int ifcXML_File::ReadOneSpecificValueOfAnEntity(TiXmlElement *pIfcEntity, string
 //  1.1) ROUTINES DE SPECIFIQUES DE LECTURE (DES ATTRIBUTS) DE LA DEFINITION D'UNE ENTITE  //
 /////////////////////////////////////////////////////////////////////////////////////////////
 
+int ifcXML_File::ReadIfcDirectionVector(TiXmlElement *pElement, double Vector[3])
+{
+	//<IfcGeometricRepresentationContext id = "i1719">
+	//	<ContextType>Model</ContextType>
+	//	<CoordinateSpaceDimension>3</CoordinateSpaceDimension>
+	//	<Precision>1.000000000E-5</Precision>
+	//	<WorldCoordinateSystem>
+	//		<IfcAxis2Placement3D xsi:nil="true" ref="i1716"/>
+	//	</WorldCoordinateSystem>
+	//	<TrueNorth>
+	//		<IfcDirection xsi:nil="true" ref="i1717"/>
+	//	</TrueNorth>
+	//</IfcGeometricRepresentationContext>
+
+
+	string st_Path[2] = { "","" };
+	int res = 0;
+
+	//Axe North
+	st_Path[0] = "TrueNorth";
+	st_Path[1] = "IfcDirection";
+	TiXmlElement *lpObjectFound = nullptr;
+	res = FindOneSpecificLinkedObjectFromFirstLinkPath(pElement, st_Path, lpObjectFound);
+
+	TiXmlHandle hLocalBaseRoot3(lpObjectFound);
+	TiXmlHandle hLocalBaseRoot4(hLocalBaseRoot3.FirstChild("DirectionRatios"));
+
+	//lecture du contenu des child d'un IfcEntity
+	list<string> li_messages;
+	res = ReadAllValuesOfAnEntity(hLocalBaseRoot4.ToElement(), li_messages);
+
+	// Remplissage Matrice
+	list <string>::iterator it_li_messages;
+	it_li_messages = li_messages.begin();
+	Vector[0] = std::stod((*it_li_messages)); it_li_messages++;
+	Vector[1] = std::stod((*it_li_messages)); it_li_messages++;
+	if (it_li_messages == li_messages.end())
+	{
+		Vector[2] = std::stod("0.0");
+	}// if (it_li_messages == li_messages.end())
+	else
+	{
+		Vector[2] = std::stod((*it_li_messages)); it_li_messages++;
+	}// else if (it_li_messages == li_messages.end())
+
+	return 0;
+}
+
 int ifcXML_File::ReadIfcAxis2Placement3DMatrix(TiXmlElement *pElement, double Matrix[3][4])
 {
 	//<IfcAxis2Placement3D id="i1735">
@@ -226,7 +274,7 @@ int ifcXML_File::ReadIfcAxis2Placement3DMatrix(TiXmlElement *pElement, double Ma
 		TiXmlHandle hLocalBaseRoot3(lpObjectFound);
 		TiXmlHandle hLocalBaseRoot4(hLocalBaseRoot3.FirstChild("DirectionRatios"));
 
-		//lecture du contenu des child d'un IfcEntity liés à "IfcProject"
+		//lecture du contenu des child d'un IfcEntity 
 		list<string> li_messages;
 		res = ReadAllValuesOfAnEntity(hLocalBaseRoot4.ToElement(), li_messages);
 
@@ -547,15 +595,6 @@ int ifcXML_File::FindIfcGeometricRepresentationContext(TiXmlElement *pElement, T
 	//    <IfcGeometricRepresentationContext ex:pos="0" xsi:nil="true" ref="i1719"/>
 	//  </RepresentationContexts>
 	//</IfcProject>
-	//
-	//<IfcGeometricRepresentationContext id="i1719">
-	//  <WorldCoordinateSystem>
-	//    <IfcAxis2Placement3D xsi:nil="true" ref="i1716"/>
-	//  </WorldCoordinateSystem>
-	//  <TrueNorth>
-	//    <IfcDirection xsi:nil="true" ref="i1717"/>
-	//  </TrueNorth>
-	//</IfcGeometricRepresentationContext>
 
 	int res = 0;
 	string st_Path[2] = { "","" };
@@ -568,12 +607,29 @@ int ifcXML_File::FindIfcGeometricRepresentationContext(TiXmlElement *pElement, T
 	// Pour les faces et sous-faces routine FindIfcGeometricRepresentationSubContext pourlaquelle il n'y a toujours qu'un seul contexte!
 	st_Path[0] = "RepresentationContexts";
 	st_Path[1] = "IfcGeometricRepresentationContext";
-	TiXmlElement *lpObjectFound1 = nullptr;
-	res = FindOneSpecificLinkedObjectFromFirstLinkPath(pElement, st_Path, lpObjectFound1);
+	//TiXmlElement *lpObjectFound1 = nullptr;
+	res = FindOneSpecificLinkedObjectFromFirstLinkPath(pElement, st_Path, lpObject);
+
+	return res;
+}
+
+int ifcXML_File::FindIfcAxis2Placement3D(TiXmlElement *pElement, TiXmlElement *&lpObject)
+{
+	//<IfcGeometricRepresentationContext id="i1719">
+	//  <WorldCoordinateSystem>
+	//    <IfcAxis2Placement3D xsi:nil="true" ref="i1716"/>
+	//  </WorldCoordinateSystem>
+	//  <TrueNorth>
+	//    <IfcDirection xsi:nil="true" ref="i1717"/>
+	//  </TrueNorth>
+	//</IfcGeometricRepresentationContext>
+
+	int res = 0;
+	string st_Path[2] = { "","" };
 
 	st_Path[0] = "WorldCoordinateSystem";
 	st_Path[1] = "IfcAxis2Placement3D";
-	res = FindOneSpecificLinkedObjectFromFirstLinkPath(lpObjectFound1, st_Path, lpObject);
+	res = FindOneSpecificLinkedObjectFromFirstLinkPath(pElement, st_Path, lpObject);
 
 	return res;
 }

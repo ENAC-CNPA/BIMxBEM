@@ -8,13 +8,14 @@
 class LoadDataAtBEMFormat
 {
 public:
-	LoadDataAtBEMFormat();
+	LoadDataAtBEMFormat(double dbl_Minisurf);
 	~LoadDataAtBEMFormat();
 
 	int LoadLesosaiFormat(ifc_Tree* CurrentIfcTree);
 	int GetLesosaiEntitiesNumber();
 	int GetLesosaiEntitiesAttributesSize();
 	int GetLesosaiEntitiesDefinition(string *&str_EntDef);
+	int GetLesosaiLogFile(string *&str_LogFile);
 
 	int ConvertIfcProject(STRUCT_IFCENTITY *st_IfcEnt);
 	int ConvertIfcSite(STRUCT_IFCENTITY *st_IfcEnt);
@@ -38,6 +39,7 @@ public:
 	int SpecificConversionOfContainsForTIFCGeo2D(STRUCT_IFCENTITY *&st_IfcEnt, string &str_EntsDefinitions, string &str_ContainsName, string &str_InsideContainsName);
 	int SpecificConversionOfContainsForConnectionSurfaceGeometry(STRUCT_IFCENTITY *&st_IfcEnt, string &str_EntsDefinitions, string &str_ContainsName, string &str_InsideContainsName, string str_FaceToFaceName = "FaceToFace", string str_Centroid = "Centroid", string str_SideBySideName = "SideBySide");
 	int SpecificConversionOfContainsForTIFCSurface(STRUCT_IFCENTITY *&st_IfcEnt, string &str_EntsDefinitions, string &str_ContainsName, string &str_InsideContainsName);
+	int SpecificConversionOfNorthProject(STRUCT_IFCENTITY *&st_IfcEnt, string &str_EntsDefinitions/*, string &str_ContainsName, string &str_InsideContainsName*/);
 	int GenericConversion(STRUCT_IFCENTITY *&st_IfcEnt, string &str_EntsDefinitions, string &str_ContainsName, string &str_InsideContainsName);
 	int ConvertIfcEnt(STRUCT_IFCENTITY *&st_IfcEnt, string &str_Balise, string &str_EntsDefinitions, string &str_ContainsName, string &str_InsideContainsName);
 	//int BasifyTreeFrom(STRUCT_IFCENTITY *&st_IfcTree, Map_Basified_Tree &map_BasifTree);
@@ -46,9 +48,6 @@ public:
 
 private:
 	int LineForLevel(int &int_Level, string &str_EntsDefinitions, string &str_KW, string &str_ValKW);
-
-	// Compilation de toutes les entités (variable utilisée pour passer l'info au code appelant)
-	string *_str_EntitiesDefinitions;
 
 	// Compilation de toutes les entités d'un même type
 	string _str_ProjectsDefinitions;
@@ -93,5 +92,11 @@ private:
 	string FIN_KW3_L = "\t\t\t</";
 	string FIN_KW4_L = "\t\t\t\t</";
 
+	//Param Géométrique: Surface minimale à partir de laquelle Lesosai considère la surface nulle
+	double _dbl_MinimalSurface;
+
+	// Compilation de toutes les entités (variable utilisée pour passer l'info au code appelant)
+	string *_str_EntitiesDefinitions;
+	string *_str_LogFile;
 };
 

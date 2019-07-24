@@ -1,7 +1,6 @@
 #include "ifc_Tree.h"
 
 
-
 ifc_Tree::ifc_Tree(): _st_IfcTree(nullptr)
 {
 }
@@ -205,6 +204,13 @@ void ifc_Tree::FillNameAndIDAttributeOf_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_If
 	char *ch_copy55 = new char[56];//size+1 pour que strncpy mette'\0'
 	strncpy(ch_copy55, map_messages["Type"].c_str(), 56);
 	st_IfcTree->ch_Type = ch_copy55;
+
+	if (map_messages.count("PredefinedType"))
+	{
+		char *ch_copy55 = new char[56];//size+1 pour que strncpy mette'\0'
+		strncpy(ch_copy55, map_messages["PredefinedType"].c_str(), 56);
+		st_IfcTree->ch_PredifinedType = ch_copy55;
+	}// if (map_messages.count("PredefinedType"))
 }
 
 void ifc_Tree::FillRelativePlacementOf_STRUCT_IFCENTITY(STRUCT_IFCENTITY* st_IfcTree, double db_LocalMat[3][4])
