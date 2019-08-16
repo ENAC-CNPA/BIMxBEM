@@ -14,8 +14,9 @@ def display_boundaries(ifc_path):
 
     space_boundaries = ifc_file.by_type("IfcRelSpaceBoundary")
     settings = ifcopenshell.geom.settings()
-    # s.set(s.USE_PYTHON_OPENCASCADE, True)
-    # s.set(s.USE_WORLD_COORDS, True)
+    # settings.set(settings.USE_PYTHON_OPENCASCADE, True)
+    # settings.set(settings.USE_BREP_DATA, True)
+    settings.set(settings.USE_WORLD_COORDS, True)
     settings.set(settings.EXCLUDE_SOLIDS_AND_SURFACES, False)
     settings.set(settings.INCLUDE_CURVES, True)
 
@@ -23,18 +24,18 @@ def display_boundaries(ifc_path):
     for boundary in (b for b in space_boundaries if b.Name == "2ndLevel"):
         # Retrieve boundary wire
         geom = ifcopenshell.geom.create_shape(
-            settings, boundary.ConnectionGeometry.SurfaceOnRelatingElement.OuterBoundary
+            settings, boundary.ConnectionGeometry.SurfaceOnRelatingElement
         )  # type: OCC.TopoDS.Compound
 
-        wire = get_wire(geom)
+        # wire = get_wire(geom)
 
-        plane = get_plane(boundary)
+        # plane = get_plane(boundary)
 
         # Create boundary face
-        face = OCC.BRepBuilderAPI.BRepBuilderAPI_MakeFace(plane, wire).Face()
+        # face = OCC.BRepBuilderAPI.BRepBuilderAPI_MakeFace(plane, wire).Face()
 
         # Display boundary face
-        ifcopenshell.geom.utils.display_shape(face)
+        ifcopenshell.geom.utils.display_shape(geom)
 
     occ_display.FitAll()
 
@@ -45,13 +46,10 @@ def get_wire(geom):
     """Retrieve boundaries surface wire"""
     ifc_verts = geom.verts
     occ_verts = [
-        OCC.gp.gp_Pnt(ifc_verts[i], ifc_verts[i + 1], ifc_verts[i + 2])
-        for i in range(0, len(ifc_verts), 3)
+        OCC.gp.gp_Pnt(*ifc_verts[i : i + 3]) for i in range(0, len(ifc_verts), 3)
     ]
     edges = [
-        OCC.BRepBuilderAPI.BRepBuilderAPI_MakeEdge(
-            occ_verts[i], occ_verts[i + 1]
-        ).Edge()
+        OCC.BRepBuilderAPI.BRepBuilderAPI_MakeEdge(*occ_verts[i : i + 2]).Edge()
         for i in range(0, len(occ_verts), 2)
     ]
     wire_maker = OCC.BRepBuilderAPI.BRepBuilderAPI_MakeWire()
@@ -73,4 +71,4 @@ def get_plane(boundary):
 
 
 if __name__ == "__main__":
-    display_boundaries(ifc_path="IfcPython/9000_BIMxBEM_TestModèle_ACAD.ifc")
+    display_boundaries(ifc_path="IfcTestFiles/TriangleBEM_R19.ifc")
