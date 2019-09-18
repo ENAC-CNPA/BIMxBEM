@@ -35,10 +35,10 @@ SCALE = 1000
 def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     """Display IfcRelSpaceBoundaries from selected IFC file into FreeCAD documennt"""
     # Create default groups
-    group = get_group(doc, "RelSpaceBoundary")
+    group = get_or_create_group(doc, "RelSpaceBoundary")
     group.addProperty("App::PropertyString", "ApplicationIdentifier")
     group.addProperty("App::PropertyString", "ApplicationVersion")
-    group_2nd = get_group(doc, "SecondLevel")
+    group_2nd = get_or_create_group(doc, "SecondLevel")
     group.addObject(group_2nd)
 
     ifc_file = ifcopenshell.open(ifc_path)
@@ -51,15 +51,13 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
 
     for space in spaces:
         space_full_name = f"{space.Name} {space.LongName}"
-        space_group = doc.addObject("App::DocumentObjectGroup", f"Space_{space.Name}")
+        space_group = group_2nd.newObject("App::DocumentObjectGroup", f"Space_{space.Name}")
         space_group.Label = space_full_name
-        group_2nd.addObject(space_group)
 
         # All boundaries have their placement relative to space placement
         space_placement = get_placement(space)
         for ifc_boundary in (b for b in space.BoundedBy if b.Name == "2ndLevel"):
             face = make_relspaceboundary("Face")
-            # face = doc.addObject("Part::Feature", "Face")
             space_group.addObject(face)
             face.Shape = create_fc_shape(ifc_boundary)
             face.Placement = space_placement
@@ -72,7 +70,7 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             face.InternalOrExternalBoundary = ifc_boundary.InternalOrExternalBoundary
             face.PhysicalOrVirtualBoundary = ifc_boundary.PhysicalOrVirtualBoundary
             # face.RelatedBuildingElement = get_or_create_wall(ifc_boundary.RelatedBuildingElement)
-            face.OriginalBoundary = face
+            # face.OriginalBoundary = face
 
     for space in spaces:
         # Find inner boundaries
@@ -83,8 +81,8 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             except AttributeError:
                 pass
     
-    # create_geo_ext_boundaries(doc, group_2nd)
-    # create_geo_int_boundaries(doc, group_2nd)
+    create_geo_ext_boundaries(doc, group_2nd)
+    create_geo_int_boundaries(doc, group_2nd)
 
     doc.recompute()
 
@@ -263,7 +261,7 @@ def get_color(ifc_product):
         return (0.0, 0.0, 0.0)
 
 
-def get_group(doc, name):
+def get_or_create_group(doc, name):
     """Get group by name or create one if not found"""
     group = doc.findObjects("App::DocumentObjectGroup", name)
     if group:
