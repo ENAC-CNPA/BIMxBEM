@@ -51,7 +51,9 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
 
     for space in spaces:
         space_full_name = f"{space.Name} {space.LongName}"
-        space_group = group_2nd.newObject("App::DocumentObjectGroup", f"Space_{space.Name}")
+        space_group = group_2nd.newObject(
+            "App::DocumentObjectGroup", f"Space_{space.Name}"
+        )
         space_group.Label = space_full_name
 
         # All boundaries have their placement relative to space placement
@@ -71,6 +73,9 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             face.PhysicalOrVirtualBoundary = ifc_boundary.PhysicalOrVirtualBoundary
             # face.RelatedBuildingElement = get_or_create_wall(ifc_boundary.RelatedBuildingElement)
             # face.OriginalBoundary = face
+        
+        for fc_boundary in space_group.Group:
+            pass
 
     for space in spaces:
         # Find inner boundaries
@@ -80,7 +85,7 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
                     pass
             except AttributeError:
                 pass
-    
+
     create_geo_ext_boundaries(doc, group_2nd)
     create_geo_int_boundaries(doc, group_2nd)
 
@@ -281,6 +286,34 @@ def make_relspaceboundary(obj_name, ifc_entity=None):
     return obj
 
 
+class Root:
+    """Wrapping various IFC entity :
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/schema/ifcproductextension/lexical/ifcelement.htm
+    """
+    def __init__(self, obj):
+        self.Type = "IfcRelSpaceBoundary"
+        obj.Proxy = self
+        category_name = "BEM"
+        ifc_attributes = "IFC Attributes"
+        obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
+
+    def onChanged(self, fp, prop):
+        """Do something when a property has changed"""
+        return
+
+    def execute(self, fp):
+        """Do something when doing a recomputation, this method is mandatory"""
+        return
+
+    @classmethod
+    def create(cls, obj_name, ifc_entity=None):
+        """Stantard FreeCAD FeaturePython Object creation method
+        ifc_entity : Optionnally provide a base entity.
+        """
+        obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
+        feature_python_object = cls(obj)
+        return obj
+
 class RelSpaceBoundary:
     """Wrapping IFC entity : 
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcrelspaceboundary2ndlevel.htm"""
@@ -312,9 +345,44 @@ class RelSpaceBoundary:
         obj.addProperty("App::PropertyLink", "OriginalBoundary", category_name)
 
 
-class Wall:
+class Element:
+    """Wrapping various IFC entity :
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/schema/ifcproductextension/lexical/ifcelement.htm
+    """
+    def __init__(self, obj):
+        self.Type = "IfcRelSpaceBoundary"
+        obj.Proxy = self
+        category_name = "BEM"
+        ifc_attributes = "IFC Attributes"
+        obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "HasAssociations", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "FillsVoids", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "HasOpenings", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "ProvidesBoundaries", ifc_attributes)
+
+    def onChanged(self, fp, prop):
+        """Do something when a property has changed"""
+        return
+
+    def execute(self, fp):
+        """Do something when doing a recomputation, this method is mandatory"""
+        return
+
+    @classmethod
+    def make_fakewall(cls, obj_name, ifc_entity=None):
+        """Stantard FreeCAD FeaturePython Object creation method
+        ifc_entity : Optionnally provide a base entity.
+        """
+        obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
+        feature_python_object = cls(obj)
+        return obj
+
+    pass
+
+
+class FakeWall:
     """Wrapping IFC entity : 
-    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/chapter-1.htm"""
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcwall.htm"""
 
     def __init__(self, obj):
         self.Type = "IfcRelSpaceBoundary"
@@ -322,24 +390,11 @@ class Wall:
         category_name = "BEM"
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
-        obj.addProperty("App::PropertyLink", "RelatingSpace", ifc_attributes)
-        obj.addProperty("App::PropertyLink", "RelatedBuildingElement", ifc_attributes)
-        obj.addProperty(
-            "App::PropertyEnumeration", "PhysicalOrVirtualBoundary", ifc_attributes
-        ).PhysicalOrVirtualBoundary = ["PHYSICAL", "VIRTUAL", "NOTDEFINED"]
-        obj.addProperty(
-            "App::PropertyEnumeration", "InternalOrExternalBoundary", ifc_attributes
-        ).InternalOrExternalBoundary = [
-            "INTERNAL",
-            "EXTERNAL",
-            "EXTERNAL_EARTH",
-            "EXTERNAL_WATER",
-            "EXTERNAL_FIRE",
-            "NOTDEFINED",
-        ]
         obj.addProperty("App::PropertyLink", "CorrespondingBoundary", ifc_attributes)
-        obj.addProperty("App::PropertyLink", "ParentBoundary", ifc_attributes)
-        obj.addProperty("App::PropertyLinkList", "InnerBoundaries", ifc_attributes)
+        obj.addProperty("App::PropertyLink", "t", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "FillsVoids", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "HasOpenings", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "ProvidesBoundaries", ifc_attributes)
         obj.addProperty("App::PropertyLink", "OriginalBoundary", category_name)
 
     def onChanged(self, fp, prop):
@@ -383,3 +438,7 @@ if __name__ == "__main__":
         FreeCADGui.SendMsgToActiveView("ViewFit")
 
         FreeCADGui.exec_loop()
+
+
+class box:
+    pass

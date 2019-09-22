@@ -1,5 +1,7 @@
 # coding: utf8
 """This module reads IfcRelSpaceBoundary from an IFC file and display them in FreeCAD"""
+import os
+
 import ifcopenshell
 import ifcopenshell.geom
 
@@ -187,7 +189,14 @@ def get_group(doc, name):
 
 
 if __name__ == "__main__":
-    IFC_PATH = "/home/cyril/git/BIMxBEM/IfcTestFiles/Triangle_R19.ifc"
+    TEST_FOLDER = "/home/cyril/git/BIMxBEM/IfcTestFiles/"
+    TEST_FILES = [
+        "Triangle_R19.ifc",
+        "Triangle_ACAD.ifc",
+        "2Storey_ACAD.ifc",
+        "2Storey_R19.ifc",
+    ]
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[2])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
