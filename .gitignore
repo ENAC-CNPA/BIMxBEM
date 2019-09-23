@@ -183,3 +183,4 @@ dbnavigator.xml
 *.idb
 *.VC.db
 .vs/
+ifcopenshell/
