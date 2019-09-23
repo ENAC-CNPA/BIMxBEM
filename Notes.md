@@ -33,3 +33,12 @@
 	* HasCovering : Certains logiciels pourrait donner l'isolation dans un élément séparé ? 
 	(TODO: Vérifier définition schéma IFC)
 * GlobalId : uuid à enregistrer pour mise à jour IFC etc…
+
+Concernant les surfaces modifiées :
+* Les points coincidants entre les faces doivent le rester après translation.
+(Pas forcément un segment, 1 seul point peut être coincident avec une autre face)
+Part.Vertex.Point -> FreeCAD.Vector
+1. Repérer les points coincidents 
+(méthode d'enregistrement de la coincidence, performance de calcul ?)
+2. Calculer la ligne à l'intersection des plans. (Part.Plane.intersectSS)
+3. Projeter les points coincidents sur la ligne. (FreeCAD.Vector.projectToLine)

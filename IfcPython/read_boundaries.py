@@ -73,9 +73,21 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             face.PhysicalOrVirtualBoundary = ifc_boundary.PhysicalOrVirtualBoundary
             # face.RelatedBuildingElement = get_or_create_wall(ifc_boundary.RelatedBuildingElement)
             # face.OriginalBoundary = face
-        
-        for fc_boundary in space_group.Group:
-            pass
+            face.Proxy.coincident_boundaries = [None] * len(face.Shape.Vertexes)
+
+    for space_group in group_2nd.Group:
+        # Find coincident points
+        fc_boundaries = space_group.Group
+        for fc_boundary_1 in fc_boundaries:
+            for i, vertex_1 in enumerate(fc_boundary_1.Shape.Vertexes):
+                if fc_boundary_1.Proxy.coincident_boundaries[i]:
+                    continue
+                fc_boundary_1.Proxy.coincident_boundaries[
+                    i
+                ] = find_coincident_in_boundary(vertex_1.Point, fc_boundary_1, space_group)
+            fc_boundary_1.CoincidentBoundaries = (
+                fc_boundary_1.Proxy.coincident_boundaries
+            )
 
     for space in spaces:
         # Find inner boundaries
@@ -90,6 +102,17 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     create_geo_int_boundaries(doc, group_2nd)
 
     doc.recompute()
+
+
+def find_coincident_in_boundary(vector, fc_boundary_1, space_group):
+    for fc_boundary_2 in (b for b in space_group.Group if b != fc_boundary_1):
+        for j, vertex_2 in enumerate(fc_boundary_2.Shape.Vertexes):
+            # Consider vector.isEqual(vertex.Point) if precision issue
+            if vector == vertex_2.Point:
+                fc_boundary_2.Proxy.coincident_boundaries[j] = fc_boundary_1
+                return fc_boundary_2
+    else:
+        assert ValueError
 
 
 def get_or_create_wall(ifc_wall):
@@ -290,6 +313,7 @@ class Root:
     """Wrapping various IFC entity :
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/schema/ifcproductextension/lexical/ifcelement.htm
     """
+
     def __init__(self, obj):
         self.Type = "IfcRelSpaceBoundary"
         obj.Proxy = self
@@ -313,6 +337,7 @@ class Root:
         obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
         feature_python_object = cls(obj)
         return obj
+
 
 class RelSpaceBoundary:
     """Wrapping IFC entity : 
@@ -343,12 +368,14 @@ class RelSpaceBoundary:
         obj.addProperty("App::PropertyLink", "ParentBoundary", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "InnerBoundaries", ifc_attributes)
         obj.addProperty("App::PropertyLink", "OriginalBoundary", category_name)
+        obj.addProperty("App::PropertyLinkList", "CoincidentBoundaries", category_name)
 
 
 class Element:
     """Wrapping various IFC entity :
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/schema/ifcproductextension/lexical/ifcelement.htm
     """
+
     def __init__(self, obj):
         self.Type = "IfcRelSpaceBoundary"
         obj.Proxy = self
