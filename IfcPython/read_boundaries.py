@@ -110,12 +110,9 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
 def find_coincident_in_space(space_group):
     fc_boundaries = space_group.Group
     for fc_boundary_1 in fc_boundaries:
-        py_proxy = fc_boundary_1.Proxy
         for i, vertex_1 in enumerate(fc_boundary_1.Shape.Vertexes):
-            if py_proxy.coincident_boundaries[i]:
-                continue
             coincident_boundary = find_coincident(i, fc_boundary_1, fc_boundaries)
-            py_proxy.coincident_boundaries[i] = coincident_boundary["boundary"]
+            fc_boundary_1.CoincidentBoundaries = coincident_boundary["boundary"]
             py_proxy.coincident_indexes[i] = coincident_boundary["index"]
         fc_boundary_1.CoincidentBoundaries = py_proxy.coincident_boundaries
         fc_boundary_1.CoincidentVertexIndexList = py_proxy.coincident_indexes

@@ -35,8 +35,9 @@
 * GlobalId : uuid à enregistrer pour mise à jour IFC etc…
 
 Concernant les surfaces modifiées :
-* Les points coincidants entre les faces doivent le rester après translation.
-(Pas forcément un segment, 1 seul point peut être coincident avec une autre face)
+* Les points coincidants entre les faces doivent le rester après translation. Attention :
+	* Pas forcément un segment, 1 seul point peut être coincident avec une autre face
+	* 1 point ne coincide pas forcément avec un autre point (ligne / face)
 Part.Vertex.Point -> FreeCAD.Vector
 1. Repérer les points coincidents 
 (méthode d'enregistrement de la coincidence, performance de calcul ?)
