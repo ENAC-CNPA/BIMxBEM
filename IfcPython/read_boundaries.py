@@ -73,18 +73,21 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             face.PhysicalOrVirtualBoundary = ifc_boundary.PhysicalOrVirtualBoundary
             # face.RelatedBuildingElement = get_or_create_wall(ifc_boundary.RelatedBuildingElement)
             # face.OriginalBoundary = face
-            face.Proxy.coincident_boundaries = [None] * len(face.Shape.Vertexes)
+            face.Proxy.coincident_boundaries = face.Proxy.coincident_indexes = [
+                None
+            ] * len(face.Shape.Vertexes)
 
     for space_group in group_2nd.Group:
+        find_coincident_in_space(space_group)
         # Find coincident points
         fc_boundaries = space_group.Group
         for fc_boundary_1 in fc_boundaries:
             for i, vertex_1 in enumerate(fc_boundary_1.Shape.Vertexes):
                 if fc_boundary_1.Proxy.coincident_boundaries[i]:
                     continue
-                fc_boundary_1.Proxy.coincident_boundaries[
-                    i
-                ] = find_coincident_in_boundary(vertex_1.Point, fc_boundary_1, space_group)
+                fc_boundary_1.Proxy.coincident_boundaries[i] = find_coincident(
+                    vertex_1.Point, fc_boundary_1, space_group
+                )
             fc_boundary_1.CoincidentBoundaries = (
                 fc_boundary_1.Proxy.coincident_boundaries
             )
@@ -104,15 +107,32 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     doc.recompute()
 
 
-def find_coincident_in_boundary(vector, fc_boundary_1, space_group):
-    for fc_boundary_2 in (b for b in space_group.Group if b != fc_boundary_1):
+def find_coincident_in_space(space_group):
+    fc_boundaries = space_group.Group
+    for fc_boundary_1 in fc_boundaries:
+        py_proxy = fc_boundary_1.Proxy
+        for i, vertex_1 in enumerate(fc_boundary_1.Shape.Vertexes):
+            if py_proxy.coincident_boundaries[i]:
+                continue
+            coincident_boundary = find_coincident(i, fc_boundary_1, fc_boundaries)
+            py_proxy.coincident_boundaries[i] = coincident_boundary["boundary"]
+            py_proxy.coincident_indexes[i] = coincident_boundary["index"]
+        fc_boundary_1.CoincidentBoundaries = py_proxy.coincident_boundaries
+        fc_boundary_1.CoincidentVertexIndexList = py_proxy.coincident_indexes
+
+
+def find_coincident(index_1, fc_boundary_1, fc_boundaries):
+    point1 = fc_boundary_1.Shape.Vertexes[index_1].Point
+    for fc_boundary_2 in (b for b in fc_boundaries if b != fc_boundary_1):
         for j, vertex_2 in enumerate(fc_boundary_2.Shape.Vertexes):
+            py_proxy = fc_boundary_2.Proxy
             # Consider vector.isEqual(vertex.Point) if precision issue
-            if vector == vertex_2.Point:
-                fc_boundary_2.Proxy.coincident_boundaries[j] = fc_boundary_1
-                return fc_boundary_2
+            if point1.isEqual(vertex_2.Point, 1):
+                py_proxy.coincident_boundaries[j] = fc_boundary_1
+                py_proxy.coincident_indexes[j] = index_1
+                return {"boundary":fc_boundary_2, "index":j}
     else:
-        assert ValueError
+        raise LookupError
 
 
 def get_or_create_wall(ifc_wall):
@@ -304,8 +324,11 @@ def make_relspaceboundary(obj_name, ifc_entity=None):
     """
     obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
     # ViewProviderRelSpaceBoundary(obj.ViewObject)
-    fpo = RelSpaceBoundary(obj)
-    obj.ViewObject.Proxy = 0
+    RelSpaceBoundary(obj)
+    try:
+        obj.ViewObject.Proxy = 0
+    except AttributeError:
+        FreeCAD.Console.PrintLog("No ViewObject ok if running with no Gui")
     return obj
 
 
@@ -369,6 +392,9 @@ class RelSpaceBoundary:
         obj.addProperty("App::PropertyLinkList", "InnerBoundaries", ifc_attributes)
         obj.addProperty("App::PropertyLink", "OriginalBoundary", category_name)
         obj.addProperty("App::PropertyLinkList", "CoincidentBoundaries", category_name)
+        obj.addProperty(
+            "App::PropertyIntegerList", "CoincidentVertexIndexList", category_name
+        )
 
 
 class Element:
