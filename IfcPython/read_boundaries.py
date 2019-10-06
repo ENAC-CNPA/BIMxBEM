@@ -1,6 +1,7 @@
 # coding: utf8
 """This module reads IfcRelSpaceBoundary from an IFC file and display them in FreeCAD"""
 import os
+import itertools
 
 import ifcopenshell
 import ifcopenshell.geom
@@ -40,6 +41,7 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     group.addProperty("App::PropertyString", "ApplicationVersion")
     group_2nd = get_or_create_group(doc, "SecondLevel")
     group.addObject(group_2nd)
+    elements_group = get_or_create_group(doc, "Elements")
 
     ifc_file = ifcopenshell.open(ifc_path)
 
@@ -47,8 +49,13 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     group.ApplicationIdentifier = owning_application.ApplicationIdentifier
     group.ApplicationVersion = owning_application.Version
 
-    spaces = ifc_file.by_type("IfcSpace")
+    for ifc_entity in (
+        e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries
+    ):
+        elements_group.addObject(create_fc_object_from_entity(doc, ifc_entity))
 
+    # Generate boundaries
+    spaces = ifc_file.by_type("IfcSpace")
     for space in spaces:
         space_full_name = f"{space.Name} {space.LongName}"
         space_group = group_2nd.newObject(
@@ -59,52 +66,88 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
         # All boundaries have their placement relative to space placement
         space_placement = get_placement(space)
         for ifc_boundary in (b for b in space.BoundedBy if b.Name == "2ndLevel"):
-            face = make_relspaceboundary("Face")
+            face = make_relspaceboundary(doc, ifc_boundary)
             space_group.addObject(face)
-            face.Shape = create_fc_shape(ifc_boundary)
             face.Placement = space_placement
-            face.Label = "{} {}".format(
-                ifc_boundary.RelatedBuildingElement.id(),
-                ifc_boundary.RelatedBuildingElement.Name,
-            )
-            face.ViewObject.ShapeColor = get_color(ifc_boundary.RelatedBuildingElement)
-            face.GlobalId = ifc_boundary.GlobalId
-            face.InternalOrExternalBoundary = ifc_boundary.InternalOrExternalBoundary
-            face.PhysicalOrVirtualBoundary = ifc_boundary.PhysicalOrVirtualBoundary
             # face.RelatedBuildingElement = get_or_create_wall(ifc_boundary.RelatedBuildingElement)
             # face.OriginalBoundary = face
-            face.Proxy.coincident_boundaries = face.Proxy.coincident_indexes = [
-                None
-            ] * len(face.Shape.Vertexes)
 
     for space_group in group_2nd.Group:
-        find_coincident_in_space(space_group)
-        # Find coincident points
         fc_boundaries = space_group.Group
-        for fc_boundary_1 in fc_boundaries:
-            for i, vertex_1 in enumerate(fc_boundary_1.Shape.Vertexes):
-                if fc_boundary_1.Proxy.coincident_boundaries[i]:
-                    continue
-                fc_boundary_1.Proxy.coincident_boundaries[i] = find_coincident(
-                    vertex_1.Point, fc_boundary_1, space_group
-                )
-            fc_boundary_1.CoincidentBoundaries = (
-                fc_boundary_1.Proxy.coincident_boundaries
-            )
+        # Minimal number of boundary is 5 - 3 vertical faces, 2 horizontal faces
+        # If there is less than 5 boundaries there is an issue or a new case to analyse
+        if len(fc_boundaries) == 5:
+            continue
+        elif len(fc_boundaries) < 5:
+            assert ValueError, f"{space_group.Label} has less than 5 boundaries"
 
-    for space in spaces:
-        # Find inner boundaries
-        for ifc_boundary in (b for b in space.BoundedBy if b.Name == "2ndLevel"):
-            try:
-                if ifc_boundary.ParentBoundary:
-                    pass
-            except AttributeError:
+        # Find coplanar boundaries to identify hosted boundaries and fill gaps (2b)
+        for fc_boundary_1, fc_boundary_2 in itertools.combinations(fc_boundaries, 2):
+            if is_coplanar(fc_boundary_1, fc_boundary_2):
+                append(fc_boundary_1, "CoplanarWith", fc_boundary_2)
+                append(fc_boundary_2, "CoplanarWith", fc_boundary_1)
+
+        # Associate hosted elements and fill gaps
+        for fc_boundary in fc_boundaries:
+            if fc_boundary.IsHosted:
+                # TODO : Handle cases where there is more than 1 coplanar boundary
+                if len(fc_boundary.CoplanarWith) == 1:
+                    host_element = fc_boundary.CoplanarWith[0]
+                    fc_boundary.ParentBoundary = host_element
+                append(host_element, "InnerBoundaries", fc_boundary)
+                continue
+            non_hosted_coplanar = [
+                b for b in fc_boundary.CoplanarWith if not b.IsHosted
+            ]
+            # FIXME : Simplification which doesn't handle case where 2b touch a corner
+            if not non_hosted_coplanar:
+                continue
+            elif len(non_hosted_coplanar) == 1:
+                # TODO : Find closest vertices
+                # TODO : Move vertices at mid distance
                 pass
 
-    create_geo_ext_boundaries(doc, group_2nd)
-    create_geo_int_boundaries(doc, group_2nd)
+        # Find CorrespondingBoundary
+
+    # for space_group in group_2nd.Group:
+    # find_coincident_in_space(space_group)
+    # # Find coincident points
+    # fc_boundaries = space_group.Group
+    # for fc_boundary_1 in fc_boundaries:
+    # for i, vertex_1 in enumerate(fc_boundary_1.Shape.Vertexes):
+    # if fc_boundary_1.Proxy.coincident_boundaries[i]:
+    # continue
+    # fc_boundary_1.Proxy.coincident_boundaries[i] = find_coincident(
+    # vertex_1.Point, fc_boundary_1, space_group
+    # )
+    # fc_boundary_1.CoincidentBoundaries = (
+    # fc_boundary_1.Proxy.coincident_boundaries
+    # )
+
+    # create_geo_ext_boundaries(doc, group_2nd)
+    # create_geo_int_boundaries(doc, group_2nd)
 
     doc.recompute()
+
+
+def is_coplanar(shape_1, shape_2):
+    """Intended for RelSpaceBoundary use only
+    For some reason native Part.Shape.isCoplanar(Part.Shape) do not always work"""
+    return get_plane(shape_1).toShape().isCoplanar(get_plane(shape_2).toShape())
+
+
+def get_plane(fc_boundary):
+    """Intended for RelSpaceBoundary use only"""
+    return Part.Plane(
+        fc_boundary.Shape.Vertexes[0].Point, fc_boundary.Shape.normalAt(0, 0)
+    )
+
+
+def append(doc_object, fc_property, value):
+    """Intended to manipulate FreeCAD list like properties only"""
+    current_value = getattr(doc_object, fc_property)
+    current_value.append(value)
+    setattr(doc_object, fc_property, current_value)
 
 
 def find_coincident_in_space(space_group):
@@ -127,7 +170,7 @@ def find_coincident(index_1, fc_boundary_1, fc_boundaries):
             if point1.isEqual(vertex_2.Point, 1):
                 py_proxy.coincident_boundaries[j] = fc_boundary_1
                 py_proxy.coincident_indexes[j] = index_1
-                return {"boundary":fc_boundary_2, "index":j}
+                return {"boundary": fc_boundary_2, "index": j}
     else:
         raise LookupError
 
@@ -299,6 +342,7 @@ def get_color(ifc_product):
         "IfcDoor": (1.0, 1.0, 1.0),
     }
     for product, color in product_colors.items():
+        # Not only test if IFC class is in dictionnary but it is a subclass
         if ifc_product.is_a(product):
             return color
     else:
@@ -311,17 +355,14 @@ def get_or_create_group(doc, name):
     group = doc.findObjects("App::DocumentObjectGroup", name)
     if group:
         return group[0]
-    else:
-        return doc.addObject("App::DocumentObjectGroup", name)
+    return doc.addObject("App::DocumentObjectGroup", name)
 
 
-def make_relspaceboundary(obj_name, ifc_entity=None):
-    """Stantard FreeCAD FeaturePython Object creation method
-    ifc_entity : Optionnally provide a 
-    """
-    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
+def make_relspaceboundary(doc, ifc_entity):
+    """Stantard FreeCAD FeaturePython Object creation method"""
+    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "RelSpaceBoundary")
     # ViewProviderRelSpaceBoundary(obj.ViewObject)
-    RelSpaceBoundary(obj)
+    RelSpaceBoundary(obj, ifc_entity)
     try:
         obj.ViewObject.Proxy = 0
     except AttributeError:
@@ -331,15 +372,24 @@ def make_relspaceboundary(obj_name, ifc_entity=None):
 
 class Root:
     """Wrapping various IFC entity :
-    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/schema/ifcproductextension/lexical/ifcelement.htm
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcroot.htm
     """
 
-    def __init__(self, obj):
-        self.Type = "IfcRelSpaceBoundary"
+    def __init__(self, obj, ifc_entity):
+        self.Type = self.__class__.__name__
         obj.Proxy = self
-        category_name = "BEM"
         ifc_attributes = "IFC Attributes"
+        obj.addProperty("App::PropertyString", "IfcType", "IFC")
         obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
+        obj.addProperty("App::PropertyString", "Description", ifc_attributes)
+        
+        obj.GlobalId = ifc_entity.GlobalId
+        obj.IfcType = ifc_entity.is_a()
+        self.set_label(obj, ifc_entity)
+        try:
+            obj.Description = ifc_entity.Description
+        except TypeError:
+            pass
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -348,6 +398,11 @@ class Root:
     def execute(self, fp):
         """Do something when doing a recomputation, this method is mandatory"""
         return
+
+    @staticmethod
+    def set_label(obj, ifc_entity):
+        """Allow specific method for specific elements"""
+        obj.Label = "{} {}".format(ifc_entity.id(), ifc_entity.Name)
 
     @classmethod
     def create(cls, obj_name, ifc_entity=None):
@@ -359,16 +414,15 @@ class Root:
         return obj
 
 
-class RelSpaceBoundary:
+class RelSpaceBoundary(Root):
     """Wrapping IFC entity : 
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcrelspaceboundary2ndlevel.htm"""
 
-    def __init__(self, obj):
-        self.Type = "IfcRelSpaceBoundary"
+    def __init__(self, obj, ifc_entity):
+        super().__init__(obj, ifc_entity)
         obj.Proxy = self
         category_name = "BEM"
         ifc_attributes = "IFC Attributes"
-        obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
         obj.addProperty("App::PropertyLink", "RelatingSpace", ifc_attributes)
         obj.addProperty("App::PropertyLink", "RelatedBuildingElement", ifc_attributes)
         obj.addProperty(
@@ -389,34 +443,77 @@ class RelSpaceBoundary:
         obj.addProperty("App::PropertyLinkList", "InnerBoundaries", ifc_attributes)
         obj.addProperty("App::PropertyLink", "OriginalBoundary", category_name)
         obj.addProperty("App::PropertyLinkList", "CoincidentBoundaries", category_name)
+        obj.addProperty("App::PropertyLinkList", "CoplanarWith", category_name)
         obj.addProperty(
             "App::PropertyIntegerList", "CoincidentVertexIndexList", category_name
         )
+        obj.addProperty("App::PropertyBool", "IsHosted", category_name)
+        obj.addProperty("App::PropertyArea", "Area", category_name)
+        obj.addProperty("App::PropertyArea", "AreaWithHosted", category_name)
+
+        obj.ViewObject.ShapeColor = get_color(ifc_entity.RelatedBuildingElement)
+        obj.GlobalId = ifc_entity.GlobalId
+        obj.InternalOrExternalBoundary = ifc_entity.InternalOrExternalBoundary
+        obj.PhysicalOrVirtualBoundary = ifc_entity.PhysicalOrVirtualBoundary
+        obj.Shape = create_fc_shape(ifc_entity)
+        obj.Area = obj.Shape.Area
+        self.set_label(obj, ifc_entity)
+        if ifc_entity.RelatedBuildingElement.FillsVoids:
+            obj.IsHosted = True
+        self.coincident_boundaries = self.coincident_indexes = [None] * len(
+            obj.Shape.Vertexes
+        )
+        self.coplanar_with = []
+
+    def onChanged(self, obj, prop):
+        super().onChanged(obj, prop)
+        if prop == "InnerBoundaries":
+            obj.AreaWithHosted = self.recompute_area_with_hosted(obj)
+
+    @staticmethod
+    def recompute_area_with_hosted(obj):
+        """Recompute area including inner boundaries"""
+        area = obj.Area
+        for boundary in obj.InnerBoundaries:
+            area = area + boundary.Area
+        return area
+
+    @staticmethod
+    def set_label(obj, ifc_entity):
+        obj.Label = "{} {}".format(
+            ifc_entity.RelatedBuildingElement.id(),
+            ifc_entity.RelatedBuildingElement.Name,
+        )
 
 
-class Element:
+def create_fc_object_from_entity(doc, ifc_entity):
+    """Stantard FreeCAD FeaturePython Object creation method"""
+    obj_name = "Element"
+    obj = doc.addObject("Part::FeaturePython", obj_name)
+    # ViewProviderRelSpaceBoundary(obj.ViewObject)
+    Element(obj, ifc_entity)
+    try:
+        obj.ViewObject.Proxy = 0
+    except AttributeError:
+        FreeCAD.Console.PrintLog("No ViewObject ok if running with no Gui")
+    return obj
+
+
+class Element(Root):
     """Wrapping various IFC entity :
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/schema/ifcproductextension/lexical/ifcelement.htm
     """
 
-    def __init__(self, obj):
+    def __init__(self, obj, ifc_entity):
+        super().__init__(obj, ifc_entity)
         self.Type = "IfcRelSpaceBoundary"
         obj.Proxy = self
         category_name = "BEM"
         ifc_attributes = "IFC Attributes"
-        obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "HasAssociations", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "FillsVoids", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "HasOpenings", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "ProvidesBoundaries", ifc_attributes)
-
-    def onChanged(self, fp, prop):
-        """Do something when a property has changed"""
-        return
-
-    def execute(self, fp):
-        """Do something when doing a recomputation, this method is mandatory"""
-        return
 
     @classmethod
     def make_fakewall(cls, obj_name, ifc_entity=None):
@@ -426,8 +523,6 @@ class Element:
         obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
         feature_python_object = cls(obj)
         return obj
-
-    pass
 
 
 class FakeWall:

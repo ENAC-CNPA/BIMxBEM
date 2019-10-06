@@ -34,6 +34,8 @@
 	(TODO: Vérifier définition schéma IFC)
 * GlobalId : uuid à enregistrer pour mise à jour IFC etc…
 
+Vérifier si 2 formes sont coplanaires : Part.Shape.isCoplanar(other_shape)
+
 Concernant les surfaces modifiées :
 * Les points coincidants entre les faces doivent le rester après translation. Attention :
 	* Pas forcément un segment, 1 seul point peut être coincident avec une autre face
