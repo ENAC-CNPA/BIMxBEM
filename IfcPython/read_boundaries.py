@@ -69,8 +69,11 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             face = make_relspaceboundary(doc, ifc_boundary)
             space_group.addObject(face)
             face.Placement = space_placement
-            # face.RelatedBuildingElement = get_or_create_wall(ifc_boundary.RelatedBuildingElement)
             # face.OriginalBoundary = face
+            element = get_related_element(doc, elements_group.Group, ifc_boundary)
+            face.RelatedBuildingElement = element
+            append(element, "ProvidesBoundaries", face)
+            face.RelatingSpace = space_group
 
     for space_group in group_2nd.Group:
         fc_boundaries = space_group.Group
@@ -175,10 +178,11 @@ def find_coincident(index_1, fc_boundary_1, fc_boundaries):
         raise LookupError
 
 
-def get_or_create_wall(ifc_wall):
-
-    return
-
+def get_related_element(doc, group, ifc_entity):
+    guid = ifc_entity.RelatedBuildingElement.GlobalId
+    for element in group:
+        if element.GlobalId == guid:
+            return element 
 
 def get_wall_thickness(ifc_wall):
     wall_thickness = 0
@@ -382,7 +386,7 @@ class Root:
         obj.addProperty("App::PropertyString", "IfcType", "IFC")
         obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
         obj.addProperty("App::PropertyString", "Description", ifc_attributes)
-        
+
         obj.GlobalId = ifc_entity.GlobalId
         obj.IfcType = ifc_entity.is_a()
         self.set_label(obj, ifc_entity)
