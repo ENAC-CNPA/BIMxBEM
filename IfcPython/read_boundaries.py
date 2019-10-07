@@ -9,7 +9,6 @@ import ifcopenshell.geom
 import FreeCAD
 import FreeCADGui
 import Part
-import uuid
 
 
 def ios_settings(brep):
@@ -49,10 +48,11 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     group.ApplicationIdentifier = owning_application.ApplicationIdentifier
     group.ApplicationVersion = owning_application.Version
 
+    # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
     for ifc_entity in (
         e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries
     ):
-        elements_group.addObject(create_fc_object_from_entity(doc, ifc_entity))
+        elements_group.addObject(create_fc_object_from_entity(ifc_entity))
 
     # Generate boundaries
     spaces = ifc_file.by_type("IfcSpace")
@@ -66,7 +66,7 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
         # All boundaries have their placement relative to space placement
         space_placement = get_placement(space)
         for ifc_boundary in (b for b in space.BoundedBy if b.Name == "2ndLevel"):
-            face = make_relspaceboundary(doc, ifc_boundary)
+            face = make_relspaceboundary(ifc_boundary)
             space_group.addObject(face)
             face.Placement = space_placement
             # face.OriginalBoundary = face
@@ -75,6 +75,12 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             append(element, "ProvidesBoundaries", face)
             face.RelatingSpace = space_group
 
+    # Associate CorrespondingBoundary
+    for space_group in group_2nd.Group:
+        for fc_boundary in space_group.Group:
+            associate_corresponding_boundary(fc_boundary)
+
+    # Associate hosted elements
     for space_group in group_2nd.Group:
         fc_boundaries = space_group.Group
         # Minimal number of boundary is 5 - 3 vertical faces, 2 horizontal faces
@@ -153,6 +159,38 @@ def append(doc_object, fc_property, value):
     setattr(doc_object, fc_property, current_value)
 
 
+def clean_corresponding_candidates(fc_boundary):
+    other_boundaries = fc_boundary.RelatedBuildingElement.ProvidesBoundaries
+    other_boundaries.remove(fc_boundary)
+    return [
+        b
+        for b in other_boundaries
+        if not b.CorrespondingBoundary or b.RelatingSpace != fc_boundary.RelatingSpace
+    ]
+
+
+def associate_corresponding_boundary(fc_boundary):
+    if (
+        fc_boundary.InternalOrExternalBoundary != "INTERNAL"
+        or fc_boundary.CorrespondingBoundary
+    ):
+        return
+
+    other_boundaries = clean_corresponding_candidates(fc_boundary)
+    if len(other_boundaries) == 1:
+        corresponding_boundary = other_boundaries[0]
+    else:
+        center_of_mass = fc_boundary.Shape.CenterOfMass
+        min_lenght = 10000  # No element has 10 m
+        for boundary in other_boundaries:
+            distance = center_of_mass.distanceToPoint(boundary.Shape.CenterOfMass)
+            if distance < min_lenght:
+                min_lenght = distance
+                corresponding_boundary = boundary
+    fc_boundary.CorrespondingBoundary = corresponding_boundary
+    corresponding_boundary.CorrespondingBoundary = fc_boundary
+
+
 def find_coincident_in_space(space_group):
     fc_boundaries = space_group.Group
     for fc_boundary_1 in fc_boundaries:
@@ -182,7 +220,8 @@ def get_related_element(doc, group, ifc_entity):
     guid = ifc_entity.RelatedBuildingElement.GlobalId
     for element in group:
         if element.GlobalId == guid:
-            return element 
+            return element
+
 
 def get_wall_thickness(ifc_wall):
     wall_thickness = 0
@@ -362,7 +401,7 @@ def get_or_create_group(doc, name):
     return doc.addObject("App::DocumentObjectGroup", name)
 
 
-def make_relspaceboundary(doc, ifc_entity):
+def make_relspaceboundary(ifc_entity):
     """Stantard FreeCAD FeaturePython Object creation method"""
     obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "RelSpaceBoundary")
     # ViewProviderRelSpaceBoundary(obj.ViewObject)
@@ -395,11 +434,11 @@ class Root:
         except TypeError:
             pass
 
-    def onChanged(self, fp, prop):
+    def onChanged(self, obj, prop):
         """Do something when a property has changed"""
         return
 
-    def execute(self, fp):
+    def execute(self, obj):
         """Do something when doing a recomputation, this method is mandatory"""
         return
 
@@ -460,7 +499,7 @@ class RelSpaceBoundary(Root):
         obj.InternalOrExternalBoundary = ifc_entity.InternalOrExternalBoundary
         obj.PhysicalOrVirtualBoundary = ifc_entity.PhysicalOrVirtualBoundary
         obj.Shape = create_fc_shape(ifc_entity)
-        obj.Area = obj.Shape.Area
+        obj.Area = obj.AreaWithHosted = obj.Shape.Area
         self.set_label(obj, ifc_entity)
         if ifc_entity.RelatedBuildingElement.FillsVoids:
             obj.IsHosted = True
@@ -490,10 +529,10 @@ class RelSpaceBoundary(Root):
         )
 
 
-def create_fc_object_from_entity(doc, ifc_entity):
+def create_fc_object_from_entity(ifc_entity):
     """Stantard FreeCAD FeaturePython Object creation method"""
     obj_name = "Element"
-    obj = doc.addObject("Part::FeaturePython", obj_name)
+    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
     # ViewProviderRelSpaceBoundary(obj.ViewObject)
     Element(obj, ifc_entity)
     try:
@@ -512,47 +551,11 @@ class Element(Root):
         super().__init__(obj, ifc_entity)
         self.Type = "IfcRelSpaceBoundary"
         obj.Proxy = self
-        category_name = "BEM"
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyLinkList", "HasAssociations", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "FillsVoids", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "HasOpenings", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "ProvidesBoundaries", ifc_attributes)
-
-    @classmethod
-    def make_fakewall(cls, obj_name, ifc_entity=None):
-        """Stantard FreeCAD FeaturePython Object creation method
-        ifc_entity : Optionnally provide a base entity.
-        """
-        obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
-        feature_python_object = cls(obj)
-        return obj
-
-
-class FakeWall:
-    """Wrapping IFC entity : 
-    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcwall.htm"""
-
-    def __init__(self, obj):
-        self.Type = "IfcRelSpaceBoundary"
-        obj.Proxy = self
-        category_name = "BEM"
-        ifc_attributes = "IFC Attributes"
-        obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
-        obj.addProperty("App::PropertyLink", "CorrespondingBoundary", ifc_attributes)
-        obj.addProperty("App::PropertyLink", "t", ifc_attributes)
-        obj.addProperty("App::PropertyLinkList", "FillsVoids", ifc_attributes)
-        obj.addProperty("App::PropertyLinkList", "HasOpenings", ifc_attributes)
-        obj.addProperty("App::PropertyLinkList", "ProvidesBoundaries", ifc_attributes)
-        obj.addProperty("App::PropertyLink", "OriginalBoundary", category_name)
-
-    def onChanged(self, fp, prop):
-        """Do something when a property has changed"""
-        return
-
-    def execute(self, fp):
-        """Do something when doing a recomputation, this method is mandatory"""
-        return
 
 
 if __name__ == "__main__":
@@ -563,7 +566,7 @@ if __name__ == "__main__":
         "2Storey_ACAD.ifc",
         "2Storey_R19.ifc",
     ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[2])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
