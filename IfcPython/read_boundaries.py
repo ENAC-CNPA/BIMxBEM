@@ -76,9 +76,7 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             face.RelatingSpace = space_group
 
     # Associate CorrespondingBoundary
-    for space_group in group_2nd.Group:
-        for fc_boundary in space_group.Group:
-            associate_corresponding_boundary(fc_boundary)
+    associate_corresponding_boundaries(group_2nd)
 
     # Associate hosted elements
     for space_group in group_2nd.Group:
@@ -113,7 +111,9 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
                 continue
             elif len(non_hosted_coplanar) == 1:
                 # TODO : Find closest vertices
-                # TODO : Move vertices at mid distance
+                # for vextex in fc_boundary.Shape.Vertexes:
+
+                # TODO : Move vertices at mid distance or create a 2b boundary
                 pass
 
         # Find CorrespondingBoundary
@@ -137,6 +137,12 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     # create_geo_int_boundaries(doc, group_2nd)
 
     doc.recompute()
+
+def associate_corresponding_boundaries(group_2nd):
+    # Associate CorrespondingBoundary
+    for space_group in group_2nd.Group:
+        for fc_boundary in space_group.Group:
+            associate_corresponding_boundary(fc_boundary)
 
 
 def is_coplanar(shape_1, shape_2):
@@ -170,6 +176,11 @@ def clean_corresponding_candidates(fc_boundary):
 
 
 def associate_corresponding_boundary(fc_boundary):
+    """Associate corresponding boundaries according to IFC definition.
+
+    Reference to the other space boundary of the pair of two space boundaries on either side of a space separating thermal boundary element.
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcrelspaceboundary2ndlevel.htm
+    """
     if (
         fc_boundary.InternalOrExternalBoundary != "INTERNAL"
         or fc_boundary.CorrespondingBoundary
