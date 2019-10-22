@@ -69,10 +69,10 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             face = make_relspaceboundary(ifc_boundary)
             space_group.addObject(face)
             face.Placement = space_placement
-            # face.OriginalBoundary = face
             element = get_related_element(doc, elements_group.Group, ifc_boundary)
-            face.RelatedBuildingElement = element
-            append(element, "ProvidesBoundaries", face)
+            if element:
+                face.RelatedBuildingElement = element
+                append(element, "ProvidesBoundaries", face)
             face.RelatingSpace = space_group
 
     # Associate CorrespondingBoundary
@@ -101,7 +101,7 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
                 if len(fc_boundary.CoplanarWith) == 1:
                     host_element = fc_boundary.CoplanarWith[0]
                     fc_boundary.ParentBoundary = host_element
-                append(host_element, "InnerBoundaries", fc_boundary)
+                    append(host_element, "InnerBoundaries", fc_boundary)
                 continue
             non_hosted_coplanar = [
                 b for b in fc_boundary.CoplanarWith if not b.IsHosted
@@ -198,8 +198,13 @@ def associate_corresponding_boundary(fc_boundary):
             if distance < min_lenght:
                 min_lenght = distance
                 corresponding_boundary = boundary
-    fc_boundary.CorrespondingBoundary = corresponding_boundary
-    corresponding_boundary.CorrespondingBoundary = fc_boundary
+    try:
+        fc_boundary.CorrespondingBoundary = corresponding_boundary
+        corresponding_boundary.CorrespondingBoundary = fc_boundary
+    except NameError:
+        # TODO: What to do with uncorrectly classified boundaries which have no corresponding boundary
+        FreeCAD.Console.PrintLog(f"Boundary {fc_boundary.GlobalId} from space {fc_boundary}")
+        return
 
 
 def find_coincident_in_space(space_group):
@@ -228,6 +233,8 @@ def find_coincident(index_1, fc_boundary_1, fc_boundaries):
 
 
 def get_related_element(doc, group, ifc_entity):
+    if not ifc_entity.RelatedBuildingElement:
+        return
     guid = ifc_entity.RelatedBuildingElement.GlobalId
     for element in group:
         if element.GlobalId == guid:
@@ -386,7 +393,7 @@ def get_placement(space):
     return FreeCAD.Matrix(*m_l)
 
 
-def get_color(ifc_product):
+def get_color(ifc_boundary):
     """Return a color depending on IfcClass given"""
     product_colors = {
         "IfcWall": (0.7, 0.3, 0.0),
@@ -395,6 +402,10 @@ def get_color(ifc_product):
         "IfcRoof": (0.0, 0.3, 0.0),
         "IfcDoor": (1.0, 1.0, 1.0),
     }
+    if ifc_boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
+        return (0.9, 1.0, 0.9)
+
+    ifc_product = ifc_boundary.RelatedBuildingElement
     for product, color in product_colors.items():
         # Not only test if IFC class is in dictionnary but it is a subclass
         if ifc_product.is_a(product):
@@ -505,15 +516,15 @@ class RelSpaceBoundary(Root):
         obj.addProperty("App::PropertyArea", "Area", category_name)
         obj.addProperty("App::PropertyArea", "AreaWithHosted", category_name)
 
-        obj.ViewObject.ShapeColor = get_color(ifc_entity.RelatedBuildingElement)
+        obj.ViewObject.ShapeColor = get_color(ifc_entity)
         obj.GlobalId = ifc_entity.GlobalId
         obj.InternalOrExternalBoundary = ifc_entity.InternalOrExternalBoundary
         obj.PhysicalOrVirtualBoundary = ifc_entity.PhysicalOrVirtualBoundary
         obj.Shape = create_fc_shape(ifc_entity)
         obj.Area = obj.AreaWithHosted = obj.Shape.Area
         self.set_label(obj, ifc_entity)
-        if ifc_entity.RelatedBuildingElement.FillsVoids:
-            obj.IsHosted = True
+        if not obj.PhysicalOrVirtualBoundary == 'VIRTUAL':
+            obj.IsHosted = bool(ifc_entity.RelatedBuildingElement.FillsVoids)
         self.coincident_boundaries = self.coincident_indexes = [None] * len(
             obj.Shape.Vertexes
         )
@@ -534,10 +545,14 @@ class RelSpaceBoundary(Root):
 
     @staticmethod
     def set_label(obj, ifc_entity):
-        obj.Label = "{} {}".format(
-            ifc_entity.RelatedBuildingElement.id(),
-            ifc_entity.RelatedBuildingElement.Name,
-        )
+        try:
+            obj.Label = "{} {}".format(
+                ifc_entity.RelatedBuildingElement.id(),
+                ifc_entity.RelatedBuildingElement.Name,
+            )
+        except AttributeError:
+            FreeCAD.Console.PrintLog(f"{ifc_entity.GlobalId} has no RelatedBuildingElement")
+            return
 
 
 def create_fc_object_from_entity(ifc_entity):
@@ -572,12 +587,12 @@ class Element(Root):
 if __name__ == "__main__":
     TEST_FOLDER = "/home/cyril/git/BIMxBEM/IfcTestFiles/"
     TEST_FILES = [
-        "Triangle_R19.ifc",
-        "Triangle_ACAD.ifc",
-        "2Storey_ACAD.ifc",
-        "2Storey_R19.ifc",
+        "Triangle_2x3_A22.ifc",
+        "Triangle_2x3_R19.ifc",
+        "2Storey_2x3_A22.ifc",
+        "2Storey_2x3_R19.ifc",
     ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[2])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
