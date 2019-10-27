@@ -38,6 +38,7 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     group = get_or_create_group(doc, "RelSpaceBoundary")
     group.addProperty("App::PropertyString", "ApplicationIdentifier")
     group.addProperty("App::PropertyString", "ApplicationVersion")
+    group.addProperty("App::PropertyString", "ApplicationFullName")
     group_2nd = get_or_create_group(doc, "SecondLevel")
     group.addObject(group_2nd)
     elements_group = get_or_create_group(doc, "Elements")
@@ -47,12 +48,15 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     owning_application = ifc_file.by_type("IfcApplication")[0]
     group.ApplicationIdentifier = owning_application.ApplicationIdentifier
     group.ApplicationVersion = owning_application.Version
+    group.ApplicationFullName = owning_application.ApplicationFullName
 
     # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
-    for ifc_entity in (
-        e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries
-    ):
+    ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)
+    for ifc_entity in ifc_elements:
         elements_group.addObject(create_fc_object_from_entity(ifc_entity))
+
+    # Associate Host / Hosted elements
+    associate_host_element(ifc_file, elements_group)
 
     # Generate boundaries
     spaces = ifc_file.by_type("IfcSpace")
@@ -69,19 +73,20 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             face = make_relspaceboundary(ifc_boundary)
             space_group.addObject(face)
             face.Placement = space_placement
-            element = get_related_element(doc, elements_group.Group, ifc_boundary)
+            element = get_related_element(doc, elements_group, ifc_boundary)
             if element:
                 face.RelatedBuildingElement = element
                 append(element, "ProvidesBoundaries", face)
+            # face.ParentBoundary = get_parent_boundary(doc, elements_group, ifc_boundary)
             face.RelatingSpace = space_group
 
     # Associate CorrespondingBoundary
     associate_corresponding_boundaries(group_2nd)
 
-    # Associate hosted elements
+    # Associate hosted elements an fill gaps
     for space_group in group_2nd.Group:
         fc_boundaries = space_group.Group
-        # Minimal number of boundary is 5 - 3 vertical faces, 2 horizontal faces
+        # Minimal number of boundary is 5: 3 vertical faces, 2 horizontal faces
         # If there is less than 5 boundaries there is an issue or a new case to analyse
         if len(fc_boundaries) == 5:
             continue
@@ -89,34 +94,13 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             assert ValueError, f"{space_group.Label} has less than 5 boundaries"
 
         # Find coplanar boundaries to identify hosted boundaries and fill gaps (2b)
-        for fc_boundary_1, fc_boundary_2 in itertools.combinations(fc_boundaries, 2):
-            if is_coplanar(fc_boundary_1, fc_boundary_2):
-                append(fc_boundary_1, "CoplanarWith", fc_boundary_2)
-                append(fc_boundary_2, "CoplanarWith", fc_boundary_1)
+        associate_coplanar_boundaries(fc_boundaries)
 
-        # Associate hosted elements and fill gaps
-        for fc_boundary in fc_boundaries:
-            if fc_boundary.IsHosted:
-                # TODO : Handle cases where there is more than 1 coplanar boundary
-                if len(fc_boundary.CoplanarWith) == 1:
-                    host_element = fc_boundary.CoplanarWith[0]
-                    fc_boundary.ParentBoundary = host_element
-                    append(host_element, "InnerBoundaries", fc_boundary)
-                continue
-            non_hosted_coplanar = [
-                b for b in fc_boundary.CoplanarWith if not b.IsHosted
-            ]
-            # FIXME : Simplification which doesn't handle case where 2b touch a corner
-            if not non_hosted_coplanar:
-                continue
-            elif len(non_hosted_coplanar) == 1:
-                # TODO : Find closest vertices
-                # for vextex in fc_boundary.Shape.Vertexes:
+        # Associate hosted elements
+        associate_inner_boundaries(fc_boundaries)
 
-                # TODO : Move vertices at mid distance or create a 2b boundary
-                pass
-
-        # Find CorrespondingBoundary
+        # FIXME: Fill 2b gaps
+        # fill2b(fc_boundaries)
 
     # for space_group in group_2nd.Group:
     # find_coincident_in_space(space_group)
@@ -133,10 +117,106 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     # fc_boundary_1.Proxy.coincident_boundaries
     # )
 
-    # create_geo_ext_boundaries(doc, group_2nd)
-    # create_geo_int_boundaries(doc, group_2nd)
+    create_geo_ext_boundaries(doc, group_2nd)
+    create_geo_int_boundaries(doc, group_2nd)
 
     doc.recompute()
+
+
+def associate_host_element(ifc_file, elements_group):
+    # Associate Host / Hosted elements
+    ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)
+    for ifc_entity in ifc_elements:
+        if ifc_entity.FillsVoids:
+            host = get_element_by_guid(get_host_guid(ifc_entity), elements_group)
+            hosted = get_element_by_guid(ifc_entity.GlobalId, elements_group)
+            append(host, "HostedElements", hosted)
+            hosted.HostElement = host
+
+
+def fill2b(fc_boundaries):
+    """Modify boundary to include area of type 2b between boundaries"""
+    for fc_boundary in fc_boundaries:
+        non_hosted_shared_element = [
+            b for b in fc_boundary.ShareRelatedElementWith if not b.IsHosted
+        ]
+        # FIXME : Simplification which doesn't handle case where 2b touch a corner
+        # FIXME : Currently assuming 2b boundaries are bounded by 4 vertices
+        if not non_hosted_shared_element:
+            continue
+        elif len(non_hosted_shared_element) == 1:
+            # Find side by side corresponding edges
+            fc_boundary1 = fc_boundary
+            fc_boundary2 = non_hosted_shared_element[0]
+            edges1 = fc_boundary1.Shape.OuterWire.Edges
+            edges2 = fc_boundary2.Shape.OuterWire.Edges
+            min_distance = 100000
+            closest_indexes = None
+            for (i, edge1), (j, edge2) in itertools.product(
+                enumerate(edges1), enumerate(edges2)
+            ):
+                if edge1.Length <= edge2.Length:
+                    mid_point = edge1.CenterOfMass
+                    line_segment = (v.Point for v in edge2.Vertexes)
+                else:
+                    mid_point = edge2.CenterOfMass
+                    line_segment = (v.Point for v in edge1.Vertexes)
+                distance = mid_point.distanceToLineSegment(*line_segment).Length
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_indexes = (i, j)
+            i, j = closest_indexes
+
+            # Compute centerline
+            vec1 = edges1[i].Vertexes[0].Point
+            vec2 = edges2[j].Vertexes[0].Point
+
+            line_segment = (v.Point for v in edges2[j].Vertexes)
+            vec2 = vec2 + vec2.distanceToLineSegment(*line_segment) / 2
+            mid_line = Part.Line(vec1, vec2)
+
+            # Compute intersection on center line between edges
+            vxs1_len = len(fc_boundary1.Shape.Vertexes)
+            vxs2_len = len(fc_boundary2.Shape.Vertexes)
+            b1_v1 = mid_line.intersectCC(edges1[i - 1].Curve)
+            b1_v2 = mid_line.intersectCC(edges1[(i + 1) % vxs1_len].Curve)
+            b2_v1 = mid_line.intersectCC(edges2[j - 1].Curve)
+            b2_v2 = mid_line.intersectCC(edges2[(j + 1) % vxs2_len].Curve)
+            vectors = [v.Point for v in fc_boundary1.Shape.OuterWire.Vertexes]
+            vectors[i] = b1_v1
+            vectors[(i + 1) % len(vectors)] = b1_v2
+            vectors.append(vectors[0])
+            wires = [Part.makePolygon(vectors)]
+            wires.extend(fc_boundary1.Shape.Wires[1:])
+            new_shape = Part.Face(wires)
+            fc_boundary1.Shape = new_shape
+
+
+def associate_inner_boundaries(fc_boundaries):
+    """Associate hosted elements like a window or a door in a wall"""
+    for fc_boundary in fc_boundaries:
+        if not fc_boundary.IsHosted:
+            continue
+        candidates = set(fc_boundaries).intersection(
+            fc_boundary.RelatedBuildingElement.HostElement.ProvidesBoundaries
+        )
+
+        # If there is more than 1 candidate it doesn't really matter
+        # as they share the same host element and space
+        host_element = candidates.pop()
+        fc_boundary.ParentBoundary = host_element
+        append(host_element, "InnerBoundaries", fc_boundary)
+
+
+def associate_coplanar_boundaries(fc_boundaries):
+    """ Find coplanar boundaries to identify hosted boundaries and fill gaps (2b)
+    FIXME: Apparently in ArchiCAD, doors are not coplanar.
+    Idea: Make it coplanar with other boundaries sharing the same space+wall before"""
+    for fc_boundary_1, fc_boundary_2 in itertools.combinations(fc_boundaries, 2):
+        if is_coplanar(fc_boundary_1, fc_boundary_2):
+            append(fc_boundary_1, "ShareRelatedElementWith", fc_boundary_2)
+            append(fc_boundary_2, "ShareRelatedElementWith", fc_boundary_1)
+
 
 def associate_corresponding_boundaries(group_2nd):
     # Associate CorrespondingBoundary
@@ -203,7 +283,9 @@ def associate_corresponding_boundary(fc_boundary):
         corresponding_boundary.CorrespondingBoundary = fc_boundary
     except NameError:
         # TODO: What to do with uncorrectly classified boundaries which have no corresponding boundary
-        FreeCAD.Console.PrintLog(f"Boundary {fc_boundary.GlobalId} from space {fc_boundary}")
+        FreeCAD.Console.PrintLog(
+            f"Boundary {fc_boundary.GlobalId} from space {fc_boundary}"
+        )
         return
 
 
@@ -233,56 +315,102 @@ def find_coincident(index_1, fc_boundary_1, fc_boundaries):
 
 
 def get_related_element(doc, group, ifc_entity):
+    elements = group.Group
     if not ifc_entity.RelatedBuildingElement:
         return
     guid = ifc_entity.RelatedBuildingElement.GlobalId
-    for element in group:
+    for element in elements:
         if element.GlobalId == guid:
             return element
 
 
-def get_wall_thickness(ifc_wall):
-    wall_thickness = 0
-    for association in ifc_wall.HasAssociations:
+def get_host_guid(ifc_entity):
+    return (
+        ifc_entity.FillsVoids[0]
+        .RelatingOpeningElement.VoidsElements[0]
+        .RelatingBuildingElement.GlobalId
+    )
+
+
+def get_element_by_guid(guid, elements_group):
+    for fc_element in elements_group.Group:
+        if fc_element.GlobalId == guid:
+            return fc_element
+    else:
+        FreeCAD.Console.PrintLog(f"Unable to get element by {guid}")
+
+
+def get_thickness(ifc_entity):
+    thickness = 0
+    if ifc_entity.IsDecomposedBy:
+        ifc_entity = ifc_entity.IsDecomposedBy[0].RelatedObjects[0]
+
+    for association in ifc_entity.HasAssociations:
         if not association.is_a("IfcRelAssociatesMaterial"):
             continue
-        for material_layer in association.RelatingMaterial.ForLayerSet.MaterialLayers:
-            wall_thickness += material_layer.LayerThickness
-    return wall_thickness
+        try:
+            material_layers = association.RelatingMaterial.ForLayerSet.MaterialLayers
+        except AttributeError:
+            material_layers = association.RelatingMaterial.MaterialLayers
+        for material_layer in material_layers:
+            thickness += material_layer.LayerThickness * SCALE
+    return thickness
 
 
 def create_geo_ext_boundaries(doc, group_2nd):
-    group_geo_ext = doc.copyObject(group_2nd, True)  # True = whith_dependencies
-    group_geo_ext.Label = "geoExt"
+    """Create boundaries necessary for SIA calculations"""
+    bem_group = doc.addObject("App::DocumentObjectGroup", "geoExt")
     is_from_revit = group_2nd.getParentGroup().ApplicationIdentifier == "Revit"
-    for fc_space in group_geo_ext.Group:
-        for fc_boundary in fc_space.Group:
-            wall_thickness = 200
-            if fc_boundary.InternalOrExternalBoundary != "INTERNAL":
-                lenght = wall_thickness
-                if is_from_revit:
+    is_from_archicad = group_2nd.getParentGroup().ApplicationFullName == "ARCHICAD-64"
+    for space in group_2nd.Group:
+        for boundary in space.Group:
+            if boundary.IsHosted:
+                continue
+            bem_boundary = make_bem_boundary(boundary)
+            bem_group.addObject(bem_boundary)
+            thickness = boundary.RelatedBuildingElement.Thickness.Value
+            ifc_type = boundary.RelatedBuildingElement.IfcType
+            normal = boundary.Shape.normalAt(0, 0)
+            if is_from_archicad:
+                normal = -normal
+            if boundary.InternalOrExternalBoundary != "INTERNAL":
+                lenght = thickness
+                if is_from_revit and ifc_type.startswith("IfcWall"):
                     lenght /= 2
-                fc_boundary.Placement.move(fc_boundary.Shape.normalAt(0, 0) * lenght)
+                bem_boundary.Placement.move(normal * lenght)
             else:
-                lenght = wall_thickness / 2
-                if is_from_revit:
-                    continue
-                fc_boundary.Placement.move(fc_boundary.Shape.normalAt(0, 0) * lenght)
+                type1 = {"IfcSlab"}
+                if ifc_type in type1:
+                    if normal.z > 0:
+                        lenght = thickness
+                    else:
+                        continue
+                else:
+                    if is_from_revit:
+                        continue
+                    lenght = thickness / 2
+                bem_boundary.Placement.move(normal * lenght)
 
 
 def create_geo_int_boundaries(doc, group_2nd):
-    group_geo_int = doc.copyObject(group_2nd, True)  # True = whith_dependencies
-    group_geo_int.Label = "geoInt"
+    """Create boundaries necessary for SIA calculations"""
+    bem_group = doc.addObject("App::DocumentObjectGroup", "geoInt")
     is_from_revit = group_2nd.getParentGroup().ApplicationIdentifier == "Revit"
-    for fc_space in group_geo_int.Group:
-        for fc_boundary in fc_space.Group:
-            if fc_boundary.InternalOrExternalBoundary != "INTERNAL":
-                if is_from_revit:
-                    wall_thickness = 200
-                    lenght = -wall_thickness / 2
-                    fc_boundary.Placement.move(
-                        fc_boundary.Shape.normalAt(0, 0) * lenght
-                    )
+    is_from_archicad = group_2nd.getParentGroup().ApplicationFullName == "ARCHICAD-64"
+    for fc_space in group_2nd.Group:
+        for boundary in fc_space.Group:
+            if boundary.IsHosted:
+                continue
+            normal = boundary.Shape.normalAt(0, 0)
+            if is_from_archicad:
+                normal = -normal
+
+            bem_boundary = make_bem_boundary(boundary)
+            bem_group.addObject(bem_boundary)
+            if is_from_revit:
+                thickness = boundary.RelatedBuildingElement.Thickness.Value
+                lenght = -thickness / 2
+                bem_boundary.Placement.move(normal * lenght)
 
 
 def create_fc_shape(space_boundary):
@@ -403,7 +531,7 @@ def get_color(ifc_boundary):
         "IfcDoor": (1.0, 1.0, 1.0),
     }
     if ifc_boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
-        return (0.9, 1.0, 0.9)
+        return (1.0, 0.0, 1.0)
 
     ifc_product = ifc_boundary.RelatedBuildingElement
     for product, color in product_colors.items():
@@ -506,9 +634,11 @@ class RelSpaceBoundary(Root):
         obj.addProperty("App::PropertyLink", "CorrespondingBoundary", ifc_attributes)
         obj.addProperty("App::PropertyLink", "ParentBoundary", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "InnerBoundaries", ifc_attributes)
-        obj.addProperty("App::PropertyLink", "OriginalBoundary", category_name)
+        obj.addProperty("App::PropertyLink", "ProcessedShape", category_name)
         obj.addProperty("App::PropertyLinkList", "CoincidentBoundaries", category_name)
-        obj.addProperty("App::PropertyLinkList", "CoplanarWith", category_name)
+        obj.addProperty(
+            "App::PropertyLinkList", "ShareRelatedElementWith", category_name
+        )
         obj.addProperty(
             "App::PropertyIntegerList", "CoincidentVertexIndexList", category_name
         )
@@ -523,7 +653,7 @@ class RelSpaceBoundary(Root):
         obj.Shape = create_fc_shape(ifc_entity)
         obj.Area = obj.AreaWithHosted = obj.Shape.Area
         self.set_label(obj, ifc_entity)
-        if not obj.PhysicalOrVirtualBoundary == 'VIRTUAL':
+        if not obj.PhysicalOrVirtualBoundary == "VIRTUAL":
             obj.IsHosted = bool(ifc_entity.RelatedBuildingElement.FillsVoids)
         self.coincident_boundaries = self.coincident_indexes = [None] * len(
             obj.Shape.Vertexes
@@ -551,7 +681,9 @@ class RelSpaceBoundary(Root):
                 ifc_entity.RelatedBuildingElement.Name,
             )
         except AttributeError:
-            FreeCAD.Console.PrintLog(f"{ifc_entity.GlobalId} has no RelatedBuildingElement")
+            FreeCAD.Console.PrintLog(
+                f"{ifc_entity.GlobalId} has no RelatedBuildingElement"
+            )
             return
 
 
@@ -559,7 +691,6 @@ def create_fc_object_from_entity(ifc_entity):
     """Stantard FreeCAD FeaturePython Object creation method"""
     obj_name = "Element"
     obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
-    # ViewProviderRelSpaceBoundary(obj.ViewObject)
     Element(obj, ifc_entity)
     try:
         obj.ViewObject.Proxy = 0
@@ -578,10 +709,58 @@ class Element(Root):
         self.Type = "IfcRelSpaceBoundary"
         obj.Proxy = self
         ifc_attributes = "IFC Attributes"
+        bem_category = "BEM"
         obj.addProperty("App::PropertyLinkList", "HasAssociations", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "FillsVoids", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "HasOpenings", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "ProvidesBoundaries", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "HostedElements", bem_category)
+        obj.addProperty("App::PropertyLink", "HostElement", bem_category)
+        obj.addProperty("App::PropertyLength", "Thickness", ifc_attributes)
+
+        ifc_walled_entities = {"IfcWall", "IfcSlab", "IfcRoof"}
+        for entity_class in ifc_walled_entities:
+            if ifc_entity.is_a(entity_class):
+                obj.Thickness = get_thickness(ifc_entity)
+
+
+def make_bem_boundary(boundary):
+    """Stantard FreeCAD FeaturePython Object creation method"""
+    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "BEMBoundary")
+    # ViewProviderRelSpaceBoundary(obj.ViewObject)
+    BEMBoundary(obj, boundary)
+    try:
+        obj.ViewObject.Proxy = 0
+        obj.ViewObject.ShapeColor = boundary.ViewObject.ShapeColor
+    except AttributeError:
+        FreeCAD.Console.PrintLog("No ViewObject ok if running with no Gui")
+    return obj
+
+
+class BEMBoundary:
+    def __init__(self, obj, boundary):
+        self.Type = "BEMBoundary"
+        category_name = "BEM"
+        obj.addProperty("App::PropertyLink", "SourceBoundary", category_name)
+        obj.SourceBoundary = boundary
+        obj.addProperty("App::PropertyArea", "Area", category_name)
+        obj.addProperty("App::PropertyArea", "AreaWithHosted", category_name)
+        obj.Shape = boundary.Shape.copy()
+        obj.Area = obj.Shape.Area
+        obj.AreaWithHosted = self.recompute_area_with_hosted(obj)
+        self.set_label(obj)
+    
+    @staticmethod
+    def recompute_area_with_hosted(obj):
+        """Recompute area including inner boundaries"""
+        area = obj.Area
+        for boundary in obj.SourceBoundary.InnerBoundaries:
+            area = area + boundary.Area
+        return area
+
+    @staticmethod
+    def set_label(obj):
+        obj.Label = obj.SourceBoundary.Label
 
 
 if __name__ == "__main__":
@@ -592,7 +771,7 @@ if __name__ == "__main__":
         "2Storey_2x3_A22.ifc",
         "2Storey_2x3_R19.ifc",
     ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[1])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
