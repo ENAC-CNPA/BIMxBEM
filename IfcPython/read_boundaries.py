@@ -10,6 +10,11 @@ import FreeCAD
 import FreeCADGui
 import Part
 
+from bem_xml import BEMxml
+
+WRITE_XML = True
+GUI_UP = True
+
 
 def ios_settings(brep):
     """Create ifcopenshell.geom.settings for various cases"""
@@ -50,6 +55,12 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     group.ApplicationVersion = owning_application.Version
     group.ApplicationFullName = owning_application.ApplicationFullName
 
+    # Generate projects
+    ifc_projects = ifc_file.by_type("IfcProject")
+    projects = get_or_create_group(doc, "Projects")
+    for ifc_project in ifc_projects:
+        projects.addObject(create_project_from_entity(ifc_project))
+
     # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
     ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)
     for ifc_entity in ifc_elements:
@@ -61,37 +72,33 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     # Generate boundaries
     spaces = ifc_file.by_type("IfcSpace")
     for space in spaces:
-        space_full_name = f"{space.Name} {space.LongName}"
-        space_group = group_2nd.newObject(
-            "App::DocumentObjectGroup", f"Space_{space.Name}"
-        )
-        space_group.Label = space_full_name
+        fc_space = create_space_from_entity(group_2nd, space)
 
         # All boundaries have their placement relative to space placement
         space_placement = get_placement(space)
         for ifc_boundary in (b for b in space.BoundedBy if b.Name == "2ndLevel"):
             face = make_relspaceboundary(ifc_boundary)
-            space_group.addObject(face)
+            fc_space.addObject(face)
             face.Placement = space_placement
             element = get_related_element(doc, elements_group, ifc_boundary)
             if element:
                 face.RelatedBuildingElement = element
                 append(element, "ProvidesBoundaries", face)
             # face.ParentBoundary = get_parent_boundary(doc, elements_group, ifc_boundary)
-            face.RelatingSpace = space_group
+            face.RelatingSpace = fc_space
 
     # Associate CorrespondingBoundary
     associate_corresponding_boundaries(group_2nd)
 
     # Associate hosted elements an fill gaps
-    for space_group in group_2nd.Group:
-        fc_boundaries = space_group.Group
+    for fc_space in group_2nd.Group:
+        fc_boundaries = fc_space.Group
         # Minimal number of boundary is 5: 3 vertical faces, 2 horizontal faces
         # If there is less than 5 boundaries there is an issue or a new case to analyse
         if len(fc_boundaries) == 5:
             continue
         elif len(fc_boundaries) < 5:
-            assert ValueError, f"{space_group.Label} has less than 5 boundaries"
+            assert ValueError, f"{fc_space.Label} has less than 5 boundaries"
 
         # Find coplanar boundaries to identify hosted boundaries and fill gaps (2b)
         associate_coplanar_boundaries(fc_boundaries)
@@ -121,6 +128,16 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     create_geo_int_boundaries(doc, group_2nd)
 
     doc.recompute()
+
+    if WRITE_XML:
+        bem_xml = BEMxml()
+        for project in projects.Group:
+            bem_xml.write_project(project)
+        for space in group_2nd.Group:
+            bem_xml.write_space(space)
+        for boundary in space.Group:
+            bem_xml.write_boundary(boundary)
+        bem_xml.write_to_file("/home/cyril/git/BIMxBEM/output.xml")
 
 
 def associate_host_element(ifc_file, elements_group):
@@ -366,7 +383,7 @@ def create_geo_ext_boundaries(doc, group_2nd):
         for boundary in space.Group:
             if boundary.IsHosted:
                 continue
-            bem_boundary = make_bem_boundary(boundary)
+            bem_boundary = make_bem_boundary(boundary, "geoExt")
             bem_group.addObject(bem_boundary)
             thickness = boundary.RelatedBuildingElement.Thickness.Value
             ifc_type = boundary.RelatedBuildingElement.IfcType
@@ -405,9 +422,11 @@ def create_geo_int_boundaries(doc, group_2nd):
             if is_from_archicad:
                 normal = -normal
 
-            bem_boundary = make_bem_boundary(boundary)
+            bem_boundary = make_bem_boundary(boundary, "geoInt")
             bem_group.addObject(bem_boundary)
-            if is_from_revit:
+
+            ifc_type = boundary.RelatedBuildingElement.IfcType
+            if is_from_revit and ifc_type.startswith("IfcWall"):
                 thickness = boundary.RelatedBuildingElement.Thickness.Value
                 lenght = -thickness / 2
                 bem_boundary.Placement.move(normal * lenght)
@@ -573,9 +592,11 @@ class Root:
         obj.Proxy = self
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyString", "IfcType", "IFC")
+        obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
         obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
         obj.addProperty("App::PropertyString", "Description", ifc_attributes)
 
+        obj.Id = ifc_entity.id()
         obj.GlobalId = ifc_entity.GlobalId
         obj.IfcType = ifc_entity.is_a()
         self.set_label(obj, ifc_entity)
@@ -614,7 +635,7 @@ class RelSpaceBoundary(Root):
     def __init__(self, obj, ifc_entity):
         super().__init__(obj, ifc_entity)
         obj.Proxy = self
-        category_name = "BEM"
+        bem_category = "BEM"
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyLink", "RelatingSpace", ifc_attributes)
         obj.addProperty("App::PropertyLink", "RelatedBuildingElement", ifc_attributes)
@@ -634,17 +655,19 @@ class RelSpaceBoundary(Root):
         obj.addProperty("App::PropertyLink", "CorrespondingBoundary", ifc_attributes)
         obj.addProperty("App::PropertyLink", "ParentBoundary", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "InnerBoundaries", ifc_attributes)
-        obj.addProperty("App::PropertyLink", "ProcessedShape", category_name)
-        obj.addProperty("App::PropertyLinkList", "CoincidentBoundaries", category_name)
+        obj.addProperty("App::PropertyLink", "ProcessedShape", bem_category)
+        obj.addProperty("App::PropertyLinkList", "CoincidentBoundaries", bem_category)
         obj.addProperty(
-            "App::PropertyLinkList", "ShareRelatedElementWith", category_name
+            "App::PropertyLinkList", "ShareRelatedElementWith", bem_category
         )
         obj.addProperty(
-            "App::PropertyIntegerList", "CoincidentVertexIndexList", category_name
+            "App::PropertyIntegerList", "CoincidentVertexIndexList", bem_category
         )
-        obj.addProperty("App::PropertyBool", "IsHosted", category_name)
-        obj.addProperty("App::PropertyArea", "Area", category_name)
-        obj.addProperty("App::PropertyArea", "AreaWithHosted", category_name)
+        obj.addProperty("App::PropertyBool", "IsHosted", bem_category)
+        obj.addProperty("App::PropertyArea", "Area", bem_category)
+        obj.addProperty("App::PropertyArea", "AreaWithHosted", bem_category)
+        obj.addProperty("App::PropertyLink", "geoInt", bem_category)
+        obj.addProperty("App::PropertyLink", "geoExt", bem_category)
 
         obj.ViewObject.ShapeColor = get_color(ifc_entity)
         obj.GlobalId = ifc_entity.GlobalId
@@ -724,11 +747,12 @@ class Element(Root):
                 obj.Thickness = get_thickness(ifc_entity)
 
 
-def make_bem_boundary(boundary):
+def make_bem_boundary(boundary, geo_type):
     """Stantard FreeCAD FeaturePython Object creation method"""
     obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "BEMBoundary")
     # ViewProviderRelSpaceBoundary(obj.ViewObject)
     BEMBoundary(obj, boundary)
+    setattr(boundary, geo_type, obj)
     try:
         obj.ViewObject.Proxy = 0
         obj.ViewObject.ShapeColor = boundary.ViewObject.ShapeColor
@@ -749,7 +773,7 @@ class BEMBoundary:
         obj.Area = obj.Shape.Area
         obj.AreaWithHosted = self.recompute_area_with_hosted(obj)
         self.set_label(obj)
-    
+
     @staticmethod
     def recompute_area_with_hosted(obj):
         """Recompute area including inner boundaries"""
@@ -763,6 +787,63 @@ class BEMBoundary:
         obj.Label = obj.SourceBoundary.Label
 
 
+def create_project_from_entity(ifc_entity):
+    """Stantard FreeCAD FeaturePython Object creation method"""
+    obj_name = "Project"
+    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
+    Project(obj, ifc_entity)
+    try:
+        obj.ViewObject.Proxy = 0
+    except AttributeError:
+        FreeCAD.Console.PrintLog("No ViewObject ok if running with no Gui")
+    return obj
+
+
+class Project(Root):
+    """Representation of an IfcProject:
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
+
+    def __init__(self, obj, ifc_entity):
+        super().__init__(obj, ifc_entity)
+        ifc_attributes = "IFC Attributes"
+        obj.addProperty("App::PropertyString", "LongName", ifc_attributes)
+        obj.addProperty("App::PropertyVector", "TrueNorth", ifc_attributes)
+        obj.addProperty("App::PropertyVector", "WorldCoordinateSystem", ifc_attributes)
+        obj.LongName = ifc_entity.LongName
+        obj.TrueNorth = FreeCAD.Vector(
+            *ifc_entity.RepresentationContexts[0].TrueNorth.DirectionRatios
+        )
+        obj.WorldCoordinateSystem = FreeCAD.Vector(
+            ifc_entity.RepresentationContexts[
+                0
+            ].WorldCoordinateSystem.Location.Coordinates
+        )
+
+
+def create_space_from_entity(group_2nd, ifc_entity):
+    obj = group_2nd.newObject(
+        "App::DocumentObjectGroup", f"Space_{ifc_entity.Name}"
+    )
+    ifc_attributes = "IFC Attributes"
+    obj.addProperty("App::PropertyString", "IfcType", "IFC")
+    obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
+    obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
+    obj.addProperty("App::PropertyString", "Description", ifc_attributes)
+
+    obj.Id = ifc_entity.id()
+    obj.GlobalId = ifc_entity.GlobalId
+    obj.IfcType = ifc_entity.is_a()
+
+    space_full_name = f"{ifc_entity.Name} {ifc_entity.LongName}"
+    obj.Label = space_full_name
+    try:
+        obj.Description = ifc_entity.Description
+    except TypeError:
+        pass
+
+    return obj
+
+
 if __name__ == "__main__":
     TEST_FOLDER = "/home/cyril/git/BIMxBEM/IfcTestFiles/"
     TEST_FILES = [
@@ -771,7 +852,7 @@ if __name__ == "__main__":
         "2Storey_2x3_A22.ifc",
         "2Storey_2x3_R19.ifc",
     ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[1])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[2])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
