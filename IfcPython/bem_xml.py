@@ -15,6 +15,7 @@ class BEMxml:
         self.projects = ET.SubElement(self.root, "Projects")
         self.spaces = ET.SubElement(self.root, "Spaces")
         self.boundaries = ET.SubElement(self.root, "Boundaries")
+        self.building_elements = ET.SubElement(self.root, "BuildingElements")
 
     @staticmethod
     def write_root_attrib(xml_element, fc_object):
@@ -22,6 +23,7 @@ class BEMxml:
         ET.SubElement(xml_element, "GlobalId").text = fc_object.GlobalId
         ET.SubElement(xml_element, "Name").text = fc_object.Name
         ET.SubElement(xml_element, "Description").text = fc_object.Description
+        ET.SubElement(xml_element, "IfcType").text = fc_object.IfcType
 
     def write_project(self, fc_object):
         project = ET.SubElement(self.projects, "Project")
@@ -68,6 +70,16 @@ class BEMxml:
                 geo = ET.SubElement(boundary, geo_type)
                 fc_geo = getattr(fc_object, geo_type)
                 self.write_shape(geo, fc_geo)
+
+    def write_building_elements(self, fc_object):
+        building_element = ET.SubElement(self.building_elements, "BuildingElement")
+        self.write_root_attrib(building_element, fc_object)
+        ET.SubElement(building_element, "Thickness").text = str(
+            fc_object.Thickness.Value / SCALE
+        )
+        boundaries = ET.SubElement(building_element, "ProvidesBoundaries")
+        for fc_boundary in fc_object.ProvidesBoundaries:
+            self.append_id_element(boundaries, fc_boundary, "Boundary")
 
     @staticmethod
     def write_shape(xml_element, fc_object):
