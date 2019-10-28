@@ -137,6 +137,8 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             bem_xml.write_space(space)
         for boundary in space.Group:
             bem_xml.write_boundary(boundary)
+        for building_element in elements_group.Group:
+            bem_xml.write_building_elements(building_element)
         bem_xml.write_to_file("/home/cyril/git/BIMxBEM/output.xml")
 
 
