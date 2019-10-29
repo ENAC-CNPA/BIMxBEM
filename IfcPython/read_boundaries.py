@@ -139,7 +139,8 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
             bem_xml.write_boundary(boundary)
         for building_element in elements_group.Group:
             bem_xml.write_building_elements(building_element)
-        bem_xml.write_to_file("/home/cyril/git/BIMxBEM/output.xml")
+        xml_path =  "./output.xml" if os.name == "nt" else "/home/cyril/git/BIMxBEM/output.xml"
+        bem_xml.write_to_file(xml_path)
 
 
 def associate_host_element(ifc_file, elements_group):
@@ -265,6 +266,8 @@ def append(doc_object, fc_property, value):
 
 
 def clean_corresponding_candidates(fc_boundary):
+    if fc_boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
+        return []
     other_boundaries = fc_boundary.RelatedBuildingElement.ProvidesBoundaries
     other_boundaries.remove(fc_boundary)
     return [
@@ -383,7 +386,7 @@ def create_geo_ext_boundaries(doc, group_2nd):
     is_from_archicad = group_2nd.getParentGroup().ApplicationFullName == "ARCHICAD-64"
     for space in group_2nd.Group:
         for boundary in space.Group:
-            if boundary.IsHosted:
+            if boundary.IsHosted or boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
                 continue
             bem_boundary = make_bem_boundary(boundary, "geoExt")
             bem_group.addObject(bem_boundary)
@@ -418,7 +421,7 @@ def create_geo_int_boundaries(doc, group_2nd):
     is_from_archicad = group_2nd.getParentGroup().ApplicationFullName == "ARCHICAD-64"
     for fc_space in group_2nd.Group:
         for boundary in fc_space.Group:
-            if boundary.IsHosted:
+            if boundary.IsHosted or boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
                 continue
             normal = boundary.Shape.normalAt(0, 0)
             if is_from_archicad:
@@ -847,14 +850,19 @@ def create_space_from_entity(group_2nd, ifc_entity):
 
 
 if __name__ == "__main__":
-    TEST_FOLDER = "/home/cyril/git/BIMxBEM/IfcTestFiles/"
+    if os.name == 'nt':
+        TEST_FOLDER = r"C:\git\BIMxBEM\IfcTestFiles"
+    else:
+        TEST_FOLDER = "/home/cyril/git/BIMxBEM/IfcTestFiles/"
     TEST_FILES = [
         "Triangle_2x3_A22.ifc",
         "Triangle_2x3_R19.ifc",
         "2Storey_2x3_A22.ifc",
         "2Storey_2x3_R19.ifc",
+        "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
+        "Investigation_test_R19.ifc"
     ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[2])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
