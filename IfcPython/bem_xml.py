@@ -79,8 +79,8 @@ class BEMxml:
         )
         boundaries = ET.SubElement(building_element, "ProvidesBoundaries")
         for fc_boundary in fc_object.ProvidesBoundaries:
-            self.append_id_element(boundaries, fc_boundary, "Boundary")
-
+            ET.SubElement(boundaries, "Id").text = str(fc_boundary.Id)
+            
     @staticmethod
     def write_shape(xml_element, fc_object):
         geom = ET.SubElement(xml_element, "geom")

@@ -45,3 +45,11 @@ Part.Vertex.Point -> FreeCAD.Vector
 (méthode d'enregistrement de la coincidence, performance de calcul ?)
 2. Calculer la ligne à l'intersection des plans. (Part.Plane.intersectSS)
 3. Projeter les points coincidents sur la ligne. (FreeCAD.Vector.projectToLine)
+
+Dans Revit, l'export d'un modèle en cm pose problème -> exporter en m en attendant de trouver la solution. IfcOpenShell ne sort pas les dimensions en m avec input cm ?
+Ajouter une pour annuler le traitement si il n'y a aucune IfcRelSpaceBoundary dans le fichier ou si le fichier est vide / n'existe pas
+
+Procédure / cahier des charges par application (Envoyer procédure export avec IfcRelSpaceBoundary)
+
+Medial axis
+Straight Skeleton
