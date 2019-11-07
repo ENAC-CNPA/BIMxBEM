@@ -7,13 +7,10 @@ import ifcopenshell
 import ifcopenshell.geom
 
 import FreeCAD
-import FreeCADGui
 import Part
+import FreeCADGui
 
 from bem_xml import BEMxml
-
-WRITE_XML = True
-GUI_UP = True
 
 
 def ios_settings(brep):
@@ -37,62 +34,87 @@ BREP = False
 SCALE = 1000
 
 
-def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
-    """Display IfcRelSpaceBoundaries from selected IFC file into FreeCAD documennt"""
-    # Create default groups
-    group = get_or_create_group(doc, "RelSpaceBoundary")
-    group.addProperty("App::PropertyString", "ApplicationIdentifier")
-    group.addProperty("App::PropertyString", "ApplicationVersion")
-    group.addProperty("App::PropertyString", "ApplicationFullName")
-    group_2nd = get_or_create_group(doc, "SecondLevel")
-    group.addObject(group_2nd)
-    elements_group = get_or_create_group(doc, "Elements")
+def generate_space(ifc_space, parent, doc=FreeCAD.ActiveDocument):
+    fc_space = create_space_from_entity(ifc_space)
+    parent.addObject(fc_space)
 
+    boundaries = fc_space.newObject("App::DocumentObjectGroup", "Boundaries")
+    fc_space.Boundaries = boundaries
+    second_levels = boundaries.newObject("App::DocumentObjectGroup", "SecondLevel")
+    fc_space.SecondLevel = second_levels
+
+    # All boundaries have their placement relative to space placement
+    space_placement = get_placement(ifc_space)
+    for ifc_boundary in (b for b in ifc_space.BoundedBy if b.Name == "2ndLevel"):
+        face = make_relspaceboundary(ifc_boundary)
+        second_levels.addObject(face)
+        face.Placement = space_placement
+        element = get_related_element(ifc_boundary, doc)
+        if element:
+            face.RelatedBuildingElement = element
+            append(element, "ProvidesBoundaries", face)
+        face.RelatingSpace = fc_space
+
+
+def generate_containers(ifc_parent, fc_parent, doc=FreeCAD.ActiveDocument):
+    for rel_aggregates in ifc_parent.IsDecomposedBy:
+        for element in rel_aggregates.RelatedObjects:
+            if element.is_a("IfcSpace"):
+                generate_space(element, fc_parent, doc)
+            else:
+                fc_container = create_container_from_entity(element)
+                fc_parent.addObject(fc_container)
+                generate_containers(element, fc_container, doc)
+
+
+def get_elements(doc=FreeCAD.ActiveDocument):
+    """Generator throught FreeCAD document element of specific ifc_type"""
+    for element in doc.Objects:
+        try:
+            if isinstance(element.Proxy, Element):
+                yield element
+        except AttributeError:
+            continue
+
+
+def get_elements_by_ifctype(ifc_type: str, doc=FreeCAD.ActiveDocument):
+    """Generator throught FreeCAD document element of specific ifc_type"""
+    for element in doc.Objects:
+        try:
+            if element.IfcType == ifc_type:
+                yield element
+        except AttributeError:
+            continue
+
+
+def generate_ifc_rel_space_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
+    """Display IfcRelSpaceBoundaries from selected IFC file into FreeCAD documennt"""
     ifc_file = ifcopenshell.open(ifc_path)
 
-    owning_application = ifc_file.by_type("IfcApplication")[0]
-    group.ApplicationIdentifier = owning_application.ApplicationIdentifier
-    group.ApplicationVersion = owning_application.Version
-    group.ApplicationFullName = owning_application.ApplicationFullName
-
-    # Generate projects
-    ifc_projects = ifc_file.by_type("IfcProject")
-    projects = get_or_create_group(doc, "Projects")
-    for ifc_project in ifc_projects:
-        projects.addObject(create_project_from_entity(ifc_project))
-
     # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
+    elements_group = get_or_create_group("Elements", doc)
     ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)
     for ifc_entity in ifc_elements:
         elements_group.addObject(create_fc_object_from_entity(ifc_entity))
 
+    # Generate projects structure and boundaries
+    for ifc_project in ifc_file.by_type("IfcProject"):
+        project = create_project_from_entity(ifc_project)
+        generate_containers(ifc_project, project, doc)
+
+    # Associate CorrespondingBoundary
+    associate_corresponding_boundaries(doc)
+
+    # Join over splitted boundaries
+    for space in get_elements_by_ifctype("IfcSpace", doc):
+        join_over_splitted_boundaries(space)
+
     # Associate Host / Hosted elements
     associate_host_element(ifc_file, elements_group)
 
-    # Generate boundaries
-    spaces = ifc_file.by_type("IfcSpace")
-    for space in spaces:
-        fc_space = create_space_from_entity(group_2nd, space)
-
-        # All boundaries have their placement relative to space placement
-        space_placement = get_placement(space)
-        for ifc_boundary in (b for b in space.BoundedBy if b.Name == "2ndLevel"):
-            face = make_relspaceboundary(ifc_boundary)
-            fc_space.addObject(face)
-            face.Placement = space_placement
-            element = get_related_element(doc, elements_group, ifc_boundary)
-            if element:
-                face.RelatedBuildingElement = element
-                append(element, "ProvidesBoundaries", face)
-            # face.ParentBoundary = get_parent_boundary(doc, elements_group, ifc_boundary)
-            face.RelatingSpace = fc_space
-
-    # Associate CorrespondingBoundary
-    associate_corresponding_boundaries(group_2nd)
-
     # Associate hosted elements an fill gaps
-    for fc_space in group_2nd.Group:
-        fc_boundaries = fc_space.Group
+    for fc_space in get_elements_by_ifctype("IfcSpace", doc):
+        fc_boundaries = fc_space.SecondLevel.Group
         # Minimal number of boundary is 5: 3 vertical faces, 2 horizontal faces
         # If there is less than 5 boundaries there is an issue or a new case to analyse
         if len(fc_boundaries) == 5:
@@ -106,41 +128,174 @@ def display_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
         # Associate hosted elements
         associate_inner_boundaries(fc_boundaries)
 
-        # FIXME: Fill 2b gaps
-        # fill2b(fc_boundaries)
 
-    # for space_group in group_2nd.Group:
-    # find_coincident_in_space(space_group)
-    # # Find coincident points
-    # fc_boundaries = space_group.Group
-    # for fc_boundary_1 in fc_boundaries:
-    # for i, vertex_1 in enumerate(fc_boundary_1.Shape.Vertexes):
-    # if fc_boundary_1.Proxy.coincident_boundaries[i]:
-    # continue
-    # fc_boundary_1.Proxy.coincident_boundaries[i] = find_coincident(
-    # vertex_1.Point, fc_boundary_1, space_group
-    # )
-    # fc_boundary_1.CoincidentBoundaries = (
-    # fc_boundary_1.Proxy.coincident_boundaries
-    # )
-
-    create_geo_ext_boundaries(doc, group_2nd)
-    create_geo_int_boundaries(doc, group_2nd)
+def create_geo_boundaries(doc=FreeCAD.ActiveDocument):
+    """Create SIA specific boundaries cf. https://www.sia.ch/fr/services/sia-norm/"""
+    for space in get_elements_by_ifctype("IfcSpace", doc):
+        close_space_boundaries(space)
+        find_closest_edges(space)
+    # create_geo_ext_boundaries(doc)
+    # sia_interiors = boundaries.newObject("App::DocumentObjectGroup", "SIA_Interiors")
+    # sia_exteriors = boundaries.newObject("App::DocumentObjectGroup", "SIA_Exteriors")
+    # create_geo_int_boundaries(doc)
 
     doc.recompute()
 
-    if WRITE_XML:
-        bem_xml = BEMxml()
-        for project in projects.Group:
-            bem_xml.write_project(project)
-        for space in group_2nd.Group:
-            bem_xml.write_space(space)
-            for boundary in space.Group:
-                bem_xml.write_boundary(boundary)
-        for building_element in elements_group.Group:
-            bem_xml.write_building_elements(building_element)
-        xml_path =  "./output.xml" if os.name == "nt" else "/home/cyril/git/BIMxBEM/output.xml"
-        bem_xml.write_to_file(xml_path)
+
+def write_xml(doc=FreeCAD.ActiveDocument):
+    bem_xml = BEMxml()
+    for project in get_elements_by_ifctype("IfcProject", doc):
+        bem_xml.write_project(project)
+    for space in get_elements_by_ifctype("IfcSpace", doc):
+        bem_xml.write_space(space)
+        for boundary in space.Group:
+            bem_xml.write_boundary(boundary)
+    for building_element in get_elements():
+        bem_xml.write_building_elements(building_element)
+    return bem_xml
+
+
+def output_xml_to_path(bem_xml, xml_path=None):
+    if not xml_path:
+        xml_path = (
+            "./output.xml" if os.name == "nt" else "/home/cyril/git/BIMxBEM/output.xml"
+        )
+    bem_xml.write_to_file(xml_path)
+
+
+def close_space_boundaries(space):
+    sia = space.Boundaries.newObject("App::DocumentObjectGroup", "SIA")
+
+    join_over_splitted_boundaries(space)
+    boundaries = space.SecondLevel.Group
+    for rel_boundary1 in boundaries:
+        for edge1 in rel_boundary1.Shape.OuterWire.Edges:
+            mid_point = edge1.CenterOfMass
+            for rel_boundary2 in boundaries:
+                if rel_boundary1 == rel_boundary2:
+                    continue
+                for edge2 in enumerate(rel_boundary2.Shape.OuterWire.Edges):
+                    pass
+
+
+def join_over_splitted_boundaries(space):
+    boundaries = space.SecondLevel.Group
+    if len(boundaries) < 5:
+        return
+    elements_dict = dict()
+    for rel_boundary in boundaries:
+        key = f"{rel_boundary.RelatedBuildingElement.Id}"
+        corresponding_boundary = rel_boundary.CorrespondingBoundary
+        if corresponding_boundary:
+            key += str(corresponding_boundary.Id)
+        elements_dict.setdefault(key, []).append(rel_boundary)
+    for boundary_list in elements_dict.values():
+        # Case 1 : only 1 boundary related to the same element. Cannot group boundaries.
+        if len(boundary_list) == 1:
+            continue
+        # Case 2 : more than 1 boundary related to the same element might be grouped.
+        join_boundaries(boundary_list)
+
+
+def join_boundaries(boundaries: list):
+    result_boundary = boundaries.pop()
+    result_shape = result_boundary.Shape
+    while boundaries:
+        edges1 = result_shape.OuterWire.Edges
+        for boundary2 in boundaries:
+            edges2 = boundary2.Shape.OuterWire.Edges
+            for (ei1, edge1), (ei2, edge2) in itertools.product(
+                enumerate(edges1), enumerate(edges2)
+            ):
+                if not is_collinear(edge1, edge2):
+                    continue
+                vectors1 = get_boundary_outer_vectors(result_boundary)
+                vectors2 = get_boundary_outer_vectors(boundary2)
+                v0_0, v0_1, v0_2, v0_3 = [
+                    vectors1[i % len(vectors1)] for i in range(ei1 - 1, ei1 + 3)
+                ]
+                v1_0, v1_1, v1_2, v1_3 = [
+                    vectors1[i % len(vectors2)] for i in range(ei2 - 1, ei2 + 3)
+                ]
+                tolerance = 1  # mm
+                if v0_1.isEqual(v1_1, tolerance):
+                    pass
+                elif v0_1.isEqual(v1_2, tolerance):
+                    pass
+
+
+
+def get_boundary_outer_vectors(boundary):
+    return [vx.Point for vx in boundary.Shape.OuterWire.Vertexes]
+
+
+def is_collinear(edge1, edge2):
+    v0_0, v0_1 = (vx.Point for vx in edge1.Vertexes)
+    v1_0, v1_1 = (vx.Point for vx in edge2.Vertexes)
+    if is_collinear_or_parallel(v0_0, v0_1, v1_0, v1_1):
+        return v0_0 == v1_0 or is_collinear_or_parallel(v0_0, v0_1, v0_0, v1_0)
+
+
+def is_collinear_or_parallel(v0_0, v0_1, v1_0, v1_1):
+    return abs(direction(v0_0, v0_1).dot(direction(v1_0, v1_1))) > 0.9999
+
+
+def direction(v0, v1):
+    return (v0 - v1).normalize()
+
+
+def find_closest_edges(space):
+    boundaries = [b for b in space.SecondLevel.Group if not b.IsHosted]
+    closest_dict = dict()
+    for i, boundary in enumerate(boundaries):
+        n = len(boundary.Shape.OuterWire.Edges)
+        closest_dict[i] = {
+            "boundaries": [-1] * n,
+            "edges": [-1] * n,
+            "distances": [10000] * n,
+        }
+    for (bi1, boundary1), (bi2, boundary2) in itertools.combinations(
+        enumerate(boundaries), 2
+    ):
+        distances1 = closest_dict[bi1]["distances"]
+        distances2 = closest_dict[bi2]["distances"]
+        edges1 = boundary1.Shape.OuterWire.Edges
+        edges2 = boundary2.Shape.OuterWire.Edges
+        for (ei1, edge1), (ei2, edge2) in itertools.product(
+            enumerate(edges1), enumerate(edges2)
+        ):
+            if not is_low_angle(edge1, edge2):
+                continue
+            distance = distances1[ei1]
+            edge_to_edge = compute_distance(edge1, edge2)
+            if edge_to_edge < distance:
+                closest_dict[bi1]["boundaries"][ei1] = bi2
+                closest_dict[bi1]["edges"][ei1] = ei2
+                distances1[ei1] = round(edge_to_edge)
+
+            distance = distances2[ei2]
+            edge_to_edge = compute_distance(edge2, edge1)
+            if edge_to_edge < distance:
+                closest_dict[bi2]["boundaries"][ei2] = bi1
+                closest_dict[bi2]["edges"][ei2] = ei1
+                distances2[ei2] = round(edge_to_edge)
+
+    for i, boundary in enumerate(boundaries):
+        boundary.ClosestBoundaries = closest_dict[i]["boundaries"]
+        boundary.ClosestEdges = closest_dict[i]["edges"]
+        boundary.ClosestDistance = closest_dict[i]["distances"]
+
+
+def compute_distance(edge1, edge2):
+    mid_point = edge1.CenterOfMass
+    line_segment = (v.Point for v in edge2.Vertexes)
+    return mid_point.distanceToLineSegment(*line_segment).Length
+
+
+def is_low_angle(edge1, edge2):
+    dir1 = (edge1.Vertexes[1].Point - edge1.Vertexes[0].Point).normalize()
+    dir2 = (edge2.Vertexes[1].Point - edge2.Vertexes[0].Point).normalize()
+    return abs(dir1.dot(dir2)) > 0.5  # Low angle considered as < 30°. cos(pi/3)=0.5.
 
 
 def associate_host_element(ifc_file, elements_group):
@@ -238,11 +393,10 @@ def associate_coplanar_boundaries(fc_boundaries):
             append(fc_boundary_2, "ShareRelatedElementWith", fc_boundary_1)
 
 
-def associate_corresponding_boundaries(group_2nd):
+def associate_corresponding_boundaries(doc=FreeCAD.ActiveDocument):
     # Associate CorrespondingBoundary
-    for space_group in group_2nd.Group:
-        for fc_boundary in space_group.Group:
-            associate_corresponding_boundary(fc_boundary)
+    for fc_boundary in get_elements_by_ifctype("IfcRelSpaceBoundary", doc):
+        associate_corresponding_boundary(fc_boundary)
 
 
 def is_coplanar(shape_1, shape_2):
@@ -311,39 +465,16 @@ def associate_corresponding_boundary(fc_boundary):
         return
 
 
-def find_coincident_in_space(space_group):
-    fc_boundaries = space_group.Group
-    for fc_boundary_1 in fc_boundaries:
-        for i, vertex_1 in enumerate(fc_boundary_1.Shape.Vertexes):
-            coincident_boundary = find_coincident(i, fc_boundary_1, fc_boundaries)
-            fc_boundary_1.CoincidentBoundaries = coincident_boundary["boundary"]
-            py_proxy.coincident_indexes[i] = coincident_boundary["index"]
-        fc_boundary_1.CoincidentBoundaries = py_proxy.coincident_boundaries
-        fc_boundary_1.CoincidentVertexIndexList = py_proxy.coincident_indexes
-
-
-def find_coincident(index_1, fc_boundary_1, fc_boundaries):
-    point1 = fc_boundary_1.Shape.Vertexes[index_1].Point
-    for fc_boundary_2 in (b for b in fc_boundaries if b != fc_boundary_1):
-        for j, vertex_2 in enumerate(fc_boundary_2.Shape.Vertexes):
-            py_proxy = fc_boundary_2.Proxy
-            # Consider vector.isEqual(vertex.Point) if precision issue
-            if point1.isEqual(vertex_2.Point, 1):
-                py_proxy.coincident_boundaries[j] = fc_boundary_1
-                py_proxy.coincident_indexes[j] = index_1
-                return {"boundary": fc_boundary_2, "index": j}
-    else:
-        raise LookupError
-
-
-def get_related_element(doc, group, ifc_entity):
-    elements = group.Group
+def get_related_element(ifc_entity, doc=FreeCAD.ActiveDocument):
     if not ifc_entity.RelatedBuildingElement:
         return
     guid = ifc_entity.RelatedBuildingElement.GlobalId
-    for element in elements:
-        if element.GlobalId == guid:
-            return element
+    for element in doc.Objects:
+        try:
+            if element.GlobalId == guid:
+                return element
+        except AttributeError:
+            continue
 
 
 def get_host_guid(ifc_entity):
@@ -384,39 +515,38 @@ def get_thickness(ifc_entity):
     return thickness
 
 
-def create_geo_ext_boundaries(doc, group_2nd):
+def create_geo_ext_boundaries(doc=FreeCAD.ActiveDocument):
     """Create boundaries necessary for SIA calculations"""
-    bem_group = doc.addObject("App::DocumentObjectGroup", "geoExt")
-    is_from_revit = group_2nd.getParentGroup().ApplicationIdentifier == "Revit"
-    is_from_archicad = group_2nd.getParentGroup().ApplicationFullName == "ARCHICAD-64"
-    for space in group_2nd.Group:
-        for boundary in space.Group:
-            if boundary.IsHosted or boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
-                continue
-            bem_boundary = make_bem_boundary(boundary, "geoExt")
-            bem_group.addObject(bem_boundary)
-            thickness = boundary.RelatedBuildingElement.Thickness.Value
-            ifc_type = boundary.RelatedBuildingElement.IfcType
-            normal = boundary.Shape.normalAt(0, 0)
-            if is_from_archicad:
-                normal = -normal
-            if boundary.InternalOrExternalBoundary != "INTERNAL":
-                lenght = thickness
-                if is_from_revit and ifc_type.startswith("IfcWall"):
-                    lenght /= 2
-                bem_boundary.Placement.move(normal * lenght)
-            else:
-                type1 = {"IfcSlab"}
-                if ifc_type in type1:
-                    if normal.z > 0:
-                        lenght = thickness
-                    else:
-                        continue
+    project = next(get_elements_by_ifctype("IfcProject"), doc)
+    is_from_revit = project.ApplicationIdentifier == "Revit"
+    is_from_archicad = project.ApplicationFullName == "ARCHICAD-64"
+    for boundary in get_elements_by_ifctype("IfcRelSpaceBoundary", doc):
+        if boundary.IsHosted or boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
+            continue
+        bem_boundary = make_bem_boundary(boundary, "geoExt")
+        boundary.addObject(bem_boundary)
+        thickness = boundary.RelatedBuildingElement.Thickness.Value
+        ifc_type = boundary.RelatedBuildingElement.IfcType
+        normal = boundary.Shape.normalAt(0, 0)
+        if is_from_archicad:
+            normal = -normal
+        if boundary.InternalOrExternalBoundary != "INTERNAL":
+            lenght = thickness
+            if is_from_revit and ifc_type.startswith("IfcWall"):
+                lenght /= 2
+            bem_boundary.Placement.move(normal * lenght)
+        else:
+            type1 = {"IfcSlab"}
+            if ifc_type in type1:
+                if normal.z > 0:
+                    lenght = thickness
                 else:
-                    if is_from_revit:
-                        continue
-                    lenght = thickness / 2
-                bem_boundary.Placement.move(normal * lenght)
+                    continue
+            else:
+                if is_from_revit:
+                    continue
+                lenght = thickness / 2
+            bem_boundary.Placement.move(normal * lenght)
 
 
 def create_geo_int_boundaries(doc, group_2nd):
@@ -572,7 +702,7 @@ def get_color(ifc_boundary):
         return (0.0, 0.0, 0.0)
 
 
-def get_or_create_group(doc, name):
+def get_or_create_group(name, doc=FreeCAD.ActiveDocument):
     """Get group by name or create one if not found"""
     group = doc.findObjects("App::DocumentObjectGroup", name)
     if group:
@@ -600,6 +730,8 @@ class Root:
     def __init__(self, obj, ifc_entity):
         self.Type = self.__class__.__name__
         obj.Proxy = self
+        obj.addExtension("App::GroupExtensionPython", self)
+
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyString", "IfcType", "IFC")
         obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
@@ -638,6 +770,12 @@ class Root:
         return obj
 
 
+class ViewProviderRoot:
+    def __init__(self, vobj):
+        vobj.Proxy = self
+        vobj.addExtension("Gui::ViewProviderGroupExtensionPython", self)
+
+
 class RelSpaceBoundary(Root):
     """Wrapping IFC entity : 
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcrelspaceboundary2ndlevel.htm"""
@@ -666,12 +804,12 @@ class RelSpaceBoundary(Root):
         obj.addProperty("App::PropertyLink", "ParentBoundary", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "InnerBoundaries", ifc_attributes)
         obj.addProperty("App::PropertyLink", "ProcessedShape", bem_category)
-        obj.addProperty("App::PropertyLinkList", "CoincidentBoundaries", bem_category)
+        obj.addProperty("App::PropertyIntegerList", "ClosestBoundaries", bem_category)
+        obj.addProperty("App::PropertyIntegerList", "ClosestEdges", bem_category)
+        obj.addProperty("App::PropertyIntegerList", "ClosestDistance", bem_category)
+        obj.addProperty("App::PropertyBoolList", "ClosestHasSameNormal", bem_category)
         obj.addProperty(
             "App::PropertyLinkList", "ShareRelatedElementWith", bem_category
-        )
-        obj.addProperty(
-            "App::PropertyIntegerList", "CoincidentVertexIndexList", bem_category
         )
         obj.addProperty("App::PropertyBool", "IsHosted", bem_category)
         obj.addProperty("App::PropertyArea", "Area", bem_category)
@@ -688,9 +826,6 @@ class RelSpaceBoundary(Root):
         self.set_label(obj, ifc_entity)
         if not obj.PhysicalOrVirtualBoundary == "VIRTUAL":
             obj.IsHosted = bool(ifc_entity.RelatedBuildingElement.FillsVoids)
-        self.coincident_boundaries = self.coincident_indexes = [None] * len(
-            obj.Shape.Vertexes
-        )
         self.coplanar_with = []
 
     def onChanged(self, obj, prop):
@@ -797,15 +932,36 @@ class BEMBoundary:
         obj.Label = obj.SourceBoundary.Label
 
 
+def create_container_from_entity(ifc_entity):
+    """Stantard FreeCAD FeaturePython Object creation method"""
+    obj_name = "Project"
+    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
+    Container(obj, ifc_entity)
+    if FreeCAD.GuiUp:
+        obj.ViewObject.Proxy = ViewProviderRoot(obj.ViewObject)
+    return obj
+
+
+class Container(Root):
+    """Representation of an IfcProject:
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
+
+    def __init__(self, obj, ifc_entity):
+        super().__init__(obj, ifc_entity)
+        self.ifc_entity = ifc_entity
+        self.setProperties(obj)
+
+    def setProperties(self, obj):
+        return
+
+
 def create_project_from_entity(ifc_entity):
     """Stantard FreeCAD FeaturePython Object creation method"""
     obj_name = "Project"
     obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
     Project(obj, ifc_entity)
-    try:
-        obj.ViewObject.Proxy = 0
-    except AttributeError:
-        FreeCAD.Console.PrintLog("No ViewObject ok if running with no Gui")
+    if FreeCAD.GuiUp:
+        obj.ViewObject.Proxy = ViewProviderRoot(obj.ViewObject)
     return obj
 
 
@@ -815,6 +971,11 @@ class Project(Root):
 
     def __init__(self, obj, ifc_entity):
         super().__init__(obj, ifc_entity)
+        self.ifc_entity = ifc_entity
+        self.setProperties(obj)
+
+    def setProperties(self, obj):
+        ifc_entity = self.ifc_entity
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyString", "LongName", ifc_attributes)
         obj.addProperty("App::PropertyVector", "TrueNorth", ifc_attributes)
@@ -829,33 +990,60 @@ class Project(Root):
             ].WorldCoordinateSystem.Location.Coordinates
         )
 
+        owning_application = "OwningApplication"
+        obj.addProperty(
+            "App::PropertyString", "ApplicationIdentifier", owning_application
+        )
+        obj.addProperty("App::PropertyString", "ApplicationVersion", owning_application)
+        obj.addProperty(
+            "App::PropertyString", "ApplicationFullName", owning_application
+        )
+        owning_application = ifc_entity.OwnerHistory.OwningApplication
+        obj.ApplicationIdentifier = owning_application.ApplicationIdentifier
+        obj.ApplicationVersion = owning_application.Version
+        obj.ApplicationFullName = owning_application.ApplicationFullName
 
-def create_space_from_entity(group_2nd, ifc_entity):
-    obj = group_2nd.newObject(
-        "App::DocumentObjectGroup", f"Space_{ifc_entity.Name}"
-    )
-    ifc_attributes = "IFC Attributes"
-    obj.addProperty("App::PropertyString", "IfcType", "IFC")
-    obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
-    obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
-    obj.addProperty("App::PropertyString", "Description", ifc_attributes)
 
-    obj.Id = ifc_entity.id()
-    obj.GlobalId = ifc_entity.GlobalId
-    obj.IfcType = ifc_entity.is_a()
-
-    space_full_name = f"{ifc_entity.Name} {ifc_entity.LongName}"
-    obj.Label = space_full_name
-    try:
-        obj.Description = ifc_entity.Description
-    except TypeError:
-        pass
-
+def create_space_from_entity(ifc_entity):
+    """Stantard FreeCAD FeaturePython Object creation method"""
+    obj_name = "Space"
+    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
+    Space(obj, ifc_entity)
+    if FreeCAD.GuiUp:
+        obj.ViewObject.Proxy = ViewProviderRoot(obj.ViewObject)
     return obj
 
 
+class Space(Root):
+    """Representation of an IfcProject:
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
+
+    def __init__(self, obj, ifc_entity):
+        super().__init__(obj, ifc_entity)
+        self.ifc_entity = ifc_entity
+        self.setProperties(obj)
+
+    def setProperties(self, obj):
+        ifc_entity = self.ifc_entity
+        category_name = "Boundaries"
+        obj.addProperty("App::PropertyLink", "Boundaries", category_name)
+        obj.addProperty("App::PropertyLink", "SecondLevel", category_name)
+        obj.addProperty("App::PropertyLink", "SIA", category_name)
+        obj.addProperty("App::PropertyLink", "SIA_Interiors", category_name)
+        obj.addProperty("App::PropertyLink", "SIA_Exteriors", category_name)
+
+        space_full_name = f"{ifc_entity.Name} {ifc_entity.LongName}"
+        obj.Label = space_full_name
+        try:
+            obj.Description = ifc_entity.Description
+        except TypeError:
+            pass
+
+        return obj
+
+
 if __name__ == "__main__":
-    if os.name == 'nt':
+    if os.name == "nt":
         TEST_FOLDER = r"C:\git\BIMxBEM\IfcTestFiles"
     else:
         TEST_FOLDER = "/home/cyril/git/BIMxBEM/IfcTestFiles/"
@@ -865,9 +1053,9 @@ if __name__ == "__main__":
         "2Storey_2x3_A22.ifc",
         "2Storey_2x3_R19.ifc",
         "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
-        "Investigation_test_R19.ifc"
+        "Investigation_test_R19.ifc",
     ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[2])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
@@ -885,13 +1073,10 @@ if __name__ == "__main__":
         FreeCADGui.showMainWindow()
         DOC = FreeCAD.newDocument()
 
-        display_boundaries(ifc_path=IFC_PATH, doc=DOC)
+        generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
+        create_geo_boundaries(DOC)
 
         FreeCADGui.activeView().viewIsometric()
         FreeCADGui.SendMsgToActiveView("ViewFit")
 
         FreeCADGui.exec_loop()
-
-
-class box:
-    pass

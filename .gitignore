@@ -35,9 +35,6 @@ $RECYCLE.BIN/
 cmake-build-debug/
 cmake-build-release/
 
-# Mongo Explorer plugin
-.idea/**/mongoSettings.xml
-
 # File-based project format
 *.iws
 
@@ -49,9 +46,6 @@ out/
 
 # JIRA plugin
 atlassian-ide-plugin.xml
-
-# Cursive Clojure plugin
-.idea/replstate.xml
 
 # Crashlytics plugin (for Android Studio and IntelliJ)
 com_crashlytics_export_strings.xml
@@ -169,9 +163,6 @@ venv.bak/
 
 # pyCharm settings
 _windows
-
-# dbnavigator settings
-dbnavigator.xml
 
 *.VC.opendb
 *.pdb
