@@ -53,3 +53,9 @@ Procédure / cahier des charges par application (Envoyer procédure export avec 
 
 Medial axis
 Straight Skeleton
+
+Centre entre 2 droites :
+* Parallèles : droite parallèle à interdistance
+* Non parallèles : Origine -> Intersection des droites. Direction -> ???
+
+# TODO : Génerer un modèle test avec surfaces surdécoupées
