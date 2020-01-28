@@ -25,6 +25,7 @@ def ios_settings(brep):
 
 BREP_SETTINGS = ios_settings(brep=True)
 MESH_SETTINGS = ios_settings(brep=False)
+TOLERANCE = 0.001
 
 """With IfcOpenShell 0.6.0a1 recreating face from wires seems to give more consistant results.
 Especially when inner boundaries touch outer boundary"""
@@ -190,39 +191,118 @@ def join_over_splitted_boundaries(space):
             key += str(corresponding_boundary.Id)
         elements_dict.setdefault(key, []).append(rel_boundary)
     for boundary_list in elements_dict.values():
-        # Case 1 : only 1 boundary related to the same element. Cannot group boundaries.
-        if len(boundary_list) == 1:
-            continue
-        # Case 2 : more than 1 boundary related to the same element might be grouped.
-        join_boundaries(boundary_list)
+        # None coplanar boundaries should not be connected.
+        # eg. round wall splitted with multiple orientations.
+        coplanar_boundaries = list()
+        for boundary in boundary_list:
+            for coplanar_list in coplanar_boundaries:
+                # TODO: Test if this test is not too strict considering precision
+                if is_coplanar(boundary, coplanar_list[0]):
+                    coplanar_list.append(boundary)
+                else:
+                    coplanar_boundaries.append([boundary])
+
+        for coplanar_list in coplanar_boundaries:
+            # Case 1 : only 1 boundary related to the same element. Cannot group boundaries.
+            if len(coplanar_list) == 1:
+                continue
+            # Case 2 : more than 1 boundary related to the same element might be grouped.
+            join_boundaries(coplanar_list)
 
 
-def join_boundaries(boundaries: list):
+def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
+    """Try to join coplanar boundaries"""
     result_boundary = boundaries.pop()
-    result_shape = result_boundary.Shape
+    inner_wires = get_inner_wires(result_boundary)[:]
+    vectors1 = get_boundary_outer_vectors(result_boundary)
     while boundaries:
-        edges1 = result_shape.OuterWire.Edges
         for boundary2 in boundaries:
-            edges2 = boundary2.Shape.OuterWire.Edges
-            for (ei1, edge1), (ei2, edge2) in itertools.product(
-                enumerate(edges1), enumerate(edges2)
+            vectors2 = get_boundary_outer_vectors(boundary2)
+            for ei1, ei2 in itertools.product(
+                range(len(vectors1)), range(len(vectors2))
             ):
-                if not is_collinear(edge1, edge2):
-                    continue
-                vectors1 = get_boundary_outer_vectors(result_boundary)
-                vectors2 = get_boundary_outer_vectors(boundary2)
-                v0_0, v0_1, v0_2, v0_3 = [
-                    vectors1[i % len(vectors1)] for i in range(ei1 - 1, ei1 + 3)
-                ]
-                v1_0, v1_1, v1_2, v1_3 = [
-                    vectors1[i % len(vectors2)] for i in range(ei2 - 1, ei2 + 3)
-                ]
-                tolerance = 1  # mm
-                if v0_1.isEqual(v1_1, tolerance):
-                    pass
-                elif v0_1.isEqual(v1_2, tolerance):
-                    pass
 
+                # retrieves points from previous edge to next edge included.
+                p0_1, p0_2 = (vectors1[ei1], vectors1[(ei1 + 1) % len(vectors1)])
+                p1_1, p1_2 = (vectors2[ei2], vectors2[(ei2 + 1) % len(vectors2)])
+
+                v0_12 = p0_2 - p0_1
+                v1_12 = p1_2 - p1_1
+
+                dir0 = (v0_12).normalize()
+                dir1 = (v1_12).normalize()
+
+                # if edge1 and edge2 are not collinear no junction is possible.
+                if not (
+                    (dir0.isEqual(dir1, TOLERANCE) or dir0.isEqual(-dir1, TOLERANCE))
+                    and v0_12.cross(p1_1 - p0_1) < TOLERANCE
+                ):
+                    continue
+
+                # Check in which order vectors1 and vectors2 should be connected
+                if dir0.isEqual(dir1, TOLERANCE):
+                    p0_1_next_point = p1_2
+                    reverse_new_points = True
+                else:
+                    p0_1_next_point = p1_1
+                    reverse_new_points = False
+
+                # Check if edge1 and edge2 have a common segment
+                if not dir0.dot(p0_1_next_point - p0_1) < dir0.dot(p0_2 - p0_1):
+                    continue
+
+                # join vectors1 and vectors2 at indexes
+                new_points = vectors2[ei2 + 1 :] + vectors2[: ei2 + 1]
+                if reverse_new_points:
+                    new_points.reverse()
+
+                # Efficient way to insert elements at index : https://stackoverflow.com/questions/14895599/insert-an-element-at-specific-index-in-a-list-and-return-updated-list/48139870#48139870
+                vectors1[ei1 + 1 : ei1 + 1] = new_points
+
+                clean_vectors(vectors1)
+                inner_wires.extend(get_inner_wires(boundary2))
+                boundaries.remove(boundary2)
+                doc.removeObject(boundary2.Name)
+
+    # Replace existing shape with joined shapes
+    close_vectors(vectors1)
+    wires = [Part.makePolygon(vectors1)] + inner_wires
+    result_boundary.Shape = Part.makeFace(wires, "Part::FaceMakerBullseye")
+
+
+def clean_vectors(vectors):
+    """Clean vectors for polygons creation
+    Keep only 1 point if 2 consecutive points are equal.
+    Remove point if it makes border go back and forth"""
+    count = len(vectors)
+    i = 0
+    while count:
+        count -= 1
+        p1 = vectors[i - 1]
+        p2 = vectors[i]
+        p3 = vectors[(i + 1) % len(vectors)]
+        if p2 == p3 or are_3points_collinear(p1, p2, p3):
+            vectors.remove(p2)
+            continue
+        i += 1
+
+
+def get_inner_wires(boundary):
+    return boundary.Shape.Wires[1:]
+
+
+def close_vectors(vectors):
+    vectors.append(vectors[0])
+
+
+def vectors_dir(p1, p2) -> FreeCAD.Vector:
+    return (p2 - p1).normalize()
+
+
+def are_3points_collinear(p1, p2, p3) -> bool:
+    dir1 = vectors_dir(p1, p2)
+    dir2 = vectors_dir(p2, p3)
+    return dir1.isEqual(dir2, TOLERANCE) or dir1.isEqual(-dir2, TOLERANCE)
 
 
 def get_boundary_outer_vectors(boundary):
