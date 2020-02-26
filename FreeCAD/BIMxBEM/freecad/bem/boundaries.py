@@ -127,12 +127,12 @@ def generate_ifc_rel_space_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
         associate_inner_boundaries(fc_boundaries)
 
 
-def create_geo_boundaries(doc=FreeCAD.ActiveDocument):
+def create_sia_boundaries(doc=FreeCAD.ActiveDocument):
     """Create SIA specific boundaries cf. https://www.sia.ch/fr/services/sia-norm/"""
     for space in get_elements_by_ifctype("IfcSpace", doc):
         close_space_boundaries(space)
         find_closest_edges(space)
-    create_geo_ext_boundaries(doc)
+    create_sia_ext_boundaries(doc)
     # sia_interiors = boundaries.newObject("App::DocumentObjectGroup", "SIA_Interiors")
     # create_geo_int_boundaries(doc)
 
@@ -591,78 +591,89 @@ def get_thickness(ifc_entity):
     return thickness
 
 
-def create_geo_ext_boundaries(doc=FreeCAD.ActiveDocument):
+def create_sia_ext_boundaries(doc=FreeCAD.ActiveDocument):
     """Create boundaries necessary for SIA calculations"""
     project = next(get_elements_by_ifctype("IfcProject", doc))
     is_from_revit = project.ApplicationIdentifier == "Revit"
     is_from_archicad = project.ApplicationFullName == "ARCHICAD-64"
     for space in get_elements_by_ifctype("IfcSpace", doc):
-        sia_exteriors = space.Boundaries.newObject(
-            "App::DocumentObjectGroup", "SIA_Exteriors"
-        )
-        space.SIA_Exteriors = sia_exteriors
-        for boundary1 in space.SecondLevel.Group:
-            if boundary1.IsHosted or boundary1.PhysicalOrVirtualBoundary == "VIRTUAL":
-                continue
-            bem_boundary = make_bem_boundary(boundary1, "geoExt")
-            sia_exteriors.addObject(bem_boundary)
-            thickness = boundary1.RelatedBuildingElement.Thickness.Value
-            ifc_type = boundary1.RelatedBuildingElement.IfcType
-            normal = boundary1.Shape.normalAt(0, 0)
-            if is_from_archicad:
-                normal = -normal
-            if boundary1.InternalOrExternalBoundary != "INTERNAL":
-                lenght = thickness
-                if is_from_revit and ifc_type.startswith("IfcWall"):
-                    lenght /= 2
-                bem_boundary.Placement.move(normal * lenght)
-            else:
-                type1 = {"IfcSlab"}
-                if ifc_type in type1:
-                    if normal.z > 0:
-                        lenght = thickness
-                    else:
-                        continue
-                else:
-                    if is_from_revit:
-                        continue
-                    lenght = thickness / 2
-                bem_boundary.Placement.move(normal * lenght)
-        for boundary1 in space.SIA_Exteriors.Group:
-            lines = []
-            base_boundary = boundary1.SourceBoundary
-            if base_boundary.IsHosted or base_boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
-                continue
-            for bi2, (ei1, ei2) in zip(
-                base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges)
-            ):
-                boundary2 = space.SIA_Exteriors.Group[bi2]
-                base_plane = get_plane(boundary1)
-                # Case 1 : boundaries are not parallel
-                plane_intersect = base_plane.intersect(get_plane(boundary2))
-                if plane_intersect:
-                    lines.append(plane_intersect[0])
-                    continue
-                # Case 2 : boundaries are parallel
-                line1 = line_from_edge(boundary1.Shape.OuterWire.Edges[ei1])
-                line2 = line_from_edge(boundary2.Shape.OuterWire.Edges[ei2])
-                # Case 2a : edges are not parallel
-                line_intersect = line1.intersect2d(line2, base_plane)
-                if line_intersect:
-                    point1 = line_intersect[0]
-                    if line1.Direction.dot(line2.Direction)> 0:
-                        point2 = point1 + line1.Direction + line2.Direction
-                    else:
-                        point2 = point1 + line1.Direction - line2.Direction
-                # Case 2b : edges are parallel
-                else:
-                    point1 = (line1.Location + line2.Location) * 0.5
-                    point2 = point1 + line1.Direction
+        displace_boundaries(space, is_from_revit, is_from_archicad)
+        rejoin_boundaries(space)
 
-                lines.append(Part.Line(point1, point2))
-            # Generate new shape
-            wires = [polygon_from_lines(lines)] + get_inner_wires(boundary1)
-            boundary1.Shape = Part.makeFace(wires, "Part::FaceMakerBullseye")
+
+def rejoin_boundaries(space):
+    for boundary1 in space.SIA_Exteriors.Group:
+        lines = []
+        base_boundary = boundary1.SourceBoundary
+        if (
+            base_boundary.IsHosted
+            or base_boundary.PhysicalOrVirtualBoundary == "VIRTUAL"
+        ):
+            continue
+        for bi2, (ei1, ei2) in zip(
+            base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges)
+        ):
+            boundary2 = space.SIA_Exteriors.Group[bi2]
+            base_plane = get_plane(boundary1)
+            # Case 1 : boundaries are not parallel
+            plane_intersect = base_plane.intersect(get_plane(boundary2))
+            if plane_intersect:
+                lines.append(plane_intersect[0])
+                continue
+            # Case 2 : boundaries are parallel
+            line1 = line_from_edge(boundary1.Shape.OuterWire.Edges[ei1])
+            line2 = line_from_edge(boundary2.Shape.OuterWire.Edges[ei2])
+            # Case 2a : edges are not parallel
+            line_intersect = line1.intersect2d(line2, base_plane)
+            if line_intersect:
+                point1 = line_intersect[0]
+                if line1.Direction.dot(line2.Direction) > 0:
+                    point2 = point1 + line1.Direction + line2.Direction
+                else:
+                    point2 = point1 + line1.Direction - line2.Direction
+            # Case 2b : edges are parallel
+            else:
+                point1 = (line1.Location + line2.Location) * 0.5
+                point2 = point1 + line1.Direction
+
+            lines.append(Part.Line(point1, point2))
+        # Generate new shape
+        wires = [polygon_from_lines(lines)] + get_inner_wires(boundary1)
+        boundary1.Shape = Part.makeFace(wires, "Part::FaceMakerBullseye")
+
+
+def displace_boundaries(space, is_from_revit, is_from_archicad):
+    sia_exteriors = space.Boundaries.newObject(
+        "App::DocumentObjectGroup", "SIA_Exteriors"
+    )
+    space.SIA_Exteriors = sia_exteriors
+    for boundary1 in space.SecondLevel.Group:
+        if boundary1.IsHosted or boundary1.PhysicalOrVirtualBoundary == "VIRTUAL":
+            continue
+        bem_boundary = make_bem_boundary(boundary1, "geoExt")
+        sia_exteriors.addObject(bem_boundary)
+        thickness = boundary1.RelatedBuildingElement.Thickness.Value
+        ifc_type = boundary1.RelatedBuildingElement.IfcType
+        normal = boundary1.Shape.normalAt(0, 0)
+        if is_from_archicad:
+            normal = -normal
+        if boundary1.InternalOrExternalBoundary != "INTERNAL":
+            lenght = thickness
+            if is_from_revit and ifc_type.startswith("IfcWall"):
+                lenght /= 2
+            bem_boundary.Placement.move(normal * lenght)
+        else:
+            type1 = {"IfcSlab"}
+            if ifc_type in type1:
+                if normal.z > 0:
+                    lenght = thickness
+                else:
+                    continue
+            else:
+                if is_from_revit:
+                    continue
+                lenght = thickness / 2
+            bem_boundary.Placement.move(normal * lenght)
 
 
 def line_from_edge(edge: Part.Edge) -> Part.Line:
@@ -1202,7 +1213,7 @@ if __name__ == "__main__":
         DOC = FreeCAD.newDocument()
 
         generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
-        create_geo_boundaries(DOC)
+        create_sia_boundaries(DOC)
 
         FreeCADGui.activeView().viewIsometric()
         FreeCADGui.SendMsgToActiveView("ViewFit")
