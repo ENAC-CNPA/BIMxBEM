@@ -15,7 +15,7 @@ class BIMxBEM(Gui.Workbench):
     MenuText = "BIMxBEM"
     ToolTip = "a simple template workbench"
     Icon = os.path.join(ICONPATH, "template_resource.svg")
-    toolbox = ["Import", "Generate"]
+    toolbox = ["Import", "Generate SIA", "DisplaySIAInt", "DisplaySIAExt", "DisplayAll"]
 
     def GetClassName(self):
         return "Gui::PythonWorkbench"
@@ -32,7 +32,10 @@ class BIMxBEM(Gui.Workbench):
         self.appendToolbar("Tools", self.toolbox)
         self.appendMenu("Tools", self.toolbox)
         Gui.addCommand("Import", commands.ImportRelSpaceBoundary())
-        Gui.addCommand("Generate", commands.GenerateBemBoundaries())
+        Gui.addCommand("Generate SIA", commands.GenerateBemBoundaries())
+        Gui.addCommand("DisplaySIAInt", commands.DisplaySIAInt())
+        Gui.addCommand("DisplaySIAExt", commands.DisplaySIAExt())
+        Gui.addCommand("DisplayAll", commands.DisplayAll())
 
     def reload(self):
         from importlib import reload
@@ -43,7 +46,7 @@ class BIMxBEM(Gui.Workbench):
         self.appendToolbar("Tools", self.toolbox)
         self.appendMenu("Tools", self.toolbox)
         Gui.addCommand("Import", commands.ImportRelSpaceBoundary())
-        Gui.addCommand("Generate", commands.GenerateBemBoundaries())
+        Gui.addCommand("Generate SIA", commands.GenerateBemBoundaries())
 
     def Activated(self):
         """
