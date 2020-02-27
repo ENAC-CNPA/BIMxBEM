@@ -29,7 +29,7 @@ class ImportRelSpaceBoundary:
             "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
             "Investigation_test_R19.ifc",
         ]
-        ifc_path = os.path.join(test_folder, test_files[2])
+        ifc_path = os.path.join(test_folder, test_files[0])
         boundaries.generate_ifc_rel_space_boundaries(
             ifc_path, doc=FreeCAD.ActiveDocument
         )
@@ -48,7 +48,7 @@ class GenerateBemBoundaries:
         }
 
     def Activated(self):
-        boundaries.create_geo_boundaries()
+        boundaries.processing_sia_boundaries()
         return
 
 
@@ -64,4 +64,69 @@ class WriteToXml:
         }
 
     def Activated(self):
+        return
+
+
+class DisplaySIAInt:
+    def IsActive(self):
+        return bool(FreeCAD.ActiveDocument)
+
+    def GetResources(self):
+        return {
+            "Pixmap": "icon.svg",
+            "MenuText": "Display SIA Interior boundaries",
+            "ToolTip": "Display SIA Interior boundaries",
+        }
+
+    def Activated(self):
+        doc = FreeCAD.ActiveDocument
+        display_only(doc, "SIA_Interiors")
+        return
+
+
+class DisplaySIAExt:
+    def IsActive(self):
+        return bool(FreeCAD.ActiveDocument)
+
+    def GetResources(self):
+        return {
+            "Pixmap": "icon.svg",
+            "MenuText": "Display SIA Exterior boundaries",
+            "ToolTip": "Display SIA Exterior boundaries",
+        }
+
+    def Activated(self):
+        doc = FreeCAD.ActiveDocument
+        display_only(doc, "SIA_Exteriors")
+        return
+
+
+def display_only(doc, sia_type):
+    for element in doc.findObjects():
+        element.Visibility = False
+    for group_obj in doc.findObjects("App::DocumentObjectGroup"):
+        if group_obj.Label.startswith(sia_type):
+            for element in group_obj.Group:
+                element.Visibility = True
+
+
+class DisplayAll:
+    def IsActive(self):
+        return bool(FreeCAD.ActiveDocument)
+
+    def GetResources(self):
+        return {
+            "Pixmap": "icon.svg",
+            "MenuText": "Display all boundaries",
+            "ToolTip": "Display all boundaries",
+        }
+
+    def Activated(self):
+        doc = FreeCAD.ActiveDocument
+        for group_obj in doc.findObjects("App::DocumentObjectGroup"):
+            if group_obj.Label.startswith("Boundaries"):
+                for sub_group_obj in group_obj.Group:
+                    for element in sub_group_obj.Group:
+                        element.Visibility = True
+        display_only(doc, "SIA_Exteriors")
         return
