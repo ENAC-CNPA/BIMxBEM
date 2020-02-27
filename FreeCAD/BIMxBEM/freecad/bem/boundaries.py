@@ -127,15 +127,12 @@ def generate_ifc_rel_space_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
         associate_inner_boundaries(fc_boundaries)
 
 
-def create_sia_boundaries(doc=FreeCAD.ActiveDocument):
+def processing_sia_boundaries(doc=FreeCAD.ActiveDocument):
     """Create SIA specific boundaries cf. https://www.sia.ch/fr/services/sia-norm/"""
     for space in get_elements_by_ifctype("IfcSpace", doc):
         close_space_boundaries(space)
         find_closest_edges(space)
-    create_sia_ext_boundaries(doc)
-    # sia_interiors = boundaries.newObject("App::DocumentObjectGroup", "SIA_Interiors")
-    # create_geo_int_boundaries(doc)
-
+    create_sia_boundaries(doc)
     doc.recompute()
 
 
@@ -591,18 +588,21 @@ def get_thickness(ifc_entity):
     return thickness
 
 
-def create_sia_ext_boundaries(doc=FreeCAD.ActiveDocument):
+def create_sia_boundaries(doc=FreeCAD.ActiveDocument):
     """Create boundaries necessary for SIA calculations"""
     project = next(get_elements_by_ifctype("IfcProject", doc))
     is_from_revit = project.ApplicationIdentifier == "Revit"
     is_from_archicad = project.ApplicationFullName == "ARCHICAD-64"
     for space in get_elements_by_ifctype("IfcSpace", doc):
-        displace_boundaries(space, is_from_revit, is_from_archicad)
-        rejoin_boundaries(space)
+        create_sia_ext_boundaries(space, is_from_revit, is_from_archicad)
+        create_sia_int_boundaries(space, is_from_revit, is_from_archicad)
+        rejoin_boundaries(space, "SIA_Exteriors")
+        rejoin_boundaries(space, "SIA_Interiors")
 
 
-def rejoin_boundaries(space):
-    for boundary1 in space.SIA_Exteriors.Group:
+def rejoin_boundaries(space, sia_type):
+    sia_group = getattr(space, sia_type)
+    for boundary1 in sia_group.Group:
         lines = []
         base_boundary = boundary1.SourceBoundary
         if (
@@ -613,7 +613,7 @@ def rejoin_boundaries(space):
         for bi2, (ei1, ei2) in zip(
             base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges)
         ):
-            boundary2 = space.SIA_Exteriors.Group[bi2]
+            boundary2 = sia_group.Group[bi2]
             base_plane = get_plane(boundary1)
             # Case 1 : boundaries are not parallel
             plane_intersect = base_plane.intersect(get_plane(boundary2))
@@ -642,16 +642,16 @@ def rejoin_boundaries(space):
         boundary1.Shape = Part.makeFace(wires, "Part::FaceMakerBullseye")
 
 
-def displace_boundaries(space, is_from_revit, is_from_archicad):
-    sia_exteriors = space.Boundaries.newObject(
+def create_sia_ext_boundaries(space, is_from_revit, is_from_archicad):
+    sia_group_obj = space.Boundaries.newObject(
         "App::DocumentObjectGroup", "SIA_Exteriors"
     )
-    space.SIA_Exteriors = sia_exteriors
+    space.SIA_Exteriors = sia_group_obj
     for boundary1 in space.SecondLevel.Group:
         if boundary1.IsHosted or boundary1.PhysicalOrVirtualBoundary == "VIRTUAL":
             continue
         bem_boundary = make_bem_boundary(boundary1, "geoExt")
-        sia_exteriors.addObject(bem_boundary)
+        sia_group_obj.addObject(bem_boundary)
         thickness = boundary1.RelatedBuildingElement.Thickness.Value
         ifc_type = boundary1.RelatedBuildingElement.IfcType
         normal = boundary1.Shape.normalAt(0, 0)
@@ -676,6 +676,29 @@ def displace_boundaries(space, is_from_revit, is_from_archicad):
             bem_boundary.Placement.move(normal * lenght)
 
 
+def create_sia_int_boundaries(space, is_from_revit, is_from_archicad):
+    """Create boundaries necessary for SIA calculations"""
+    sia_group_obj = space.Boundaries.newObject(
+        "App::DocumentObjectGroup", "SIA_Interiors"
+    )
+    space.SIA_Interiors = sia_group_obj
+    for boundary in space.SecondLevel.Group:
+        if boundary.IsHosted or boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
+            continue
+        normal = boundary.Shape.normalAt(0, 0)
+        if is_from_archicad:
+            normal = -normal
+
+        bem_boundary = make_bem_boundary(boundary, "geoInt")
+        sia_group_obj.addObject(bem_boundary)
+
+        ifc_type = boundary.RelatedBuildingElement.IfcType
+        if is_from_revit and ifc_type.startswith("IfcWall"):
+            thickness = boundary.RelatedBuildingElement.Thickness.Value
+            lenght = -thickness / 2
+            bem_boundary.Placement.move(normal * lenght)
+
+
 def line_from_edge(edge: Part.Edge) -> Part.Line:
     points = [v.Point for v in edge.Vertexes]
     return Part.Line(*points)
@@ -687,29 +710,6 @@ def polygon_from_lines(lines):
         new_points.append(line1.intersectCC(line2, 1)[0].toShape().Point)
     new_points[0:0] = new_points[-1:]
     return Part.makePolygon(new_points)
-
-
-def create_geo_int_boundaries(doc, group_2nd):
-    """Create boundaries necessary for SIA calculations"""
-    bem_group = doc.addObject("App::DocumentObjectGroup", "geoInt")
-    is_from_revit = group_2nd.getParentGroup().ApplicationIdentifier == "Revit"
-    is_from_archicad = group_2nd.getParentGroup().ApplicationFullName == "ARCHICAD-64"
-    for fc_space in group_2nd.Group:
-        for boundary in fc_space.Group:
-            if boundary.IsHosted or boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
-                continue
-            normal = boundary.Shape.normalAt(0, 0)
-            if is_from_archicad:
-                normal = -normal
-
-            bem_boundary = make_bem_boundary(boundary, "geoInt")
-            bem_group.addObject(bem_boundary)
-
-            ifc_type = boundary.RelatedBuildingElement.IfcType
-            if is_from_revit and ifc_type.startswith("IfcWall"):
-                thickness = boundary.RelatedBuildingElement.Thickness.Value
-                lenght = -thickness / 2
-                bem_boundary.Placement.move(normal * lenght)
 
 
 def create_fc_shape(space_boundary):
@@ -1194,7 +1194,7 @@ if __name__ == "__main__":
         "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
         "Investigation_test_R19.ifc",
     ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[2])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
@@ -1213,7 +1213,7 @@ if __name__ == "__main__":
         DOC = FreeCAD.newDocument()
 
         generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
-        create_sia_boundaries(DOC)
+        processing_sia_boundaries(DOC)
 
         FreeCADGui.activeView().viewIsometric()
         FreeCADGui.SendMsgToActiveView("ViewFit")
