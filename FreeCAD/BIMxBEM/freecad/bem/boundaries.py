@@ -142,9 +142,9 @@ def write_xml(doc=FreeCAD.ActiveDocument):
         bem_xml.write_project(project)
     for space in get_elements_by_ifctype("IfcSpace", doc):
         bem_xml.write_space(space)
-        for boundary in space.Group:
+        for boundary in space.SecondLevel.Group:
             bem_xml.write_boundary(boundary)
-    for building_element in get_elements():
+    for building_element in get_elements(doc):
         bem_xml.write_building_elements(building_element)
     return bem_xml
 
@@ -957,7 +957,8 @@ class RelSpaceBoundary(Root):
         obj.addProperty("App::PropertyLink", "geoInt", bem_category)
         obj.addProperty("App::PropertyLink", "geoExt", bem_category)
 
-        obj.ViewObject.ShapeColor = get_color(ifc_entity)
+        if FreeCAD.GuiUp:
+            obj.ViewObject.ShapeColor = get_color(ifc_entity)
         obj.GlobalId = ifc_entity.GlobalId
         obj.InternalOrExternalBoundary = ifc_entity.InternalOrExternalBoundary
         obj.PhysicalOrVirtualBoundary = ifc_entity.PhysicalOrVirtualBoundary
@@ -1181,6 +1182,14 @@ class Space(Root):
         return obj
 
 
+def generate_bem_xml_from_file(ifc_path: str, gui_up: bool = False):
+    doc = FreeCAD.newDocument()
+
+    generate_ifc_rel_space_boundaries(ifc_path, doc)
+    processing_sia_boundaries(doc)
+    return write_xml(doc).tostring()
+
+
 if __name__ == "__main__":
     if os.name == "nt":
         TEST_FOLDER = r"C:\git\BIMxBEM\IfcTestFiles"
@@ -1194,7 +1203,7 @@ if __name__ == "__main__":
         "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
         "Investigation_test_R19.ifc",
     ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[2])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
@@ -1209,13 +1218,15 @@ if __name__ == "__main__":
         FreeCADGui.activeView().viewIsometric()
         FreeCADGui.SendMsgToActiveView("ViewFit")
     else:
-        FreeCADGui.showMainWindow()
-        DOC = FreeCAD.newDocument()
+        # FreeCADGui.showMainWindow()
+        # DOC = FreeCAD.newDocument()
 
-        generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
-        processing_sia_boundaries(DOC)
+        # generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
+        # processing_sia_boundaries(DOC)
+        # xml_str = generate_bem_xml_from_file(IFC_PATH)
+        # output_xml_to_path(bem_xml)
 
-        FreeCADGui.activeView().viewIsometric()
-        FreeCADGui.SendMsgToActiveView("ViewFit")
+        # FreeCADGui.activeView().viewIsometric()
+        # FreeCADGui.SendMsgToActiveView("ViewFit")
 
-        FreeCADGui.exec_loop()
+        # FreeCADGui.exec_loop()
