@@ -48,13 +48,19 @@ class BEMxml:
         self.write_root_attrib(boundary, fc_object)
 
         references = (
-            "ParentBoundary",
             "CorrespondingBoundary",
-            "RelatingSpace",
             "RelatedBuildingElement",
         )
         for name in references:
             self.append_id_element(boundary, fc_object, name)
+
+        ET.SubElement(boundary, "ParentBoundary").text = (
+            str(fc_object.ParentBoundary) if fc_object.ParentBoundary else ""
+        )
+
+        ET.SubElement(boundary, "RelatingSpace").text = (
+            str(fc_object.RelatingSpace) if fc_object.RelatingSpace else ""
+        )
 
         inner_boundaries = ET.SubElement(boundary, "InnerBoundaries")
         for fc_inner_b in fc_object.InnerBoundaries:
@@ -66,7 +72,7 @@ class BEMxml:
         ET.SubElement(boundary, "IsHosted").text = "true" if is_hosted else "false"
 
         if not is_hosted:
-            for geo_type in ("geoInt", "geoExt"):
+            for geo_type in ("SIA_Interior", "SIA_Exterior"):
                 geo = ET.SubElement(boundary, geo_type)
                 fc_geo = getattr(fc_object, geo_type)
                 self.write_shape(geo, fc_geo)
@@ -78,9 +84,9 @@ class BEMxml:
             fc_object.Thickness.Value / SCALE
         )
         boundaries = ET.SubElement(building_element, "ProvidesBoundaries")
-        for fc_boundary in fc_object.ProvidesBoundaries:
-            ET.SubElement(boundaries, "Id").text = str(fc_boundary.Id)
-            
+        for element_id in fc_object.ProvidesBoundaries:
+            ET.SubElement(boundaries, "Id").text = str(element_id)
+
     @staticmethod
     def write_shape(xml_element, fc_object):
         geom = ET.SubElement(xml_element, "geom")
