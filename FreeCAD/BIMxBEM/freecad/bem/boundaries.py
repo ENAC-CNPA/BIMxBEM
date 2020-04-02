@@ -399,64 +399,6 @@ def associate_host_element(ifc_file, elements_group):
             hosted.HostElement = host.Id
 
 
-def fill2b(fc_boundaries):
-    """Modify boundary to include area of type 2b between boundaries"""
-    for fc_boundary in fc_boundaries:
-        non_hosted_shared_element = [
-            b for b in fc_boundary.ShareRelatedElementWith if not b.IsHosted
-        ]
-        # FIXME : Simplification which doesn't handle case where 2b touch a corner
-        # FIXME : Currently assuming 2b boundaries are bounded by 4 vertices
-        if not non_hosted_shared_element:
-            continue
-        elif len(non_hosted_shared_element) == 1:
-            # Find side by side corresponding edges
-            fc_boundary1 = fc_boundary
-            fc_boundary2 = non_hosted_shared_element[0]
-            edges1 = fc_boundary1.Shape.OuterWire.Edges
-            edges2 = fc_boundary2.Shape.OuterWire.Edges
-            min_distance = 100000
-            closest_indexes = None
-            for (i, edge1), (j, edge2) in itertools.product(
-                enumerate(edges1), enumerate(edges2)
-            ):
-                if edge1.Length <= edge2.Length:
-                    mid_point = edge1.CenterOfMass
-                    line_segment = (v.Point for v in edge2.Vertexes)
-                else:
-                    mid_point = edge2.CenterOfMass
-                    line_segment = (v.Point for v in edge1.Vertexes)
-                distance = mid_point.distanceToLineSegment(*line_segment).Length
-                if distance < min_distance:
-                    min_distance = distance
-                    closest_indexes = (i, j)
-            i, j = closest_indexes
-
-            # Compute centerline
-            vec1 = edges1[i].Vertexes[0].Point
-            vec2 = edges2[j].Vertexes[0].Point
-
-            line_segment = (v.Point for v in edges2[j].Vertexes)
-            vec2 = vec2 + vec2.distanceToLineSegment(*line_segment) / 2
-            mid_line = Part.Line(vec1, vec2)
-
-            # Compute intersection on center line between edges
-            vxs1_len = len(fc_boundary1.Shape.Vertexes)
-            vxs2_len = len(fc_boundary2.Shape.Vertexes)
-            b1_v1 = mid_line.intersectCC(edges1[i - 1].Curve)
-            b1_v2 = mid_line.intersectCC(edges1[(i + 1) % vxs1_len].Curve)
-            b2_v1 = mid_line.intersectCC(edges2[j - 1].Curve)
-            b2_v2 = mid_line.intersectCC(edges2[(j + 1) % vxs2_len].Curve)
-            vectors = [v.Point for v in fc_boundary1.Shape.OuterWire.Vertexes]
-            vectors[i] = b1_v1
-            vectors[(i + 1) % len(vectors)] = b1_v2
-            vectors.append(vectors[0])
-            wires = [Part.makePolygon(vectors)]
-            wires.extend(fc_boundary1.Shape.Wires[1:])
-            new_shape = Part.Face(wires)
-            fc_boundary1.Shape = new_shape
-
-
 def associate_inner_boundaries(fc_boundaries, doc):
     """Associate hosted elements like a window or a door in a wall"""
     for fc_boundary in fc_boundaries:
