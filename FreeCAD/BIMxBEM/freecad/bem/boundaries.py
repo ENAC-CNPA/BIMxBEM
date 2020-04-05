@@ -44,6 +44,7 @@ SCALE = 1000
 
 
 def generate_space(ifc_space, parent, doc=FreeCAD.ActiveDocument):
+    """Generate Space and RelSpaceBoundaries as defined in ifc_file. No post process."""
     fc_space = create_space_from_entity(ifc_space)
     parent.addObject(fc_space)
 
@@ -55,7 +56,7 @@ def generate_space(ifc_space, parent, doc=FreeCAD.ActiveDocument):
     # All boundaries have their placement relative to space placement
     space_placement = get_placement(ifc_space)
     for ifc_boundary in (b for b in ifc_space.BoundedBy if b.Name == "2ndLevel"):
-        face = make_relspaceboundary(ifc_boundary)
+        face = RelSpaceBoundary.create(ifc_entity=ifc_boundary)
         second_levels.addObject(face)
         face.Placement = space_placement
         element = get_related_element(ifc_boundary, doc)
@@ -166,17 +167,20 @@ def output_xml_to_path(bem_xml, xml_path=None):
 
 
 def close_space_boundaries(space):
-    sia = space.Boundaries.newObject("App::DocumentObjectGroup", "SIA")
-
+    """
+    1 Fill gaps between boundaries (2b)
+    2 try to join boundaries which shares same building element, same space and same orientation
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4/ADD2_TC1/HTML/schema/ifcproductextension/lexical/ifcrelspaceboundary2ndlevel.htm
+    """
     join_over_splitted_boundaries(space)
     boundaries = space.SecondLevel.Group
     for rel_boundary1 in boundaries:
-        for edge1 in rel_boundary1.Shape.OuterWire.Edges:
+        for edge1 in get_outer_wire(rel_boundary1).Edges:
             mid_point = edge1.CenterOfMass
             for rel_boundary2 in boundaries:
                 if rel_boundary1 == rel_boundary2:
                     continue
-                for edge2 in enumerate(rel_boundary2.Shape.OuterWire.Edges):
+                for edge2 in enumerate(get_outer_wire(rel_boundary2).Edges):
                     pass
 
 
@@ -276,8 +280,9 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
 
     # Replace existing shape with joined shapes
     close_vectors(vectors1)
-    wires = [Part.makePolygon(vectors1)] + inner_wires
-    result_boundary.Shape = Part.makeFace(wires, "Part::FaceMakerBullseye")
+    outer_wire = Part.makePolygon(vectors1)
+    face = Part.Face(outer_wire)
+    result_boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
 
 
 def clean_vectors(vectors):
@@ -297,8 +302,12 @@ def clean_vectors(vectors):
         i += 1
 
 
+def get_outer_wire(boundary):
+    return [s for s in boundary.Shape.SubShapes if isinstance(s, Part.Wire)][0]
+
+
 def get_inner_wires(boundary):
-    return boundary.Shape.Wires[1:]
+    return [s for s in boundary.Shape.SubShapes if isinstance(s, Part.Wire)][1:]
 
 
 def close_vectors(vectors):
@@ -316,7 +325,7 @@ def are_3points_collinear(p1, p2, p3) -> bool:
 
 
 def get_boundary_outer_vectors(boundary):
-    return [vx.Point for vx in boundary.Shape.OuterWire.Vertexes]
+    return [vx.Point for vx in get_outer_wire(boundary).Vertexes]
 
 
 def is_collinear(edge1, edge2):
@@ -338,7 +347,7 @@ def find_closest_edges(space):
     boundaries = [b for b in space.SecondLevel.Group if not b.IsHosted]
     closest_dict = dict()
     for i, boundary in enumerate(boundaries):
-        n = len(boundary.Shape.OuterWire.Edges)
+        n = len(get_outer_wire(boundary).Edges)
         closest_dict[i] = {
             "boundaries": [-1] * n,
             "edges": [-1] * n,
@@ -349,8 +358,8 @@ def find_closest_edges(space):
     ):
         distances1 = closest_dict[bi1]["distances"]
         distances2 = closest_dict[bi2]["distances"]
-        edges1 = boundary1.Shape.OuterWire.Edges
-        edges2 = boundary2.Shape.OuterWire.Edges
+        edges1 = get_outer_wire(boundary1).Edges
+        edges2 = get_outer_wire(boundary2).Edges
         for (ei1, edge1), (ei2, edge2) in itertools.product(
             enumerate(edges1), enumerate(edges2)
         ):
@@ -412,7 +421,13 @@ def associate_inner_boundaries(fc_boundaries, doc):
 
         # If there is more than 1 candidate it doesn't really matter
         # as they share the same host element and space
-        host_element = candidates.pop()
+        try:
+            host_element = candidates.pop()
+        except KeyError:
+            logger.warning(
+                f"RelSpaceBoundary Id<{fc_boundary.Id}> is hosted but host not found. Investigations required."
+            )
+            continue
         fc_boundary.ParentBoundary = host_element.Id
         append(host_element, "InnerBoundaries", fc_boundary)
 
@@ -442,7 +457,7 @@ def is_coplanar(shape_1, shape_2):
 def get_plane(fc_boundary):
     """Intended for RelSpaceBoundary use only"""
     return Part.Plane(
-        fc_boundary.Shape.Vertexes[0].Point, fc_boundary.Shape.normalAt(0, 0)
+        fc_boundary.Shape.Vertexes[0].Point, fc_boundary.Shape.Faces[0].normalAt(0, 0)
     )
 
 
@@ -476,10 +491,21 @@ def get_boundaries_by_element(element, doc):
 
 
 def get_boundaries_by_element_id(element_id, doc):
+    def _compare_related_id(boundary, id):
+        try:
+            return boundary.RelatedBuildingElement.Id == element_id
+        except AttributeError:
+            if boundary.PhysicalOrVirtualBoundary != "VIRTUAL":
+                logger.warning(
+                    f"RelSpaceBoundary Id<{boundary.Id}> is not VIRTUAL and has\
+                        no RelatedBuildingElement. Investigations required"
+                )
+            return False
+
     return [
         boundary
         for boundary in get_elements_by_ifctype("IfcRelSpaceBoundary", doc)
-        if boundary.RelatedBuildingElement.Id == element_id
+        if _compare_related_id(boundary, element_id)
     ]
 
 
@@ -499,10 +525,12 @@ def associate_corresponding_boundary(fc_boundary, doc):
     if len(other_boundaries) == 1:
         corresponding_boundary = other_boundaries[0]
     else:
-        center_of_mass = fc_boundary.Shape.CenterOfMass
+        center_of_mass = get_outer_wire(fc_boundary).CenterOfMass
         min_lenght = 10000  # No element has 10 m
         for boundary in other_boundaries:
-            distance = center_of_mass.distanceToPoint(boundary.Shape.CenterOfMass)
+            distance = center_of_mass.distanceToPoint(
+                get_outer_wire(boundary).CenterOfMass
+            )
             if distance < min_lenght:
                 min_lenght = distance
                 corresponding_boundary = boundary
@@ -600,8 +628,8 @@ def rejoin_boundaries(space, sia_type):
                 lines.append(plane_intersect[0])
                 continue
             # Case 2 : boundaries are parallel
-            line1 = line_from_edge(boundary1.Shape.OuterWire.Edges[ei1])
-            line2 = line_from_edge(boundary2.Shape.OuterWire.Edges[ei2])
+            line1 = line_from_edge(get_outer_wire(boundary1).Edges[ei1])
+            line2 = line_from_edge(get_outer_wire(boundary2).Edges[ei2])
             # Case 2a : edges are not parallel
             line_intersect = line1.intersect2d(line2, base_plane)
             if line_intersect:
@@ -617,8 +645,12 @@ def rejoin_boundaries(space, sia_type):
 
             lines.append(Part.Line(point1, point2))
         # Generate new shape
-        wires = [polygon_from_lines(lines)] + get_inner_wires(boundary1)
-        boundary1.Shape = Part.makeFace(wires, "Part::FaceMakerBullseye")
+        outer_wire = polygon_from_lines(lines)
+        face = Part.Face(outer_wire)
+        inner_wires = get_inner_wires(boundary1)
+        for inner_wire in inner_wires:
+            face = face.cut(Part.Face(inner_wire))
+        boundary1.Shape = Part.Compound([face, outer_wire, *inner_wires])
 
 
 def get_in_list_by_id(elements, element_id):
@@ -637,11 +669,11 @@ def create_sia_ext_boundaries(space, is_from_revit, is_from_archicad):
     for boundary1 in space.SecondLevel.Group:
         if boundary1.IsHosted or boundary1.PhysicalOrVirtualBoundary == "VIRTUAL":
             continue
-        bem_boundary = make_bem_boundary(boundary1, "SIA_Exterior")
+        bem_boundary = BEMBoundary.create(boundary1, "SIA_Exterior")
         sia_group_obj.addObject(bem_boundary)
         thickness = boundary1.RelatedBuildingElement.Thickness.Value
         ifc_type = boundary1.RelatedBuildingElement.IfcType
-        normal = boundary1.Shape.normalAt(0, 0)
+        normal = boundary1.Shape.Faces[0].normalAt(0, 0)
         if is_from_archicad:
             normal = -normal
         if boundary1.InternalOrExternalBoundary != "INTERNAL":
@@ -672,11 +704,11 @@ def create_sia_int_boundaries(space, is_from_revit, is_from_archicad):
     for boundary in space.SecondLevel.Group:
         if boundary.IsHosted or boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
             continue
-        normal = boundary.Shape.normalAt(0, 0)
+        normal = boundary.Shape.Faces[0].normalAt(0, 0)
         if is_from_archicad:
             normal = -normal
 
-        bem_boundary = make_bem_boundary(boundary, "SIA_Interior")
+        bem_boundary = BEMBoundary.create(boundary, "SIA_Interior")
         sia_group_obj.addObject(bem_boundary)
 
         ifc_type = boundary.RelatedBuildingElement.IfcType
@@ -760,15 +792,18 @@ def verts_clean(vertices):
 
 def part_by_wires(ifc_entity):
     """ Create a Part Shape from ifc geometry"""
-    boundaries = list()
-    boundaries.append(_polygon_by_mesh(ifc_entity.OuterBoundary))
+    inner_wires = list()
+    outer_wire = _polygon_by_mesh(ifc_entity.OuterBoundary)
+    face = Part.Face(outer_wire)
     try:
         inner_boundaries = ifc_entity.InnerBoundaries
         for inner_boundary in tuple(inner_boundaries) if inner_boundaries else tuple():
-            boundaries.append(_polygon_by_mesh(inner_boundary))
+            inner_wire = _polygon_by_mesh(inner_boundary)
+            face = face.cut(Part.Face(inner_wire))
+            inner_wires.append(inner_wire)
     except RuntimeError:
         pass
-    fc_shape = Part.makeFace(boundaries, "Part::FaceMakerBullseye")
+    fc_shape = Part.Compound([face, outer_wire, *inner_wires])
     matrix = get_matrix(ifc_entity.BasisSurface.Position)
     fc_shape = fc_shape.transformGeometry(matrix)
     return fc_shape
@@ -835,18 +870,6 @@ def get_or_create_group(name, doc=FreeCAD.ActiveDocument):
     if group:
         return group[0]
     return doc.addObject("App::DocumentObjectGroup", name)
-
-
-def make_relspaceboundary(ifc_entity):
-    """Stantard FreeCAD FeaturePython Object creation method"""
-    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "RelSpaceBoundary")
-    # ViewProviderRelSpaceBoundary(obj.ViewObject)
-    RelSpaceBoundary(obj, ifc_entity)
-    try:
-        obj.ViewObject.Proxy = 0
-    except AttributeError:
-        FreeCAD.Console.PrintLog("No ViewObject ok if running with no Gui")
-    return obj
 
 
 class Root:
@@ -944,6 +967,9 @@ class RelSpaceBoundary(Root):
         obj.addProperty("App::PropertyLink", "SIA_Interior", bem_category)
         obj.addProperty("App::PropertyLink", "SIA_Exterior", bem_category)
 
+        if not ifc_entity:
+            return
+
         if FreeCAD.GuiUp:
             obj.ViewObject.ShapeColor = get_color(ifc_entity)
         obj.GlobalId = ifc_entity.GlobalId
@@ -954,6 +980,18 @@ class RelSpaceBoundary(Root):
         self.set_label(obj, ifc_entity)
         if not obj.PhysicalOrVirtualBoundary == "VIRTUAL":
             obj.IsHosted = bool(ifc_entity.RelatedBuildingElement.FillsVoids)
+
+    @staticmethod
+    def create(obj_name: str = "RelSpaceBoundary", ifc_entity=None):
+        """Stantard FreeCAD FeaturePython Object creation method"""
+        obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
+        RelSpaceBoundary(obj, ifc_entity)
+        try:
+            # ViewProviderRelSpaceBoundary(obj.ViewObject)
+            obj.ViewObject.Proxy = 0
+        except AttributeError:
+            FreeCAD.Console.PrintLog("No ViewObject ok if running with no Gui")
+        return obj
 
     def onChanged(self, obj, prop):
         super().onChanged(obj, prop)
@@ -972,7 +1010,7 @@ class RelSpaceBoundary(Root):
     def set_label(obj, ifc_entity):
         try:
             obj.Label = "{} {}".format(
-                ifc_entity.RelatedBuildingElement.id(),
+                ifc_entity.id(),
                 ifc_entity.RelatedBuildingElement.Name,
             )
         except AttributeError:
@@ -1021,20 +1059,6 @@ class Element(Root):
                 obj.Thickness = get_thickness(ifc_entity)
 
 
-def make_bem_boundary(boundary, geo_type):
-    """Stantard FreeCAD FeaturePython Object creation method"""
-    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "BEMBoundary")
-    # ViewProviderRelSpaceBoundary(obj.ViewObject)
-    BEMBoundary(obj, boundary)
-    setattr(boundary, geo_type, obj)
-    try:
-        obj.ViewObject.Proxy = 0
-        obj.ViewObject.ShapeColor = boundary.ViewObject.ShapeColor
-    except AttributeError:
-        FreeCAD.Console.PrintLog("No ViewObject ok if running with no Gui")
-    return obj
-
-
 class BEMBoundary:
     def __init__(self, obj, boundary):
         self.Type = "BEMBoundary"
@@ -1047,6 +1071,20 @@ class BEMBoundary:
         obj.Area = obj.Shape.Area
         obj.AreaWithHosted = self.recompute_area_with_hosted(obj, boundary)
         self.set_label(obj, boundary)
+
+    @staticmethod
+    def create(boundary, geo_type):
+        """Stantard FreeCAD FeaturePython Object creation method"""
+        obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "BEMBoundary")
+        BEMBoundary(obj, boundary)
+        setattr(boundary, geo_type, obj)
+        try:
+            # ViewProviderRelSpaceBoundary(obj.ViewObject)
+            obj.ViewObject.Proxy = 0
+            obj.ViewObject.ShapeColor = boundary.ViewObject.ShapeColor
+        except AttributeError:
+            FreeCAD.Console.PrintLog("No ViewObject ok if running with no Gui")
+        return obj
 
     @staticmethod
     def recompute_area_with_hosted(obj, source_boundary):
@@ -1215,7 +1253,7 @@ if __name__ == "__main__":
 
         generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
         processing_sia_boundaries(DOC)
-        xml_str = generate_bem_xml_from_file(IFC_PATH)
+        # xml_str = generate_bem_xml_from_file(IFC_PATH)
         # output_xml_to_path(bem_xml)
 
         FreeCADGui.activeView().viewIsometric()
