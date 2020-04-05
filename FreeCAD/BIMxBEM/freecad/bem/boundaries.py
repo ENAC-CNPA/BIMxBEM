@@ -662,6 +662,7 @@ def get_in_list_by_id(elements, element_id):
 
 
 def create_sia_ext_boundaries(space, is_from_revit, is_from_archicad):
+    """Create SIA boundaries from RelSpaceBoundaries and translate it if necessary"""
     sia_group_obj = space.Boundaries.newObject(
         "App::DocumentObjectGroup", "SIA_Exteriors"
     )
@@ -674,20 +675,19 @@ def create_sia_ext_boundaries(space, is_from_revit, is_from_archicad):
         thickness = boundary1.RelatedBuildingElement.Thickness.Value
         ifc_type = boundary1.RelatedBuildingElement.IfcType
         normal = boundary1.Shape.Faces[0].normalAt(0, 0)
-        if is_from_archicad:
-            normal = -normal
+        # if is_from_archicad:
+            # normal = -normal
+        # EXTERNAL: there is multiple possible values for external so testing internal is better.
         if boundary1.InternalOrExternalBoundary != "INTERNAL":
             lenght = thickness
             if is_from_revit and ifc_type.startswith("IfcWall"):
                 lenght /= 2
             bem_boundary.Placement.move(normal * lenght)
+        # INTERNAL. TODO: Check during tests if NOTDEFINED case need to be handled ?
         else:
             type1 = {"IfcSlab"}
             if ifc_type in type1:
-                if normal.z > 0:
-                    lenght = thickness
-                else:
-                    continue
+                lenght = thickness/2
             else:
                 if is_from_revit:
                     continue
