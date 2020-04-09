@@ -651,6 +651,10 @@ def rejoin_boundaries(space, sia_type):
         for inner_wire in inner_wires:
             face = face.cut(Part.Face(inner_wire))
         boundary1.Shape = Part.Compound([face, outer_wire, *inner_wires])
+        boundary1.Area = area = boundary1.Shape.Area
+        for inner_boundary in base_boundary.InnerBoundaries:
+            area = area + inner_boundary.Shape.Area
+        boundary1.AreaWithHosted = area
 
 
 def get_in_list_by_id(elements, element_id):
@@ -1070,8 +1074,6 @@ class BEMBoundary:
         obj.addProperty("App::PropertyArea", "Area", category_name)
         obj.addProperty("App::PropertyArea", "AreaWithHosted", category_name)
         obj.Shape = boundary.Shape.copy()
-        obj.Area = obj.Shape.Area
-        obj.AreaWithHosted = self.recompute_area_with_hosted(obj, boundary)
         self.set_label(obj, boundary)
 
     @staticmethod
@@ -1087,14 +1089,6 @@ class BEMBoundary:
         except AttributeError:
             FreeCAD.Console.PrintLog("No ViewObject ok if running with no Gui")
         return obj
-
-    @staticmethod
-    def recompute_area_with_hosted(obj, source_boundary):
-        """Recompute area including inner boundaries"""
-        area = obj.Area
-        for boundary in source_boundary.InnerBoundaries:
-            area = area + boundary.Area
-        return area
 
     @staticmethod
     def set_label(obj, source_boundary):
