@@ -108,7 +108,10 @@ class BEMxml:
         self.tree.write(full_path, encoding="UTF-8", xml_declaration=True)
 
     def tostring(self):
-        return ET.tostring(self.root, encoding="utf8", method="xml")
+        # Return a bytes
+        # return ET.tostring(self.root, encoding="utf8", method="xml")
+        # Return a string
+        return ET.tostring(self.root, encoding="unicode")
 
 
 def vector_to_dict(vector):
