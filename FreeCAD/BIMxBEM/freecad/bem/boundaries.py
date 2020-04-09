@@ -11,7 +11,7 @@ import FreeCAD
 import Part
 import FreeCADGui
 
-from bem_xml import BEMxml
+from freecad.bem.bem_xml import BEMxml
 
 LOG_FORMAT = "{levelname} {asctime} {funcName}-{message}"
 
@@ -1253,7 +1253,7 @@ if __name__ == "__main__":
 
         generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
         processing_sia_boundaries(DOC)
-        # xml_str = generate_bem_xml_from_file(IFC_PATH)
+        xml_str = generate_bem_xml_from_file(IFC_PATH)
         # output_xml_to_path(bem_xml)
 
         FreeCADGui.activeView().viewIsometric()
