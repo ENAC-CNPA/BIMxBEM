@@ -886,11 +886,13 @@ class Root:
         obj.addProperty("App::PropertyString", "IfcType", "IFC")
         obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
         obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
+        obj.addProperty("App::PropertyString", "Name", ifc_attributes)
         obj.addProperty("App::PropertyString", "Description", ifc_attributes)
 
         obj.Id = ifc_entity.id()
         obj.GlobalId = ifc_entity.GlobalId
         obj.IfcType = ifc_entity.is_a()
+        obj.Name = ifc_entity.Name
         self.set_label(obj, ifc_entity)
         try:
             obj.Description = ifc_entity.Description

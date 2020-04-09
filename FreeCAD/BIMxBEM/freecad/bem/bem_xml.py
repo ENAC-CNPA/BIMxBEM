@@ -33,8 +33,30 @@ class BEMxml:
         ET.SubElement(north, "point", vector_to_dict(fc_object.TrueNorth))
         wcs = ET.SubElement(project, "WorldCoordinateSystem")
         ET.SubElement(wcs, "point", vector_to_dict(fc_object.WorldCoordinateSystem))
-        sites = ET.SubElement(project, "Site")
-        ET.SubElement(sites, "Site").text = ""
+        self.sites = ET.SubElement(project, "Sites")
+        for site in fc_object.Group:
+            self.write_site(site)
+
+    def write_site(self, fc_object):
+        site = ET.SubElement(self.sites, "Site")
+        self.write_root_attrib(site, fc_object)
+        self.buildings = ET.SubElement(site, "Buildings")
+        for building in fc_object.Group:
+            self.write_building(building)
+    
+    def write_building(self, fc_object):
+        site = ET.SubElement(self.sites, "Building")
+        self.write_root_attrib(site, fc_object)
+        self.storeys = ET.SubElement(site, "Storeys")
+        for storey in fc_object.Group:
+            self.write_storey(storey)
+    
+    def write_storey(self, fc_object):
+        storey = ET.SubElement(self.storeys, "Storey")
+        self.write_root_attrib(storey, fc_object)
+        spaces = ET.SubElement(storey, "Spaces")
+        for space in fc_object.Group:
+            ET.SubElement(spaces, "Space").text = str(space.Id)
 
     def write_space(self, fc_object):
         space = ET.SubElement(self.spaces, "Space")
