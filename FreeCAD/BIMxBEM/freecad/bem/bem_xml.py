@@ -79,6 +79,7 @@ class BEMxml:
         text_references = (
             "InternalOrExternalBoundary",
             "PhysicalOrVirtualBoundary",
+            "LesoType"
         )
 
         for name in text_references:
