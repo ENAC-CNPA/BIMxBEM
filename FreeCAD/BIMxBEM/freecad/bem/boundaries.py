@@ -141,6 +141,7 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument):
     for space in get_elements_by_ifctype("IfcSpace", doc):
         close_space_boundaries(space)
         find_closest_edges(space)
+        set_leso_type(space)
     create_sia_boundaries(doc)
     doc.recompute()
 
@@ -386,6 +387,30 @@ def find_closest_edges(space):
         boundary.ClosestEdges = closest_dict[i]["edges"]
         boundary.ClosestDistance = closest_dict[i]["distances"]
 
+def set_leso_type(space):
+    for boundary in space.SecondLevel.Group:
+        boundary.LesoType = define_leso_type(boundary)
+
+def define_leso_type(boundary):
+    ifc_type = boundary.RelatedBuildingElement.IfcType
+    if ifc_type.startswith("IfcWindow"):
+        return "Window"
+    elif ifc_type.startswith("IfcDoor"):
+        return "Door"
+    elif ifc_type.startswith("IfcWall"):
+        return "Façade"
+    elif ifc_type.startswith("IfcSlab") or ifc_type == "IfcRoof":
+        # External pointing up => Ceiling, pointing down => Flooring, Internal => Flooring
+        if boundary.InternalOrExternalBoundary != "INTERNAL":
+            if boundary.Shape.Faces[0].normalAt(0, 0).z > 0:
+                return "Ceiling"
+            else:
+                return "Flooring"
+        else:
+            return "Flooring"
+    else:
+        logger.warning(f"Unable to define LesoType for Boundary Id <{boundary.Id}>")
+        return "Unknown"
 
 def compute_distance(edge1, edge2):
     mid_point = edge1.CenterOfMass
@@ -974,6 +999,16 @@ class RelSpaceBoundary(Root):
         obj.addProperty("App::PropertyArea", "AreaWithHosted", bem_category)
         obj.addProperty("App::PropertyLink", "SIA_Interior", bem_category)
         obj.addProperty("App::PropertyLink", "SIA_Exterior", bem_category)
+        obj.addProperty(
+            "App::PropertyEnumeration", "LesoType", bem_category
+        ).LesoType = [
+            "Ceiling",
+            "Façade",
+            "Flooring",
+            "Window",
+            "Door",
+            "Unknown",
+        ]
 
         if not ifc_entity:
             return
