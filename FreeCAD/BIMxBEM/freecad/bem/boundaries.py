@@ -301,6 +301,8 @@ def clean_vectors(vectors):
             continue
         i += 1
 
+def get_wires(boundary):
+    return (s for s in boundary.Shape.SubShapes if isinstance(s, Part.Wire))
 
 def get_outer_wire(boundary):
     return [s for s in boundary.Shape.SubShapes if isinstance(s, Part.Wire)][0]
@@ -1025,6 +1027,10 @@ class RelSpaceBoundary(Root):
             )
             return
 
+    @staticmethod
+    def get_wires(obj):
+        return get_wires(obj)
+
 
 def create_fc_object_from_entity(ifc_entity):
     """Stantard FreeCAD FeaturePython Object creation method"""
@@ -1068,6 +1074,7 @@ class Element(Root):
 class BEMBoundary:
     def __init__(self, obj, boundary):
         self.Type = "BEMBoundary"
+        obj.Proxy = self
         category_name = "BEM"
         obj.addProperty("App::PropertyInteger", "SourceBoundary", category_name)
         obj.SourceBoundary = boundary.Id
@@ -1093,6 +1100,10 @@ class BEMBoundary:
     @staticmethod
     def set_label(obj, source_boundary):
         obj.Label = source_boundary.Label
+
+    @staticmethod
+    def get_wires(obj):
+        return get_wires(obj)
 
 
 def create_container_from_entity(ifc_entity):

@@ -120,7 +120,7 @@ class BEMxml:
     @staticmethod
     def write_shape(xml_element, fc_object):
         geom = ET.SubElement(xml_element, "geom")
-        for wire in fc_object.Shape.Wires:
+        for wire in fc_object.Proxy.get_wires(fc_object):
             polygon = ET.SubElement(geom, "Polygon")
             for vertex in wire.Vertexes:
                 ET.SubElement(polygon, "point", vector_to_dict(vertex.Point))
