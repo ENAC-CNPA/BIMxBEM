@@ -69,12 +69,20 @@ class BEMxml:
         boundary = ET.SubElement(self.boundaries, "Boundary")
         self.write_root_attrib(boundary, fc_object)
 
-        references = (
+        id_references = (
             "CorrespondingBoundary",
             "RelatedBuildingElement",
         )
-        for name in references:
+        for name in id_references:
             self.append_id_element(boundary, fc_object, name)
+
+        text_references = (
+            "InternalOrExternalBoundary",
+            "PhysicalOrVirtualBoundary",
+        )
+
+        for name in text_references:
+            self.append_text_element(boundary, fc_object, name)
 
         ET.SubElement(boundary, "ParentBoundary").text = (
             str(fc_object.ParentBoundary) if fc_object.ParentBoundary else ""
@@ -125,6 +133,10 @@ class BEMxml:
     def append_id_element(xml_element, fc_object, name):
         value = getattr(fc_object, name)
         ET.SubElement(xml_element, name).text = str(value.Id) if value else ""
+
+    @staticmethod
+    def append_text_element(xml_element, fc_object, name):
+        ET.SubElement(xml_element, name).text = getattr(fc_object, name)
 
     def write_to_file(self, full_path):
         self.tree.write(full_path, encoding="UTF-8", xml_declaration=True)
