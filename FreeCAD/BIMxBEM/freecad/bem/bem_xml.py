@@ -45,7 +45,7 @@ class BEMxml:
             self.write_building(building)
     
     def write_building(self, fc_object):
-        site = ET.SubElement(self.sites, "Building")
+        site = ET.SubElement(self.buildings, "Building")
         self.write_root_attrib(site, fc_object)
         self.storeys = ET.SubElement(site, "Storeys")
         for storey in fc_object.Group:
