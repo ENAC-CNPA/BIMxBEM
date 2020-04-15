@@ -400,14 +400,10 @@ def define_leso_type(boundary):
     elif ifc_type.startswith("IfcWall"):
         return "Façade"
     elif ifc_type.startswith("IfcSlab") or ifc_type == "IfcRoof":
-        # External pointing up => Ceiling, pointing down => Flooring, Internal => Flooring
-        if boundary.InternalOrExternalBoundary != "INTERNAL":
-            if boundary.Shape.Faces[0].normalAt(0, 0).z > 0:
-                return "Ceiling"
-            else:
-                return "Flooring"
-        else:
-            return "Flooring"
+        # Pointing up => Ceiling. Pointing down => Flooring
+        if boundary.Shape.Faces[0].normalAt(0, 0).z > 0:
+            return "Ceiling"
+        return "Flooring"
     else:
         logger.warning(f"Unable to define LesoType for Boundary Id <{boundary.Id}>")
         return "Unknown"
@@ -1275,7 +1271,7 @@ if __name__ == "__main__":
         "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
         "Investigation_test_R19.ifc",
     ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[1])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[2])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
@@ -1295,8 +1291,10 @@ if __name__ == "__main__":
 
         generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
         processing_sia_boundaries(DOC)
-        xml_str = generate_bem_xml_from_file(IFC_PATH)
-        # output_xml_to_path(bem_xml)
+        bem_xml = write_xml(DOC)
+        output_xml_to_path(bem_xml)
+        
+        # xml_str = generate_bem_xml_from_file(IFC_PATH)
 
         FreeCADGui.activeView().viewIsometric()
         FreeCADGui.SendMsgToActiveView("ViewFit")
