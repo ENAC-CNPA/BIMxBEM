@@ -392,7 +392,12 @@ def set_leso_type(space):
         boundary.LesoType = define_leso_type(boundary)
 
 def define_leso_type(boundary):
-    ifc_type = boundary.RelatedBuildingElement.IfcType
+    try:
+        ifc_type = boundary.RelatedBuildingElement.IfcType
+    except AttributeError:
+        if boundary.PhysicalOrVirtualBoundary != "VIRTUAL":
+            logger.warning(f"Unable to defin LesoType for boundary <{boundary.Id}>")
+        return "Unknown"
     if ifc_type.startswith("IfcWindow"):
         return "Window"
     elif ifc_type.startswith("IfcDoor"):
@@ -1271,7 +1276,7 @@ if __name__ == "__main__":
         "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
         "Investigation_test_R19.ifc",
     ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[2])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
