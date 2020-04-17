@@ -102,7 +102,7 @@ class BEMxml:
         is_hosted = fc_object.IsHosted
         ET.SubElement(boundary, "IsHosted").text = "true" if is_hosted else "false"
 
-        if not is_hosted:
+        if not is_hosted and fc_object.PhysicalOrVirtualBoundary != "VIRTUAL":
             for geo_type in ("SIA_Interior", "SIA_Exterior"):
                 geo = ET.SubElement(boundary, geo_type)
                 fc_geo = getattr(fc_object, geo_type)
