@@ -1058,11 +1058,12 @@ class RelSpaceBoundary(Root):
                 ifc_entity.RelatedBuildingElement.Name,
             )
         except AttributeError:
-            FreeCAD.Console.PrintLog(
-                f"{ifc_entity.GlobalId} has no RelatedBuildingElement"
+            obj.Label = f"{ifc_entity.id()} VIRTUAL"
+            if ifc_entity.PhysicalOrVirtualBoundary != "VIRTUAL":
+                logger.warning(
+                f"{ifc_entity.id()} is not VIRTUAL and has no RelatedBuildingElement"
             )
-            return
-
+            
     @staticmethod
     def get_wires(obj):
         return get_wires(obj)
