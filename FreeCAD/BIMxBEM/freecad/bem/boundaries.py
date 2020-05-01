@@ -56,14 +56,21 @@ def generate_space(ifc_space, parent, doc=FreeCAD.ActiveDocument):
     # All boundaries have their placement relative to space placement
     space_placement = get_placement(ifc_space)
     for ifc_boundary in (b for b in ifc_space.BoundedBy if b.Name == "2ndLevel"):
-        face = RelSpaceBoundary.create(ifc_entity=ifc_boundary)
-        second_levels.addObject(face)
-        face.Placement = space_placement
-        element = get_related_element(ifc_boundary, doc)
-        if element:
-            face.RelatedBuildingElement = element
-            append(element, "ProvidesBoundaries", face.Id)
-        face.RelatingSpace = fc_space.Id
+        try:
+            face = RelSpaceBoundary.create(ifc_entity=ifc_boundary)
+            second_levels.addObject(face)
+            face.Placement = space_placement
+            element = get_related_element(ifc_boundary, doc)
+            if element:
+                face.RelatedBuildingElement = element
+                append(element, "ProvidesBoundaries", face.Id)
+            face.RelatingSpace = fc_space.Id
+        except ShapeCreationError:
+            logger.warning(f"Failed to create fc_shape for RelSpaceBoundary <{ifc_boundary.id()}> even with fallback methode _part_by_mesh. IfcOpenShell bug ?")
+
+
+class ShapeCreationError(RuntimeError):
+    pass
 
 
 def generate_containers(ifc_parent, fc_parent, doc=FreeCAD.ActiveDocument):
@@ -208,8 +215,16 @@ def join_over_splitted_boundaries(space):
     for boundary_list in elements_dict.values():
         # None coplanar boundaries should not be connected.
         # eg. round wall splitted with multiple orientations.
-        coplanar_boundaries = list()
+
+        # Case1: No oversplitted boundaries
+        if len(boundary_list) == 1:
+            continue
+
+        coplanar_boundaries = list([])
         for boundary in boundary_list:
+            if not coplanar_boundaries:
+                coplanar_boundaries.append([boundary])
+                continue
             for coplanar_list in coplanar_boundaries:
                 # TODO: Test if this test is not too strict considering precision
                 if is_coplanar(boundary, coplanar_list[0]):
@@ -230,6 +245,7 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     result_boundary = boundaries.pop()
     inner_wires = get_inner_wires(result_boundary)[:]
     vectors1 = get_boundary_outer_vectors(result_boundary)
+    # FIXME: Infinite loop somewhere in this. It doesn’t work ?
     while boundaries:
         for boundary2 in boundaries:
             vectors2 = get_boundary_outer_vectors(boundary2)
@@ -250,7 +266,7 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
                 # if edge1 and edge2 are not collinear no junction is possible.
                 if not (
                     (dir0.isEqual(dir1, TOLERANCE) or dir0.isEqual(-dir1, TOLERANCE))
-                    and v0_12.cross(p1_1 - p0_1) < TOLERANCE
+                    and v0_12.cross(p1_1 - p0_1).Length < TOLERANCE
                 ):
                     continue
 
@@ -649,6 +665,8 @@ def rejoin_boundaries(space, sia_type):
             base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges)
         ):
             boundary2 = getattr(get_in_list_by_id(base_boundaries, b1_id), sia_type)
+            if not boundary2:
+                logger.warning(f"Cannot find corresponding boundary")
             base_plane = get_plane(boundary1)
             # Case 1 : boundaries are not parallel
             plane_intersect = base_plane.intersect(get_plane(boundary2))
@@ -662,6 +680,9 @@ def rejoin_boundaries(space, sia_type):
             line_intersect = line1.intersect2d(line2, base_plane)
             if line_intersect:
                 point1 = line_intersect[0]
+                # TODO: Investigate to see if line.intersect2d(line2, base_plane) might cause some real issues
+                if not isinstance(point1, FreeCAD.Vector):
+                    point1 = FreeCAD.Vector(*point1)
                 if line1.Direction.dot(line2.Direction) > 0:
                     point2 = point1 + line1.Direction + line2.Direction
                 else:
@@ -673,7 +694,12 @@ def rejoin_boundaries(space, sia_type):
 
             lines.append(Part.Line(point1, point2))
         # Generate new shape
-        outer_wire = polygon_from_lines(lines)
+        try:
+            outer_wire = polygon_from_lines(lines)
+        except NoIntersectionError:
+            # TODO: Investigate to see why this happens
+            logger.warning(f"Unable to rejoin boundary Id <{base_boundary.Id}>")
+            continue
         face = Part.Face(outer_wire)
         inner_wires = get_inner_wires(boundary1)
         for inner_wire in inner_wires:
@@ -758,9 +784,16 @@ def line_from_edge(edge: Part.Edge) -> Part.Line:
 def polygon_from_lines(lines):
     new_points = []
     for line1, line2 in zip(lines, lines[1:] + lines[:1]):
-        new_points.append(line1.intersectCC(line2, 1)[0].toShape().Point)
+        try:
+            new_points.append(line1.intersectCC(line2, 1)[0].toShape().Point)
+        except IndexError:
+            raise NoIntersectionError
     new_points[0:0] = new_points[-1:]
     return Part.makePolygon(new_points)
+
+
+class NoIntersectionError(IndexError):
+    pass
 
 
 def create_fc_shape(space_boundary):
@@ -780,9 +813,12 @@ def create_fc_shape(space_boundary):
             )
         except RuntimeError:
             print(f"Failed to generate mesh from {space_boundary}")
-            return _part_by_mesh(
+            try:
+                return _part_by_mesh(
                 space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
             )
+            except RuntimeError:
+                raise ShapeCreationError
 
 
 def _part_by_brep(ifc_entity):
@@ -1276,8 +1312,9 @@ if __name__ == "__main__":
         "2Storey_2x3_R19.ifc",
         "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
         "Investigation_test_R19.ifc",
+        "OverSplitted_R20_2x3.ifc",
     ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[6])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
@@ -1296,9 +1333,9 @@ if __name__ == "__main__":
         DOC = FreeCAD.newDocument()
 
         generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
-        processing_sia_boundaries(DOC)
-        bem_xml = write_xml(DOC)
-        output_xml_to_path(bem_xml)
+        # processing_sia_boundaries(DOC)
+        # bem_xml = write_xml(DOC)
+        # output_xml_to_path(bem_xml)
         
         # xml_str = generate_bem_xml_from_file(IFC_PATH)
 
