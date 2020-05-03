@@ -583,7 +583,7 @@ def associate_corresponding_boundary(fc_boundary, doc):
         corresponding_boundary.CorrespondingBoundary = fc_boundary
     except NameError:
         # TODO: What to do with uncorrectly classified boundaries which have no corresponding boundary
-        FreeCAD.Console.PrintLog(
+        logger.warning(
             f"Boundary {fc_boundary.GlobalId} from space {fc_boundary}"
         )
         return
@@ -614,7 +614,7 @@ def get_element_by_guid(guid, elements_group):
         if fc_element.GlobalId == guid:
             return fc_element
     else:
-        FreeCAD.Console.PrintLog(f"Unable to get element by {guid}")
+        logger.warning(f"Unable to get element by {guid}")
 
 
 def get_thickness(ifc_entity):
