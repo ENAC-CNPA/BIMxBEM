@@ -1305,16 +1305,18 @@ if __name__ == "__main__":
         TEST_FOLDER = r"C:\git\BIMxBEM\IfcTestFiles"
     else:
         TEST_FOLDER = "/home/cyril/git/BIMxBEM/IfcTestFiles/"
-    TEST_FILES = [
-        "Triangle_2x3_A23.ifc",
-        "Triangle_2x3_R19.ifc",
-        "2Storey_2x3_A22.ifc",
-        "2Storey_2x3_R19.ifc",
-        "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
-        "Investigation_test_R19.ifc",
-        "OverSplitted_R20_2x3.ifc",
-    ]
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[6])
+    TEST_FILES = {
+        0: "Triangle_2x3_A23.ifc",
+        1: "Triangle_2x3_R19.ifc",
+        2: "2Storey_2x3_A22.ifc",
+        3: "2Storey_2x3_R19.ifc",
+        4: "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
+        6: "Investigation_test_R19.ifc",
+        7: "OverSplitted_R20_2x3.ifc",
+        8: "ExternalEarth_R20_2x3.ifc",
+        9: "ExternalEarth_R20_IFC4.ifc",
+    }
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[7])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
