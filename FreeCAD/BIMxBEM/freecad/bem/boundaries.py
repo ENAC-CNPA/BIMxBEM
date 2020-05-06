@@ -100,7 +100,7 @@ def get_elements_by_ifctype(ifc_type: str, doc=FreeCAD.ActiveDocument):
         try:
             if element.IfcType == ifc_type:
                 yield element
-        except AttributeError:
+        except (AttributeError, ReferenceError):
             continue
 
 
@@ -122,10 +122,6 @@ def generate_ifc_rel_space_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     # Associate CorrespondingBoundary
     associate_corresponding_boundaries(doc)
 
-    # Join over splitted boundaries
-    for space in get_elements_by_ifctype("IfcSpace", doc):
-        join_over_splitted_boundaries(space)
-
     # Associate Host / Hosted elements
     associate_host_element(ifc_file, elements_group)
 
@@ -146,7 +142,7 @@ def generate_ifc_rel_space_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
 def processing_sia_boundaries(doc=FreeCAD.ActiveDocument):
     """Create SIA specific boundaries cf. https://www.sia.ch/fr/services/sia-norm/"""
     for space in get_elements_by_ifctype("IfcSpace", doc):
-        close_space_boundaries(space)
+        join_over_splitted_boundaries(space, doc)
         find_closest_edges(space)
         set_leso_type(space)
     create_sia_boundaries(doc)
@@ -174,25 +170,7 @@ def output_xml_to_path(bem_xml, xml_path=None):
     bem_xml.write_to_file(xml_path)
 
 
-def close_space_boundaries(space):
-    """
-    1 Fill gaps between boundaries (2b)
-    2 try to join boundaries which shares same building element, same space and same orientation
-    https://standards.buildingsmart.org/IFC/RELEASE/IFC4/ADD2_TC1/HTML/schema/ifcproductextension/lexical/ifcrelspaceboundary2ndlevel.htm
-    """
-    join_over_splitted_boundaries(space)
-    boundaries = space.SecondLevel.Group
-    for rel_boundary1 in boundaries:
-        for edge1 in get_outer_wire(rel_boundary1).Edges:
-            mid_point = edge1.CenterOfMass
-            for rel_boundary2 in boundaries:
-                if rel_boundary1 == rel_boundary2:
-                    continue
-                for edge2 in enumerate(get_outer_wire(rel_boundary2).Edges):
-                    pass
-
-
-def join_over_splitted_boundaries(space):
+def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
     boundaries = space.SecondLevel.Group
     if len(boundaries) < 5:
         return
@@ -237,7 +215,7 @@ def join_over_splitted_boundaries(space):
             if len(coplanar_list) == 1:
                 continue
             # Case 2 : more than 1 boundary related to the same element might be grouped.
-            join_boundaries(coplanar_list)
+            join_boundaries(coplanar_list, doc)
 
 
 def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
@@ -246,7 +224,8 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     inner_wires = get_inner_wires(result_boundary)[:]
     vectors1 = get_boundary_outer_vectors(result_boundary)
     # FIXME: Infinite loop somewhere in this. It doesn’t work ?
-    while boundaries:
+    junction_found = True
+    def find_and_join():
         for boundary2 in boundaries:
             vectors2 = get_boundary_outer_vectors(boundary2)
             for ei1, ei2 in itertools.product(
@@ -272,14 +251,17 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
 
                 # Check in which order vectors1 and vectors2 should be connected
                 if dir0.isEqual(dir1, TOLERANCE):
-                    p0_1_next_point = p1_2
+                    p0_1_next_point, other_point = p1_1, p1_2
                     reverse_new_points = True
                 else:
-                    p0_1_next_point = p1_1
+                    p0_1_next_point, other_point = p1_2, p1_1
                     reverse_new_points = False
 
                 # Check if edge1 and edge2 have a common segment
-                if not dir0.dot(p0_1_next_point - p0_1) < dir0.dot(p0_2 - p0_1):
+                if not(
+                    dir0.dot(p0_1_next_point - p0_1) < dir0.dot(p0_2 - p0_1) and 
+                    dir0.negative().dot(other_point - p0_2) < dir0.negative().dot(p0_1 - p0_2)
+                    ):
                     continue
 
                 # join vectors1 and vectors2 at indexes
@@ -294,11 +276,20 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
                 inner_wires.extend(get_inner_wires(boundary2))
                 boundaries.remove(boundary2)
                 doc.removeObject(boundary2.Name)
+                return True
+        else:
+            logger.warning(f"Unable to join boundaries RelSpaceBoundary Id <{result_boundary.Id}> with boundaries <{(b.Id for b in boundaries)}>")
+            return False
+
+    while boundaries and junction_found:
+        junction_found = find_and_join()
 
     # Replace existing shape with joined shapes
     close_vectors(vectors1)
     outer_wire = Part.makePolygon(vectors1)
     face = Part.Face(outer_wire)
+    for inner_wire in inner_wires:
+        face = face.cut(Part.Face(inner_wire))
     result_boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
 
 
@@ -652,6 +643,12 @@ def create_sia_boundaries(doc=FreeCAD.ActiveDocument):
 
 
 def rejoin_boundaries(space, sia_type):
+    """
+    Rejoin boundaries after their translation to get a correct close shell surfaces.
+    1 Fill gaps between boundaries (2b)
+    2 Fill gaps gerenate by translation to make a boundary on the inside or outside boundary of building elements
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4/ADD2_TC1/HTML/schema/ifcproductextension/lexical/ifcrelspaceboundary2ndlevel.htm
+    """
     base_boundaries = space.SecondLevel.Group
     for base_boundary in base_boundaries:
         lines = []
@@ -954,13 +951,13 @@ class Root:
         obj.addProperty("App::PropertyString", "IfcType", "IFC")
         obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
         obj.addProperty("App::PropertyString", "GlobalId", ifc_attributes)
-        obj.addProperty("App::PropertyString", "Name", ifc_attributes)
+        obj.addProperty("App::PropertyString", "IfcName", ifc_attributes)
         obj.addProperty("App::PropertyString", "Description", ifc_attributes)
 
         obj.Id = ifc_entity.id()
         obj.GlobalId = ifc_entity.GlobalId
         obj.IfcType = ifc_entity.is_a()
-        obj.Name = ifc_entity.Name
+        obj.IfcName = ifc_entity.Name
         self.set_label(obj, ifc_entity)
         try:
             obj.Description = ifc_entity.Description
@@ -1335,7 +1332,7 @@ if __name__ == "__main__":
         DOC = FreeCAD.newDocument()
 
         generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
-        # processing_sia_boundaries(DOC)
+        processing_sia_boundaries(DOC)
         # bem_xml = write_xml(DOC)
         # output_xml_to_path(bem_xml)
         
