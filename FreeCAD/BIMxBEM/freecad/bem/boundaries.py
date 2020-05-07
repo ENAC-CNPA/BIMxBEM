@@ -223,8 +223,8 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     result_boundary = boundaries.pop()
     inner_wires = get_inner_wires(result_boundary)[:]
     vectors1 = get_boundary_outer_vectors(result_boundary)
-    # FIXME: Infinite loop somewhere in this. It doesn’t work ?
     junction_found = True
+    
     def find_and_join():
         for boundary2 in boundaries:
             vectors2 = get_boundary_outer_vectors(boundary2)
@@ -284,6 +284,65 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     while boundaries and junction_found:
         junction_found = find_and_join()
 
+    common_edge_found = True
+    while common_edge_found:
+        for ei1, ei2 in itertools.combinations(range(len(vectors1)), 2):
+
+            # retrieves points from previous edge to next edge included.
+            p0_1, p0_2 = (vectors1[ei1], vectors1[(ei1 + 1) % len(vectors1)])
+            p1_1, p1_2 = (vectors1[ei2], vectors1[(ei2 + 1) % len(vectors1)])
+
+            v0_12 = p0_2 - p0_1
+            v1_12 = p1_2 - p1_1
+
+            dir0 = (v0_12).normalize()
+            dir1 = (v1_12).normalize()
+
+            # if edge1 and edge2 are not collinear no junction is possible.
+            same_dir = dir0.isEqual(dir1, TOLERANCE)
+            if not (
+                (same_dir or dir0.isEqual(-dir1, TOLERANCE))
+                and v0_12.cross(p1_1 - p0_1).Length < TOLERANCE
+            ):
+                continue
+
+            # Check in which order vectors1 and vectors2 should be connected
+            if same_dir:
+                p0_1_next_point, other_point = p1_1, p1_2
+                reverse_new_points = True
+            else:
+                p0_1_next_point, other_point = p1_2, p1_1
+                reverse_new_points = False
+
+            # Check if edge1 and edge2 have a common segment
+            if not(
+                dir0.dot(p0_1_next_point - p0_1) < dir0.dot(p0_2 - p0_1) and 
+                dir0.negative().dot(other_point - p0_2) < dir0.negative().dot(p0_1 - p0_2)
+                ):
+                continue
+
+            # join vectors1 and vectors2 at indexes
+            vectors_split1 = vectors1[:ei1+1] + vectors1[ei2+1:]
+            vectors_split2 = vectors1[ei1+1:ei2+1]
+            clean_vectors(vectors_split1)
+            clean_vectors(vectors_split2)
+            area1 = Part.Face(Part.makePolygon(vectors_split1 + [vectors_split1[-1]])).Area
+            area2 = Part.Face(Part.makePolygon(vectors_split2 + [vectors_split2[-1]])).Area
+            if area1 > area2:
+                vectors1 = vectors_split1
+                inner_vectors = vectors_split2
+            else:
+                vectors1 = vectors_split2
+                inner_vectors = vectors_split1
+            
+            close_vectors(inner_vectors)
+            inner_wires.extend([Part.makePolygon(inner_vectors)])
+            
+            common_edge_found = True
+            break
+        else:
+            common_edge_found = False
+
     # Replace existing shape with joined shapes
     close_vectors(vectors1)
     outer_wire = Part.makePolygon(vectors1)
@@ -304,7 +363,7 @@ def clean_vectors(vectors):
         p1 = vectors[i - 1]
         p2 = vectors[i]
         p3 = vectors[(i + 1) % len(vectors)]
-        if p2 == p3 or are_3points_collinear(p1, p2, p3):
+        if p2.isEqual(p3, TOLERANCE) or p1.isEqual(p2, TOLERANCE) or are_3points_collinear(p1, p2, p3):
             vectors.remove(p2)
             continue
         i += 1
