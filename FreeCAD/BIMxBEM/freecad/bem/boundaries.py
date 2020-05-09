@@ -278,6 +278,10 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
 
                 clean_vectors(vectors1)
                 inner_wires.extend(get_inner_wires(boundary2))
+                if not result_boundary.IsHosted:
+                    for inner_boundary in boundary2.InnerBoundaries:
+                        append(result_boundary, "InnerBoundaries", inner_boundary)
+                        inner_boundary.ParentBoundary = result_boundary.Id
                 boundaries.remove(boundary2)
                 doc.removeObject(boundary2.Name)
                 return True
