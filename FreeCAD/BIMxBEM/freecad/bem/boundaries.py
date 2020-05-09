@@ -66,7 +66,9 @@ def generate_space(ifc_space, parent, doc=FreeCAD.ActiveDocument):
                 append(element, "ProvidesBoundaries", face.Id)
             face.RelatingSpace = fc_space.Id
         except ShapeCreationError:
-            logger.warning(f"Failed to create fc_shape for RelSpaceBoundary <{ifc_boundary.id()}> even with fallback methode _part_by_mesh. IfcOpenShell bug ?")
+            logger.warning(
+                f"Failed to create fc_shape for RelSpaceBoundary <{ifc_boundary.id()}> even with fallback methode _part_by_mesh. IfcOpenShell bug ?"
+            )
 
 
 class ShapeCreationError(RuntimeError):
@@ -142,6 +144,7 @@ def generate_ifc_rel_space_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
 def processing_sia_boundaries(doc=FreeCAD.ActiveDocument):
     """Create SIA specific boundaries cf. https://www.sia.ch/fr/services/sia-norm/"""
     for space in get_elements_by_ifctype("IfcSpace", doc):
+        ensure_hosted_element_are(space, doc)
         join_over_splitted_boundaries(space, doc)
         find_closest_edges(space)
         set_leso_type(space)
@@ -224,7 +227,7 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     inner_wires = get_inner_wires(result_boundary)[:]
     vectors1 = get_boundary_outer_vectors(result_boundary)
     junction_found = True
-    
+
     def find_and_join():
         for boundary2 in boundaries:
             vectors2 = get_boundary_outer_vectors(boundary2)
@@ -258,10 +261,11 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
                     reverse_new_points = False
 
                 # Check if edge1 and edge2 have a common segment
-                if not(
-                    dir0.dot(p0_1_next_point - p0_1) < dir0.dot(p0_2 - p0_1) and 
-                    dir0.negative().dot(other_point - p0_2) < dir0.negative().dot(p0_1 - p0_2)
-                    ):
+                if not (
+                    dir0.dot(p0_1_next_point - p0_1) < dir0.dot(p0_2 - p0_1)
+                    and dir0.negative().dot(other_point - p0_2)
+                    < dir0.negative().dot(p0_1 - p0_2)
+                ):
                     continue
 
                 # join vectors1 and vectors2 at indexes
@@ -278,7 +282,9 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
                 doc.removeObject(boundary2.Name)
                 return True
         else:
-            logger.warning(f"Unable to join boundaries RelSpaceBoundary Id <{result_boundary.Id}> with boundaries <{(b.Id for b in boundaries)}>")
+            logger.warning(
+                f"Unable to join boundaries RelSpaceBoundary Id <{result_boundary.Id}> with boundaries <{(b.Id for b in boundaries)}>"
+            )
             return False
 
     while boundaries and junction_found:
@@ -315,29 +321,34 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
                 reverse_new_points = False
 
             # Check if edge1 and edge2 have a common segment
-            if not(
-                dir0.dot(p0_1_next_point - p0_1) < dir0.dot(p0_2 - p0_1) and 
-                dir0.negative().dot(other_point - p0_2) < dir0.negative().dot(p0_1 - p0_2)
-                ):
+            if not (
+                dir0.dot(p0_1_next_point - p0_1) < dir0.dot(p0_2 - p0_1)
+                and dir0.negative().dot(other_point - p0_2)
+                < dir0.negative().dot(p0_1 - p0_2)
+            ):
                 continue
 
             # join vectors1 and vectors2 at indexes
-            vectors_split1 = vectors1[:ei1+1] + vectors1[ei2+1:]
-            vectors_split2 = vectors1[ei1+1:ei2+1]
+            vectors_split1 = vectors1[: ei1 + 1] + vectors1[ei2 + 1 :]
+            vectors_split2 = vectors1[ei1 + 1 : ei2 + 1]
             clean_vectors(vectors_split1)
             clean_vectors(vectors_split2)
-            area1 = Part.Face(Part.makePolygon(vectors_split1 + [vectors_split1[-1]])).Area
-            area2 = Part.Face(Part.makePolygon(vectors_split2 + [vectors_split2[-1]])).Area
+            area1 = Part.Face(
+                Part.makePolygon(vectors_split1 + [vectors_split1[-1]])
+            ).Area
+            area2 = Part.Face(
+                Part.makePolygon(vectors_split2 + [vectors_split2[-1]])
+            ).Area
             if area1 > area2:
                 vectors1 = vectors_split1
                 inner_vectors = vectors_split2
             else:
                 vectors1 = vectors_split2
                 inner_vectors = vectors_split1
-            
+
             close_vectors(inner_vectors)
             inner_wires.extend([Part.makePolygon(inner_vectors)])
-            
+
             common_edge_found = True
             break
         else:
@@ -352,6 +363,68 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     result_boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
 
 
+def ensure_hosted_element_are(space, doc=FreeCAD.ActiveDocument):
+    for boundary in space.SecondLevel.Group:
+        try:
+            ifc_type = boundary.RelatedBuildingElement.IfcType
+        except AttributeError:
+            continue
+
+        if not is_typically_hosted(ifc_type):
+            continue
+
+        if boundary.IsHosted:
+            continue
+
+        def find_host(boundary):
+            fallback_solution = None
+            normal = get_normal_at(boundary)
+            for boundary2 in space.SecondLevel.Group:
+                if not normal.isEqual(get_normal_at(boundary2), TOLERANCE):
+                    continue
+
+                fallback_solution = boundary2
+                for inner_wire in get_inner_wires(boundary2):
+                    if (
+                        not abs(Part.Face(inner_wire).Area - boundary.Area.Value)
+                        < TOLERANCE
+                    ):
+                        continue
+
+                    return boundary2
+            else:
+                if not fallback_solution:
+                    raise HostNotFound(
+                        f"No host found for RelSpaceBoundary Id<{boundary.Id}>"
+                    )
+                logger.warning(
+                    f"Using fallback solution to resolve host of RelSpaceBoundary Id<{boundary.Id}>"
+                )
+                return fallback_solution
+
+        try:
+            host = find_host(boundary)
+        except HostNotFound as err:
+            logger.exception(err)
+        boundary.IsHosted = True
+        boundary.ParentBoundary = host.Id
+        append(host, "InnerBoundaries", boundary)
+
+
+def is_typically_hosted(ifc_type: str):
+    """Say if given ifc_type is typically hosted eg. windows, doors"""
+    usually_hosted_types = ("IfcWindow", "IfcWall")
+    for usual_type in usually_hosted_types:
+        if ifc_type.startswith(usual_type):
+            return True
+    else:
+        return False
+
+
+class HostNotFound(LookupError):
+    pass
+
+
 def clean_vectors(vectors):
     """Clean vectors for polygons creation
     Keep only 1 point if 2 consecutive points are equal.
@@ -363,13 +436,19 @@ def clean_vectors(vectors):
         p1 = vectors[i - 1]
         p2 = vectors[i]
         p3 = vectors[(i + 1) % len(vectors)]
-        if p2.isEqual(p3, TOLERANCE) or p1.isEqual(p2, TOLERANCE) or are_3points_collinear(p1, p2, p3):
+        if (
+            p2.isEqual(p3, TOLERANCE)
+            or p1.isEqual(p2, TOLERANCE)
+            or are_3points_collinear(p1, p2, p3)
+        ):
             vectors.remove(p2)
             continue
         i += 1
 
+
 def get_wires(boundary):
     return (s for s in boundary.Shape.SubShapes if isinstance(s, Part.Wire))
+
 
 def get_outer_wire(boundary):
     return [s for s in boundary.Shape.SubShapes if isinstance(s, Part.Wire)][0]
@@ -453,9 +532,11 @@ def find_closest_edges(space):
         boundary.ClosestEdges = closest_dict[i]["edges"]
         boundary.ClosestDistance = closest_dict[i]["distances"]
 
+
 def set_leso_type(space):
     for boundary in space.SecondLevel.Group:
         boundary.LesoType = define_leso_type(boundary)
+
 
 def define_leso_type(boundary):
     try:
@@ -478,6 +559,7 @@ def define_leso_type(boundary):
     else:
         logger.warning(f"Unable to define LesoType for Boundary Id <{boundary.Id}>")
         return "Unknown"
+
 
 def compute_distance(edge1, edge2):
     mid_point = edge1.CenterOfMass
@@ -550,9 +632,11 @@ def is_coplanar(shape_1, shape_2):
 
 def get_plane(fc_boundary):
     """Intended for RelSpaceBoundary use only"""
-    return Part.Plane(
-        fc_boundary.Shape.Vertexes[0].Point, fc_boundary.Shape.Faces[0].normalAt(0, 0)
-    )
+    return Part.Plane(fc_boundary.Shape.Vertexes[0].Point, get_normal_at(fc_boundary))
+
+
+def get_normal_at(fc_boundary, at=(0, 0)):
+    return fc_boundary.Shape.Faces[0].normalAt(*at)
 
 
 def append(doc_object, fc_property, value):
@@ -633,9 +717,7 @@ def associate_corresponding_boundary(fc_boundary, doc):
         corresponding_boundary.CorrespondingBoundary = fc_boundary
     except NameError:
         # TODO: What to do with uncorrectly classified boundaries which have no corresponding boundary
-        logger.warning(
-            f"Boundary {fc_boundary.GlobalId} from space {fc_boundary}"
-        )
+        logger.warning(f"Boundary {fc_boundary.GlobalId} from space {fc_boundary}")
         return
 
 
@@ -790,7 +872,7 @@ def create_sia_ext_boundaries(space, is_from_revit, is_from_archicad):
         ifc_type = boundary1.RelatedBuildingElement.IfcType
         normal = boundary1.Shape.Faces[0].normalAt(0, 0)
         # if is_from_archicad:
-            # normal = -normal
+        # normal = -normal
         # EXTERNAL: there is multiple possible values for external so testing internal is better.
         if boundary1.InternalOrExternalBoundary != "INTERNAL":
             lenght = thickness
@@ -801,7 +883,7 @@ def create_sia_ext_boundaries(space, is_from_revit, is_from_archicad):
         else:
             type1 = {"IfcSlab"}
             if ifc_type in type1:
-                lenght = thickness/2
+                lenght = thickness / 2
             else:
                 if is_from_revit:
                     continue
@@ -871,8 +953,8 @@ def create_fc_shape(space_boundary):
             print(f"Failed to generate mesh from {space_boundary}")
             try:
                 return _part_by_mesh(
-                space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
-            )
+                    space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
+                )
             except RuntimeError:
                 raise ShapeCreationError
 
@@ -1146,16 +1228,15 @@ class RelSpaceBoundary(Root):
     def set_label(obj, ifc_entity):
         try:
             obj.Label = "{} {}".format(
-                ifc_entity.id(),
-                ifc_entity.RelatedBuildingElement.Name,
+                ifc_entity.id(), ifc_entity.RelatedBuildingElement.Name,
             )
         except AttributeError:
             obj.Label = f"{ifc_entity.id()} VIRTUAL"
             if ifc_entity.PhysicalOrVirtualBoundary != "VIRTUAL":
                 logger.warning(
-                f"{ifc_entity.id()} is not VIRTUAL and has no RelatedBuildingElement"
-            )
-            
+                    f"{ifc_entity.id()} is not VIRTUAL and has no RelatedBuildingElement"
+                )
+
     @staticmethod
     def get_wires(obj):
         return get_wires(obj)
@@ -1394,7 +1475,7 @@ if __name__ == "__main__":
         processing_sia_boundaries(DOC)
         # bem_xml = write_xml(DOC)
         # output_xml_to_path(bem_xml)
-        
+
         # xml_str = generate_bem_xml_from_file(IFC_PATH)
 
         FreeCADGui.activeView().viewIsometric()
