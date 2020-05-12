@@ -3,6 +3,7 @@
 import os
 import itertools
 import logging
+from collections import namedtuple
 
 import ifcopenshell
 import ifcopenshell.geom
@@ -417,7 +418,7 @@ def ensure_hosted_element_are(space, doc=FreeCAD.ActiveDocument):
 
 def is_typically_hosted(ifc_type: str):
     """Say if given ifc_type is typically hosted eg. windows, doors"""
-    usually_hosted_types = ("IfcWindow", "IfcWall")
+    usually_hosted_types = ("IfcWindow", "IfcDoor")
     for usual_type in usually_hosted_types:
         if ifc_type.startswith(usual_type):
             return True
@@ -496,20 +497,37 @@ def direction(v0, v1):
 
 
 def find_closest_edges(space):
+    """Find closest boundary and edge to be able to reconstruct a closed shell"""
     boundaries = [b for b in space.SecondLevel.Group if not b.IsHosted]
-    closest_dict = dict()
-    for i, boundary in enumerate(boundaries):
-        n = len(get_outer_wire(boundary).Edges)
-        closest_dict[i] = {
-            "boundaries": [-1] * n,
-            "edges": [-1] * n,
-            "distances": [10000] * n,
-        }
-    for (bi1, boundary1), (bi2, boundary2) in itertools.combinations(
-        enumerate(boundaries), 2
+    Closest = namedtuple("Closest", ["boundary", "edge", "distance"])
+    # Initialise dict to store values
+    for boundary in boundaries:
+        n_edges = len(get_outer_wire(boundary).Edges)
+        boundary.Proxy.closest = [Closest(boundary=-1, edge=-1, distance=10000)]  * n_edges
+
+    def compare_closest(boundary1, ei1, edge1, boundary2, ei2, edge2):
+        closest_boundary, closest_edge, distance = boundary1.Proxy.closest[ei1]
+        edge_to_edge = compute_distance(edge1, edge2)
+        # Current not perfect solution to manage lift hole in a roof
+        if abs(edge_to_edge - distance) <= TOLERANCE:
+            boundary1_normal = get_normal_at(boundary1)
+            current_closest_is_parallel = get_normal_at(
+                closest_boundary
+            ).isEqual(boundary1_normal, TOLERANCE)
+            new_closest_is_parallel = get_normal_at(boundary2).isEqual(
+                boundary1_normal, TOLERANCE
+            )
+            if current_closest_is_parallel and new_closest_is_parallel:
+                return
+        # Standard way
+        elif edge_to_edge > distance:
+            return
+        boundary1.Proxy.closest[ei1] = Closest(boundary2, ei2, edge_to_edge)
+
+    # Loop through all boundaries and edges to find the closest edge
+    for boundary1, boundary2 in itertools.combinations(
+        boundaries, 2
     ):
-        distances1 = closest_dict[bi1]["distances"]
-        distances2 = closest_dict[bi2]["distances"]
         edges1 = get_outer_wire(boundary1).Edges
         edges2 = get_outer_wire(boundary2).Edges
         for (ei1, edge1), (ei2, edge2) in itertools.product(
@@ -517,24 +535,14 @@ def find_closest_edges(space):
         ):
             if not is_low_angle(edge1, edge2):
                 continue
-            distance = distances1[ei1]
-            edge_to_edge = compute_distance(edge1, edge2)
-            if edge_to_edge < distance:
-                closest_dict[bi1]["boundaries"][ei1] = boundary2.Id
-                closest_dict[bi1]["edges"][ei1] = ei2
-                distances1[ei1] = round(edge_to_edge)
 
-            distance = distances2[ei2]
-            edge_to_edge = compute_distance(edge2, edge1)
-            if edge_to_edge < distance:
-                closest_dict[bi2]["boundaries"][ei2] = boundary1.Id
-                closest_dict[bi2]["edges"][ei2] = ei1
-                distances2[ei2] = round(edge_to_edge)
+            compare_closest(boundary1, ei1, edge1, boundary2, ei2, edge2)
+            compare_closest(boundary2, ei2, edge2, boundary1, ei1, edge1)
 
-    for i, boundary in enumerate(boundaries):
-        boundary.ClosestBoundaries = closest_dict[i]["boundaries"]
-        boundary.ClosestEdges = closest_dict[i]["edges"]
-        boundary.ClosestDistance = closest_dict[i]["distances"]
+    for boundary in boundaries:
+        closest_boundaries, boundary.ClosestEdges, closest_distances = (list(i) for i in zip(*boundary.Proxy.closest))
+        boundary.ClosestBoundaries = [b.Id for b in closest_boundaries]
+        boundary.ClosestDistance = [int(d) for d in closest_distances]
 
 
 def set_leso_type(space):
