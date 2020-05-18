@@ -500,34 +500,57 @@ def find_closest_edges(space):
     """Find closest boundary and edge to be able to reconstruct a closed shell"""
     boundaries = [b for b in space.SecondLevel.Group if not b.IsHosted]
     Closest = namedtuple("Closest", ["boundary", "edge", "distance"])
-    # Initialise dict to store values
+    # Initialise defaults values
     for boundary in boundaries:
         n_edges = len(get_outer_wire(boundary).Edges)
-        boundary.Proxy.closest = [Closest(boundary=-1, edge=-1, distance=10000)]  * n_edges
+        boundary.Proxy.closest = [
+            Closest(boundary=-1, edge=-1, distance=10000)
+        ] * n_edges
 
     def compare_closest(boundary1, ei1, edge1, boundary2, ei2, edge2):
+        is_closest = False
         closest_boundary, closest_edge, distance = boundary1.Proxy.closest[ei1]
         edge_to_edge = compute_distance(edge1, edge2)
-        # Current not perfect solution to manage lift hole in a roof
-        if abs(edge_to_edge - distance) <= TOLERANCE:
-            boundary1_normal = get_normal_at(boundary1)
-            current_closest_is_parallel = get_normal_at(
-                closest_boundary
-            ).isEqual(boundary1_normal, TOLERANCE)
-            new_closest_is_parallel = get_normal_at(boundary2).isEqual(
-                boundary1_normal, TOLERANCE
-            )
-            if current_closest_is_parallel and new_closest_is_parallel:
-                return
-        # Standard way
-        elif edge_to_edge > distance:
+
+        if distance <= TOLERANCE:
             return
-        boundary1.Proxy.closest[ei1] = Closest(boundary2, ei2, edge_to_edge)
+
+        # Perfect match
+        if edge_to_edge <= TOLERANCE:
+            is_closest = True
+
+        elif edge_to_edge - distance - TOLERANCE <= 0:
+            # Case 1 : boundaries point in same direction so all solution are valid.
+            dot_dir = get_normal_at(boundary2).dot(get_normal_at(boundary1))
+            if abs(dot_dir) >= 1 - TOLERANCE:
+                is_closest = True
+            # Case 2 : boundaries intersect
+            else:
+                # Check if projection on plane intersection cross boundary1. If so edge2 cannot be a valid solution.
+                pnt1 = edge1.CenterOfMass
+                plane_intersect = get_plane(boundary1).intersect(get_plane(boundary2))[
+                    0
+                ]
+                v_ab = plane_intersect.Direction
+                v_ap = pnt1 - plane_intersect.Location
+                pnt2 = pnt1 + FreeCAD.Vector().projectToLine(v_ap, v_ab)
+                try:
+                    projection_edge = Part.makeLine(pnt1, pnt2)
+                    common = projection_edge.common(boundary1.Shape.Faces[0])
+                    if common.Length <= TOLERANCE:
+                        is_closest = True
+                # Catch case where pnt1 == pnt2 which is fore sure a valid solution.
+                except Part.OCCError:
+                    is_closest = True
+        if is_closest:
+            boundary1.Proxy.closest[ei1] = Closest(boundary2, ei2, edge_to_edge)
 
     # Loop through all boundaries and edges to find the closest edge
-    for boundary1, boundary2 in itertools.combinations(
-        boundaries, 2
-    ):
+    for boundary1, boundary2 in itertools.combinations(boundaries, 2):
+        # If boundary1 and boundary2 are facing an opposite direction no match possible
+        if get_normal_at(boundary2).dot(get_normal_at(boundary1)) <= -1 + TOLERANCE:
+            continue
+
         edges1 = get_outer_wire(boundary1).Edges
         edges2 = get_outer_wire(boundary2).Edges
         for (ei1, edge1), (ei2, edge2) in itertools.product(
@@ -539,8 +562,11 @@ def find_closest_edges(space):
             compare_closest(boundary1, ei1, edge1, boundary2, ei2, edge2)
             compare_closest(boundary2, ei2, edge2, boundary1, ei1, edge1)
 
+    # Store found values in standard FreeCAD properties
     for boundary in boundaries:
-        closest_boundaries, boundary.ClosestEdges, closest_distances = (list(i) for i in zip(*boundary.Proxy.closest))
+        closest_boundaries, boundary.ClosestEdges, closest_distances = (
+            list(i) for i in zip(*boundary.Proxy.closest)
+        )
         boundary.ClosestBoundaries = [b.Id for b in closest_boundaries]
         boundary.ClosestDistance = [int(d) for d in closest_distances]
 
