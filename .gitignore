@@ -176,3 +176,7 @@ _windows
 .vs/
 ifcopenshell/
 OCC/
+*.FCStd*
+*.rvt
+*.pln
+*.pla
