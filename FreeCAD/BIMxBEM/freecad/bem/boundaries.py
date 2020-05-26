@@ -194,7 +194,7 @@ def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
         if corresponding_boundary:
             key += str(corresponding_boundary.Id)
         elements_dict.setdefault(key, []).append(rel_boundary)
-    for boundary_list in elements_dict.values():
+    for key, boundary_list in elements_dict.items():
         # None coplanar boundaries should not be connected.
         # eg. round wall splitted with multiple orientations.
 
@@ -211,15 +211,19 @@ def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
                 # TODO: Test if this test is not too strict considering precision
                 if is_coplanar(boundary, coplanar_list[0]):
                     coplanar_list.append(boundary)
-                else:
-                    coplanar_boundaries.append([boundary])
+                    break
+            else:
+                coplanar_boundaries.append([boundary])
 
         for coplanar_list in coplanar_boundaries:
             # Case 1 : only 1 boundary related to the same element. Cannot group boundaries.
             if len(coplanar_list) == 1:
                 continue
             # Case 2 : more than 1 boundary related to the same element might be grouped.
-            join_boundaries(coplanar_list, doc)
+            try:
+                join_boundaries(coplanar_list, doc)
+            except Part.OCCError:
+                logger.warning(f"Cannot join boundaries in space <{space.Id}> with key <{key}>")
 
 
 def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
@@ -228,6 +232,7 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     inner_wires = get_inner_wires(result_boundary)[:]
     vectors1 = get_boundary_outer_vectors(result_boundary)
     junction_found = True
+    remove_from_doc = list()
 
     def find_and_join():
         for boundary2 in boundaries:
@@ -284,7 +289,7 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
                         append(result_boundary, "InnerBoundaries", inner_boundary)
                         inner_boundary.ParentBoundary = result_boundary.Id
                 boundaries.remove(boundary2)
-                doc.removeObject(boundary2.Name)
+                remove_from_doc.append(boundary2)
                 return True
         else:
             logger.warning(
@@ -366,6 +371,10 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     for inner_wire in inner_wires:
         face = face.cut(Part.Face(inner_wire))
     result_boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
+
+    # Clean FreeCAD document if join operation was a success
+    for fc_object in remove_from_doc:
+        doc.removeObject(fc_object.Name)
 
 
 def ensure_hosted_element_are(space, doc=FreeCAD.ActiveDocument):
@@ -504,7 +513,7 @@ def find_closest_edges(space):
     for boundary in boundaries:
         n_edges = len(get_outer_wire(boundary).Edges)
         boundary.Proxy.closest = [
-            Closest(boundary=-1, edge=-1, distance=10000)
+            Closest(boundary=-1, edge=-1, distance=100000)
         ] * n_edges
 
     def compare_closest(boundary1, ei1, edge1, boundary2, ei2, edge2):
@@ -1236,6 +1245,7 @@ class RelSpaceBoundary(Root):
         self.set_label(obj, ifc_entity)
         if not obj.PhysicalOrVirtualBoundary == "VIRTUAL":
             obj.IsHosted = bool(ifc_entity.RelatedBuildingElement.FillsVoids)
+        obj.LesoType = "Unknown"
 
     @staticmethod
     def create(obj_name: str = "RelSpaceBoundary", ifc_entity=None):
@@ -1491,7 +1501,7 @@ if __name__ == "__main__":
         8: "ExternalEarth_R20_2x3.ifc",
         9: "ExternalEarth_R20_IFC4.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[7])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[4])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
