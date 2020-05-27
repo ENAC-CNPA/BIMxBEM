@@ -347,10 +347,10 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
             clean_vectors(vectors_split1)
             clean_vectors(vectors_split2)
             area1 = Part.Face(
-                Part.makePolygon(vectors_split1 + [vectors_split1[-1]])
+                Part.makePolygon(vectors_split1 + [vectors_split1[0]])
             ).Area
             area2 = Part.Face(
-                Part.makePolygon(vectors_split2 + [vectors_split2[-1]])
+                Part.makePolygon(vectors_split2 + [vectors_split2[0]])
             ).Area
             if area1 > area2:
                 vectors1 = vectors_split1
@@ -370,20 +370,26 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     # Replace existing shape with joined shapes
     close_vectors(vectors1)
     outer_wire = Part.makePolygon(vectors1)
-    face = Part.Face(outer_wire)
-    for inner_wire in inner_wires:
-        new_face = face.cut(Part.Face(inner_wire))
-        if not isinstance(new_face, Part.Face):
-            logger.warning(
-                f"Failure. An inner_wire did not cut face correctly in boundary <{result_boundary.Id}>. OuterWire area = {Part.Face(outer_wire).Area / 10 ** 6}, InnerWire area = {Part.Face(inner_wire).Area / 10 ** 6}"
-            )
-            return
-        face = new_face
-    result_boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
+
+    generate_boundary_compound(result_boundary, outer_wire, inner_wires)
 
     # Clean FreeCAD document if join operation was a success
     for fc_object in remove_from_doc:
         doc.removeObject(fc_object.Name)
+
+
+def generate_boundary_compound(boundary, outer_wire: Part.Wire, inner_wires: list):
+    """Generate boundary compound composed of 1 Face, 1 OuterWire, 0-n InnerWires"""
+    face = Part.Face(outer_wire)
+    for inner_wire in inner_wires:
+        new_face = face.cut(Part.Face(inner_wire))
+        if not new_face.Area:
+            logger.warning(
+                f"Failure. An inner_wire did not cut face correctly in boundary <{boundary.Id}>. OuterWire area = {Part.Face(outer_wire).Area / 10 ** 6}, InnerWire area = {Part.Face(inner_wire).Area / 10 ** 6}"
+            )
+            continue
+        face = new_face
+    boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
 
 
 def ensure_hosted_element_are(space, doc=FreeCAD.ActiveDocument):
@@ -912,11 +918,8 @@ def rejoin_boundaries(space, sia_type):
             continue
 
         inner_wires = get_inner_wires(boundary1)
-        for inner_wire in inner_wires:
-            new_face = face.cut(Part.Face(inner_wire))
-            if isinstance(new_face, Part.Face):
-                face = new_face
-        boundary1.Shape = Part.Compound([face, outer_wire, *inner_wires])
+        generate_boundary_compound(boundary1, outer_wire, inner_wires)
+
         boundary1.Area = area = boundary1.Shape.Area
         for inner_boundary in base_boundary.InnerBoundaries:
             area = area + inner_boundary.Shape.Area
