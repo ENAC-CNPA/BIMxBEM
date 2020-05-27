@@ -176,6 +176,7 @@ def output_xml_to_path(bem_xml, xml_path=None):
 
 def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
     boundaries = space.SecondLevel.Group
+    # Considered as the minimal size for an oversplit to occur (1 ceiling, 3 wall, 1 flooring)
     if len(boundaries) < 5:
         return
     elements_dict = dict()
@@ -223,7 +224,9 @@ def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
             try:
                 join_boundaries(coplanar_list, doc)
             except Part.OCCError:
-                logger.warning(f"Cannot join boundaries in space <{space.Id}> with key <{key}>")
+                logger.warning(
+                    f"Cannot join boundaries in space <{space.Id}> with key <{key}>"
+                )
 
 
 def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
@@ -369,7 +372,13 @@ def join_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     outer_wire = Part.makePolygon(vectors1)
     face = Part.Face(outer_wire)
     for inner_wire in inner_wires:
-        face = face.cut(Part.Face(inner_wire))
+        new_face = face.cut(Part.Face(inner_wire))
+        if not isinstance(new_face, Part.Face):
+            logger.warning(
+                f"Failure. An inner_wire did not cut face correctly in boundary <{result_boundary.Id}>. OuterWire area = {Part.Face(outer_wire).Area / 10 ** 6}, InnerWire area = {Part.Face(inner_wire).Area / 10 ** 6}"
+            )
+            return
+        face = new_face
     result_boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
 
     # Clean FreeCAD document if join operation was a success
@@ -846,12 +855,14 @@ def rejoin_boundaries(space, sia_type):
             or base_boundary.PhysicalOrVirtualBoundary == "VIRTUAL"
         ):
             continue
-        for b1_id, (ei1, ei2) in zip(
+        for b2_id, (ei1, ei2) in zip(
             base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges)
         ):
-            boundary2 = getattr(get_in_list_by_id(base_boundaries, b1_id), sia_type)
+            boundary2 = getattr(get_in_list_by_id(base_boundaries, b2_id), sia_type)
             if not boundary2:
-                logger.warning(f"Cannot find corresponding boundary")
+                logger.warning(f"Cannot find corresponding boundary with id <{b2_id}>")
+                lines.append(line_from_edge(get_outer_wire(base_boundary).Edges[ei1]))
+                continue
             base_plane = get_plane(boundary1)
             # Case 1 : boundaries are not parallel
             plane_intersect = base_plane.intersect(get_plane(boundary2))
@@ -860,7 +871,13 @@ def rejoin_boundaries(space, sia_type):
                 continue
             # Case 2 : boundaries are parallel
             line1 = line_from_edge(get_outer_wire(boundary1).Edges[ei1])
-            line2 = line_from_edge(get_outer_wire(boundary2).Edges[ei2])
+            try:
+                line2 = line_from_edge(get_outer_wire(boundary2).Edges[ei2])
+            except IndexError:
+                logger.warning(f"Cannot find closest edge index <{ei2}> in boundary id <{b2_id}> to rejoin boundary <{base_boundary.Id}>")
+                lines.append(line_from_edge(get_outer_wire(base_boundary).Edges[ei1]))
+                continue
+
             # Case 2a : edges are not parallel
             line_intersect = line1.intersect2d(line2, base_plane)
             if line_intersect:
@@ -883,12 +900,22 @@ def rejoin_boundaries(space, sia_type):
             outer_wire = polygon_from_lines(lines)
         except NoIntersectionError:
             # TODO: Investigate to see why this happens
-            logger.warning(f"Unable to rejoin boundary Id <{base_boundary.Id}>")
+            logger.exception(f"Unable to rejoin boundary Id <{base_boundary.Id}>")
             continue
-        face = Part.Face(outer_wire)
+        except Part.OCCError as e:
+            logger.exception(f"Invalid geometry while rejoining boundary Id <{base_boundary.Id}>")
+            continue
+        try:
+            face = Part.Face(outer_wire)
+        except Part.OCCError:
+            logger.exception(f"Unable to rejoin boundary Id <{base_boundary.Id}>")
+            continue
+
         inner_wires = get_inner_wires(boundary1)
         for inner_wire in inner_wires:
-            face = face.cut(Part.Face(inner_wire))
+            new_face = face.cut(Part.Face(inner_wire))
+            if isinstance(new_face, Part.Face):
+                face = new_face
         boundary1.Shape = Part.Compound([face, outer_wire, *inner_wires])
         boundary1.Area = area = boundary1.Shape.Area
         for inner_boundary in base_boundary.InnerBoundaries:
@@ -970,6 +997,9 @@ def polygon_from_lines(lines):
     new_points = []
     for line1, line2 in zip(lines, lines[1:] + lines[:1]):
         try:
+            # Need to ensure direction are not same to avoid crash
+            if abs(line1.Direction.dot(line2.Direction)) >= 1 - TOLERANCE:
+                continue
             new_points.append(line1.intersectCC(line2, 1)[0].toShape().Point)
         except IndexError:
             raise NoIntersectionError
@@ -1501,7 +1531,7 @@ if __name__ == "__main__":
         8: "ExternalEarth_R20_2x3.ifc",
         9: "ExternalEarth_R20_IFC4.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[4])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[7])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
