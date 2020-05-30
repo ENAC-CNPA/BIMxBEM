@@ -384,8 +384,9 @@ def generate_boundary_compound(boundary, outer_wire: Part.Wire, inner_wires: lis
     for inner_wire in inner_wires:
         new_face = face.cut(Part.Face(inner_wire))
         if not new_face.Area:
+            b_id = boundary.Id if isinstance(boundary, Root) else boundary.SourceBoundary
             logger.warning(
-                f"Failure. An inner_wire did not cut face correctly in boundary <{boundary.Id}>. OuterWire area = {Part.Face(outer_wire).Area / 10 ** 6}, InnerWire area = {Part.Face(inner_wire).Area / 10 ** 6}"
+                f"Failure. An inner_wire did not cut face correctly in boundary <{b_id}>. OuterWire area = {Part.Face(outer_wire).Area / 10 ** 6}, InnerWire area = {Part.Face(inner_wire).Area / 10 ** 6}"
             )
             continue
         face = new_face
@@ -900,7 +901,11 @@ def rejoin_boundaries(space, sia_type):
                 point1 = (line1.Location + line2.Location) * 0.5
                 point2 = point1 + line1.Direction
 
-            lines.append(Part.Line(point1, point2))
+            try:
+                lines.append(Part.Line(point1, point2))
+            except Part.OCCError as err:
+                logger.exception(f"Failure in boundary id <{base_boundary.Id}> {point1} and {point2} are equal")
+                
         # Generate new shape
         try:
             outer_wire = polygon_from_lines(lines)
@@ -1534,7 +1539,7 @@ if __name__ == "__main__":
         8: "ExternalEarth_R20_2x3.ifc",
         9: "ExternalEarth_R20_IFC4.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[7])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[4])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
@@ -1554,8 +1559,8 @@ if __name__ == "__main__":
 
         generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
         processing_sia_boundaries(DOC)
-        # bem_xml = write_xml(DOC)
-        # output_xml_to_path(bem_xml)
+        bem_xml = write_xml(DOC)
+        output_xml_to_path(bem_xml)
 
         # xml_str = generate_bem_xml_from_file(IFC_PATH)
 
