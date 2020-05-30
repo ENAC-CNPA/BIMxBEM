@@ -80,7 +80,8 @@ def generate_containers(ifc_parent, fc_parent, doc=FreeCAD.ActiveDocument):
     for rel_aggregates in ifc_parent.IsDecomposedBy:
         for element in rel_aggregates.RelatedObjects:
             if element.is_a("IfcSpace"):
-                generate_space(element, fc_parent, doc)
+                if element.BoundedBy:
+                    generate_space(element, fc_parent, doc)
             else:
                 fc_container = create_container_from_entity(element)
                 fc_parent.addObject(fc_container)
@@ -403,7 +404,7 @@ def ensure_hosted_element_are(space, doc=FreeCAD.ActiveDocument):
         if not is_typically_hosted(ifc_type):
             continue
 
-        if boundary.IsHosted:
+        if boundary.IsHosted and boundary.ParentBoundary:
             continue
 
         def find_host(boundary):
