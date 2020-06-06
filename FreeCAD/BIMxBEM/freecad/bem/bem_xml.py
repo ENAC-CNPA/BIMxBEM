@@ -1,5 +1,13 @@
 # coding: utf8
-"""This module write boundaries informations to an xml format for BEM software use"""
+"""This module write boundaries informations to an xml format for BEM software use
+
+© All rights reserved.
+ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland, Laboratory CNPA, 2019-2020
+
+See the LICENSE.TXT file for more details.
+
+Author : Cyril Waechter
+"""
 
 import xml.etree.ElementTree as ET
 
