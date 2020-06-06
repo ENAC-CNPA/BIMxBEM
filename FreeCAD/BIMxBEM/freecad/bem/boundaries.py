@@ -1,5 +1,13 @@
 # coding: utf8
-"""This module reads IfcRelSpaceBoundary from an IFC file and display them in FreeCAD"""
+"""This module reads IfcRelSpaceBoundary from an IFC file and display them in FreeCAD
+
+© All rights reserved.
+ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland, Laboratory CNPA, 2019-2020
+
+See the LICENSE.TXT file for more details.
+
+Author : Cyril Waechter
+"""
 import os
 import itertools
 import logging

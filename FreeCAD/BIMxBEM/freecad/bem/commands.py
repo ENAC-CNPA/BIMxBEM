@@ -1,3 +1,13 @@
+# coding: utf8
+"""This module create commands for FreeCAD
+
+© All rights reserved.
+ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland, Laboratory CNPA, 2019-2020
+
+See the LICENSE.TXT file for more details.
+
+Author : Cyril Waechter
+"""
 import os
 
 import FreeCAD
