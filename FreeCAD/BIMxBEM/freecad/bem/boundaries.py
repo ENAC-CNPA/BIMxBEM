@@ -15,6 +15,7 @@ from collections import namedtuple
 
 import ifcopenshell
 import ifcopenshell.geom
+from ifcopenshell.util import unit
 
 import FreeCAD
 import Part
@@ -116,11 +117,35 @@ def get_elements_by_ifctype(ifc_type: str, doc=FreeCAD.ActiveDocument):
             continue
 
 
+def get_unit_conversion_factor(ifc_file, unit_type, default=None):
+    # TODO: Test with Imperial units
+    units = [
+        u
+        for u in ifc_file.by_type("IfcUnitAssignment")[0][0]
+        if getattr(u, "UnitType", None) == unit_type
+    ]
+    if len(units) == 0:
+        return default
+
+    ifc_unit = units[0]
+
+    unit_factor = 1.0
+    if ifc_unit.is_a("IfcConversionBasedUnit"):
+        ifc_unit = ifc_unit.ConversionFactor
+        unit_factor = ifc_unit.wrappedValue
+
+    assert ifc_unit.is_a("IfcSIUnit")
+    prefix_factor = unit.get_prefix_multiplier(ifc_unit.Prefix)
+
+    return unit_factor * prefix_factor
+
+
 def generate_ifc_rel_space_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     """Display IfcRelSpaceBoundaries from selected IFC file into FreeCAD documennt"""
     ifc_file = ifcopenshell.open(ifc_path)
 
     # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
+    Project.length_factor = get_unit_conversion_factor(ifc_file, "LENGTHUNIT")
     elements_group = get_or_create_group("Elements", doc)
     ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)
     for ifc_entity in ifc_elements:
@@ -393,7 +418,9 @@ def generate_boundary_compound(boundary, outer_wire: Part.Wire, inner_wires: lis
     for inner_wire in inner_wires:
         new_face = face.cut(Part.Face(inner_wire))
         if not new_face.Area:
-            b_id = boundary.Id if isinstance(boundary, Root) else boundary.SourceBoundary
+            b_id = (
+                boundary.Id if isinstance(boundary, Root) else boundary.SourceBoundary
+            )
             logger.warning(
                 f"Failure. An inner_wire did not cut face correctly in boundary <{b_id}>. OuterWire area = {Part.Face(outer_wire).Area / 10 ** 6}, InnerWire area = {Part.Face(inner_wire).Area / 10 ** 6}"
             )
@@ -839,7 +866,7 @@ def get_thickness(ifc_entity):
                 continue
 
         for material_layer in material_layers:
-            thickness += material_layer.LayerThickness * SCALE
+            thickness += material_layer.LayerThickness * SCALE * Project.length_factor
     return thickness
 
 
@@ -890,7 +917,9 @@ def rejoin_boundaries(space, sia_type):
             try:
                 line2 = line_from_edge(get_outer_wire(boundary2).Edges[ei2])
             except IndexError:
-                logger.warning(f"Cannot find closest edge index <{ei2}> in boundary id <{b2_id}> to rejoin boundary <{base_boundary.Id}>")
+                logger.warning(
+                    f"Cannot find closest edge index <{ei2}> in boundary id <{b2_id}> to rejoin boundary <{base_boundary.Id}>"
+                )
                 lines.append(line_from_edge(get_outer_wire(base_boundary).Edges[ei1]))
                 continue
 
@@ -913,8 +942,10 @@ def rejoin_boundaries(space, sia_type):
             try:
                 lines.append(Part.Line(point1, point2))
             except Part.OCCError as err:
-                logger.exception(f"Failure in boundary id <{base_boundary.Id}> {point1} and {point2} are equal")
-                
+                logger.exception(
+                    f"Failure in boundary id <{base_boundary.Id}> {point1} and {point2} are equal"
+                )
+
         # Generate new shape
         try:
             outer_wire = polygon_from_lines(lines)
@@ -923,7 +954,9 @@ def rejoin_boundaries(space, sia_type):
             logger.exception(f"Unable to rejoin boundary Id <{base_boundary.Id}>")
             continue
         except Part.OCCError as e:
-            logger.exception(f"Invalid geometry while rejoining boundary Id <{base_boundary.Id}>")
+            logger.exception(
+                f"Invalid geometry while rejoining boundary Id <{base_boundary.Id}>"
+            )
             continue
         try:
             face = Part.Face(outer_wire)
@@ -1111,7 +1144,9 @@ def part_by_wires(ifc_entity):
 
 def get_matrix(position):
     """Transform position to FreeCAD.Matrix"""
-    location = FreeCAD.Vector(position.Location.Coordinates).scale(SCALE, SCALE, SCALE)
+    total_scale = SCALE * Project.length_factor
+    location = FreeCAD.Vector(position.Location.Coordinates)
+    location.scale(*list(3 * [total_scale]))
 
     v_1 = FreeCAD.Vector(position.RefDirection.DirectionRatios)
     v_3 = FreeCAD.Vector(position.Axis.DirectionRatios)
@@ -1450,6 +1485,8 @@ class Project(Root):
     """Representation of an IfcProject:
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
 
+    length_factor = 1
+
     def __init__(self, obj, ifc_entity):
         super().__init__(obj, ifc_entity)
         self.ifc_entity = ifc_entity
@@ -1548,7 +1585,7 @@ if __name__ == "__main__":
         8: "ExternalEarth_R20_2x3.ifc",
         9: "ExternalEarth_R20_IFC4.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[4])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[7])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
