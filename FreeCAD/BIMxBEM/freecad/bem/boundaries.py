@@ -479,7 +479,7 @@ def ensure_hosted_element_are(space, doc=FreeCAD.ActiveDocument):
 
 def is_typically_hosted(ifc_type: str):
     """Say if given ifc_type is typically hosted eg. windows, doors"""
-    usually_hosted_types = ("IfcWindow", "IfcDoor")
+    usually_hosted_types = ("IfcWindow", "IfcDoor", "IfcOpeningElement")
     for usual_type in usually_hosted_types:
         if ifc_type.startswith(usual_type):
             return True
@@ -565,7 +565,7 @@ def find_closest_edges(space):
     for boundary in boundaries:
         n_edges = len(get_outer_wire(boundary).Edges)
         boundary.Proxy.closest = [
-            Closest(boundary=-1, edge=-1, distance=100000)
+            Closest(boundary=None, edge=-1, distance=100000)
         ] * n_edges
 
     def compare_closest(boundary1, ei1, edge1, boundary2, ei2, edge2):
@@ -628,7 +628,7 @@ def find_closest_edges(space):
         closest_boundaries, boundary.ClosestEdges, closest_distances = (
             list(i) for i in zip(*boundary.Proxy.closest)
         )
-        boundary.ClosestBoundaries = [b.Id for b in closest_boundaries]
+        boundary.ClosestBoundaries = [b.Id if b else -1 for b in closest_boundaries]
         boundary.ClosestDistance = [int(d) for d in closest_distances]
 
 
@@ -901,7 +901,7 @@ def rejoin_boundaries(space, sia_type):
         for b2_id, (ei1, ei2) in zip(
             base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges)
         ):
-            boundary2 = getattr(get_in_list_by_id(base_boundaries, b2_id), sia_type)
+            boundary2 = getattr(get_in_list_by_id(base_boundaries, b2_id), sia_type, None)
             if not boundary2:
                 logger.warning(f"Cannot find corresponding boundary with id <{b2_id}>")
                 lines.append(line_from_edge(get_outer_wire(base_boundary).Edges[ei1]))
@@ -974,6 +974,8 @@ def rejoin_boundaries(space, sia_type):
 
 
 def get_in_list_by_id(elements, element_id):
+    if element_id == -1:
+        return None
     for element in elements:
         if element.Id == element_id:
             return element
@@ -1227,12 +1229,9 @@ class Root:
         obj.Id = ifc_entity.id()
         obj.GlobalId = ifc_entity.GlobalId
         obj.IfcType = ifc_entity.is_a()
-        obj.IfcName = ifc_entity.Name
+        obj.IfcName = ifc_entity.Name or ""
         self.set_label(obj, ifc_entity)
-        try:
-            obj.Description = ifc_entity.Description
-        except TypeError:
-            pass
+        obj.Description = ifc_entity.Description or ""
 
     def onChanged(self, obj, prop):
         """Do something when a property has changed"""
@@ -1245,7 +1244,7 @@ class Root:
     @staticmethod
     def set_label(obj, ifc_entity):
         """Allow specific method for specific elements"""
-        obj.Label = "{} {}".format(ifc_entity.id(), ifc_entity.Name)
+        obj.Label = "{} {}".format(ifc_entity.id(), obj.Name)
 
     @classmethod
     def create(cls, obj_name, ifc_entity=None):
@@ -1498,7 +1497,7 @@ class Project(Root):
         obj.addProperty("App::PropertyString", "LongName", ifc_attributes)
         obj.addProperty("App::PropertyVector", "TrueNorth", ifc_attributes)
         obj.addProperty("App::PropertyVector", "WorldCoordinateSystem", ifc_attributes)
-        obj.LongName = ifc_entity.LongName
+        obj.LongName = ifc_entity.LongName or ""
         obj.TrueNorth = FreeCAD.Vector(
             *ifc_entity.RepresentationContexts[0].TrueNorth.DirectionRatios
         )
@@ -1584,6 +1583,7 @@ if __name__ == "__main__":
         7: "OverSplitted_R20_2x3.ifc",
         8: "ExternalEarth_R20_2x3.ifc",
         9: "ExternalEarth_R20_IFC4.ifc",
+        10: "Testmodell_BEM_AC22.ifc"
     }
     IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[7])
     DOC = FreeCAD.ActiveDocument
