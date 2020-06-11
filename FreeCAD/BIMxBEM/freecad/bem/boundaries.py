@@ -642,7 +642,7 @@ def define_leso_type(boundary):
         ifc_type = boundary.RelatedBuildingElement.IfcType
     except AttributeError:
         if boundary.PhysicalOrVirtualBoundary != "VIRTUAL":
-            logger.warning(f"Unable to defin LesoType for boundary <{boundary.Id}>")
+            logger.warning(f"Unable to define LesoType for boundary <{boundary.Id}>")
         return "Unknown"
     if ifc_type.startswith("IfcWindow"):
         return "Window"
@@ -655,6 +655,8 @@ def define_leso_type(boundary):
         if boundary.Shape.Faces[0].normalAt(0, 0).z > 0:
             return "Ceiling"
         return "Flooring"
+    elif ifc_type.startswith("IfcOpeningElement"):
+        return "Opening"
     else:
         logger.warning(f"Unable to define LesoType for Boundary Id <{boundary.Id}>")
         return "Unknown"
@@ -1310,6 +1312,7 @@ class RelSpaceBoundary(Root):
             "Flooring",
             "Window",
             "Door",
+            "Opening",
             "Unknown",
         ]
 
