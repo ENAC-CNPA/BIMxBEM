@@ -9,6 +9,7 @@ See the LICENSE.TXT file for more details.
 Author : Cyril Waechter
 """
 import os
+import io
 import itertools
 import logging
 from collections import namedtuple
@@ -24,9 +25,9 @@ import FreeCADGui
 from freecad.bem.bem_xml import BEMxml
 
 LOG_FORMAT = "{levelname} {asctime} {funcName}-{message}"
-
+LOG_STREAM = io.StringIO()
 logging.basicConfig(
-    filename="./boundaries.log", level=logging.WARNING, format=LOG_FORMAT, style="{"
+    stream=LOG_STREAM, level=logging.WARNING, format=LOG_FORMAT, style="{"
 )
 logger = logging.getLogger()
 
@@ -1561,12 +1562,16 @@ class Space(Root):
         return obj
 
 
-def generate_bem_xml_from_file(ifc_path: str, gui_up: bool = False):
+def generate_bem_xml_from_file(ifc_path: str, gui_up: bool = False) -> namedtuple:
     doc = FreeCAD.newDocument()
 
     generate_ifc_rel_space_boundaries(ifc_path, doc)
     processing_sia_boundaries(doc)
-    return write_xml(doc).tostring()
+    Result = namedtuple("Result", ["xml", "log"])
+    xml_str = write_xml(doc).tostring()
+    log_str = LOG_STREAM.getvalue()
+    result = Result(xml_str, log_str)
+    return result
 
 
 if __name__ == "__main__":
@@ -1610,6 +1615,9 @@ if __name__ == "__main__":
         output_xml_to_path(bem_xml)
 
         # xml_str = generate_bem_xml_from_file(IFC_PATH)
+
+        with open("./boundaries.log", "w") as f:
+            f.write(LOG_STREAM.getvalue())
 
         FreeCADGui.activeView().viewIsometric()
         FreeCADGui.SendMsgToActiveView("ViewFit")
