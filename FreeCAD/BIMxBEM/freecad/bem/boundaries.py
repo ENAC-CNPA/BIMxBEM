@@ -748,8 +748,6 @@ def append(doc_object, fc_property, value):
 
 
 def clean_corresponding_candidates(fc_boundary, doc):
-    if fc_boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
-        return []
     other_boundaries = get_boundaries_by_element(
         fc_boundary.RelatedBuildingElement, doc
     )
