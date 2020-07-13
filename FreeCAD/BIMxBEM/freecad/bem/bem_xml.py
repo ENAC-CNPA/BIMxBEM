@@ -11,6 +11,8 @@ Author : Cyril Waechter
 
 import xml.etree.ElementTree as ET
 
+from freecad.bem import materials
+
 SCALE = 1000
 
 
@@ -24,6 +26,7 @@ class BEMxml:
         self.spaces = ET.SubElement(self.root, "Spaces")
         self.boundaries = ET.SubElement(self.root, "Boundaries")
         self.building_elements = ET.SubElement(self.root, "BuildingElements")
+        self.materials = ET.SubElement(self.root, "Materials")
 
     @staticmethod
     def write_root_attrib(xml_element, fc_object):
@@ -125,6 +128,18 @@ class BEMxml:
         boundaries = ET.SubElement(building_element, "ProvidesBoundaries")
         for element_id in fc_object.ProvidesBoundaries:
             ET.SubElement(boundaries, "Id").text = str(element_id)
+        if fc_object.Material:
+            ET.SubElement(building_element, "Material").text = str(fc_object.Material.Id or "")
+
+    def write_material(self, fc_object):
+        if isinstance(fc_object.Proxy, materials.Material):
+            properties = [p for l in materials.Material.pset_dict.values() for p in l]
+            material_dict = {p: getattr(fc_object, p) for p in properties}
+            material = ET.SubElement(self.materials, "Material", material_dict)
+        elif isinstance(fc_object.Proxy, materials.LayerSet):
+            layer_set = ET.SubElement(self.materials, "LayerSet")
+        elif isinstance(fc_object.Proxy, materials.ConstituentSet):
+            constituent_set = ET.SubElement(self.materials, "ConstituentSet")
 
     @staticmethod
     def write_shape(xml_element, fc_object):
@@ -163,7 +178,7 @@ def vector_to_dict(vector):
 
 
 def fc_area_to_si_xml(fc_area):
-    return str(fc_area.Value / SCALE ** 2)
+    return str(fc_area.getValueAs("m^2"))
 
 
 if __name__ == "__main__":

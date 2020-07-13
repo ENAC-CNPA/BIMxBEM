@@ -23,6 +23,7 @@ import Part
 import FreeCADGui
 
 from freecad.bem.bem_xml import BEMxml
+from freecad.bem import materials
 
 LOG_FORMAT = "{levelname} {asctime} {funcName}-{message}"
 LOG_STREAM = io.StringIO()
@@ -49,9 +50,6 @@ TOLERANCE = 0.001
 """With IfcOpenShell 0.6.0a1 recreating face from wires seems to give more consistant results.
 Especially when inner boundaries touch outer boundary"""
 BREP = False
-
-# IfcOpenShell/IFC default unit is m, FreeCAD internal unit is mm
-SCALE = 1000
 
 
 def generate_space(ifc_space, parent, doc=FreeCAD.ActiveDocument):
@@ -98,11 +96,11 @@ def generate_containers(ifc_parent, fc_parent, doc=FreeCAD.ActiveDocument):
                 generate_containers(element, fc_container, doc)
 
 
-def get_elements(doc=FreeCAD.ActiveDocument):
-    """Generator throught FreeCAD document element of specific ifc_type"""
+def get_by_class(doc=FreeCAD.ActiveDocument, by_class=object):
+    """Generator throught FreeCAD document element of specific python proxy class"""
     for element in doc.Objects:
         try:
-            if isinstance(element.Proxy, Element):
+            if isinstance(element.Proxy, by_class):
                 yield element
         except AttributeError:
             continue
@@ -146,7 +144,7 @@ def generate_ifc_rel_space_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
     ifc_file = ifcopenshell.open(ifc_path)
 
     # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
-    Project.length_factor = get_unit_conversion_factor(ifc_file, "LENGTHUNIT")
+    Project.ifc_scale = get_unit_conversion_factor(ifc_file, "LENGTHUNIT")
     elements_group = get_or_create_group("Elements", doc)
     ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)
     for ifc_entity in ifc_elements:
@@ -196,8 +194,12 @@ def write_xml(doc=FreeCAD.ActiveDocument):
         bem_xml.write_space(space)
         for boundary in space.SecondLevel.Group:
             bem_xml.write_boundary(boundary)
-    for building_element in get_elements(doc):
+    for building_element in get_by_class(doc, Element):
         bem_xml.write_building_elements(building_element)
+    for material in get_by_class(
+        doc, (materials.Material, materials.ConstituentSet, materials.LayerSet)
+    ):
+        bem_xml.write_material(material)
     return bem_xml
 
 
@@ -867,7 +869,9 @@ def get_thickness(ifc_entity):
                 continue
 
         for material_layer in material_layers:
-            thickness += material_layer.LayerThickness * SCALE * Project.length_factor
+            thickness += (
+                material_layer.LayerThickness * Project.fc_scale * Project.ifc_scale
+            )
     return thickness
 
 
@@ -902,7 +906,9 @@ def rejoin_boundaries(space, sia_type):
         for b2_id, (ei1, ei2) in zip(
             base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges)
         ):
-            boundary2 = getattr(get_in_list_by_id(base_boundaries, b2_id), sia_type, None)
+            boundary2 = getattr(
+                get_in_list_by_id(base_boundaries, b2_id), sia_type, None
+            )
             if not boundary2:
                 logger.warning(f"Cannot find corresponding boundary with id <{b2_id}>")
                 lines.append(line_from_edge(get_outer_wire(base_boundary).Edges[ei1]))
@@ -1094,7 +1100,7 @@ def _part_by_brep(ifc_entity):
     ifc_shape = ifcopenshell.geom.create_shape(BREP_SETTINGS, ifc_entity)
     fc_shape = Part.Shape()
     fc_shape.importBrepFromString(ifc_shape.brep_data)
-    fc_shape.scale(SCALE)
+    fc_shape.scale(Project.fc_scale)
     return fc_shape
 
 
@@ -1108,7 +1114,7 @@ def _polygon_by_mesh(ifc_entity):
     ifc_shape = ifcopenshell.geom.create_shape(MESH_SETTINGS, ifc_entity)
     ifc_verts = ifc_shape.verts
     fc_verts = [
-        FreeCAD.Vector(ifc_verts[i : i + 3]).scale(SCALE, SCALE, SCALE)
+        FreeCAD.Vector(ifc_verts[i : i + 3]).scale(*[Project.fc_scale] * 3)
         for i in range(0, len(ifc_verts), 3)
     ]
     fc_verts = verts_clean(fc_verts)
@@ -1147,7 +1153,7 @@ def part_by_wires(ifc_entity):
 
 def get_matrix(position):
     """Transform position to FreeCAD.Matrix"""
-    total_scale = SCALE * Project.length_factor
+    total_scale = Project.fc_scale * Project.ifc_scale
     location = FreeCAD.Vector(position.Location.Coordinates)
     location.scale(*list(3 * [total_scale]))
 
@@ -1175,7 +1181,7 @@ def get_placement(space):
     m_l = list()
     for i in range(3):
         line = list(ios_matrix[i::3])
-        line[-1] *= SCALE
+        line[-1] *= Project.fc_scale
         m_l.extend(line)
     return FreeCAD.Matrix(*m_l)
 
@@ -1378,10 +1384,14 @@ def create_fc_object_from_entity(ifc_entity):
     obj_name = "Element"
     obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
     Element(obj, ifc_entity)
+    Element.material_creator.create(obj, ifc_entity)
     try:
-        obj.ViewObject.Proxy = 0
+        obj.Thickness = obj.Material.TotalThickness
     except AttributeError:
-        FreeCAD.Console.PrintLog("No ViewObject ok if running with no Gui")
+        pass
+
+    if FreeCAD.GuiUp:
+        obj.ViewObject.Proxy = 0
     return obj
 
 
@@ -1390,13 +1400,15 @@ class Element(Root):
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/schema/ifcproductextension/lexical/ifcelement.htm
     """
 
+    material_creator = materials.MaterialCreator()
+
     def __init__(self, obj, ifc_entity):
         super().__init__(obj, ifc_entity)
         self.Type = "IfcRelSpaceBoundary"
         obj.Proxy = self
         ifc_attributes = "IFC Attributes"
         bem_category = "BEM"
-        obj.addProperty("App::PropertyLinkList", "HasAssociations", ifc_attributes)
+        obj.addProperty("App::PropertyLink", "Material", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "FillsVoids", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "HasOpenings", ifc_attributes)
         obj.addProperty(
@@ -1404,12 +1416,9 @@ class Element(Root):
         )
         obj.addProperty("App::PropertyLinkList", "HostedElements", bem_category)
         obj.addProperty("App::PropertyInteger", "HostElement", bem_category)
-        obj.addProperty("App::PropertyLength", "Thickness", ifc_attributes)
+        obj.addProperty("App::PropertyLength", "Thickness", bem_category)
 
-        ifc_walled_entities = {"IfcWall", "IfcSlab", "IfcRoof"}
-        for entity_class in ifc_walled_entities:
-            if ifc_entity.is_a(entity_class):
-                obj.Thickness = get_thickness(ifc_entity)
+        obj.Label = f"{obj.Id}_{obj.IfcType}"
 
 
 class BEMBoundary:
@@ -1486,7 +1495,8 @@ class Project(Root):
     """Representation of an IfcProject:
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
 
-    length_factor = 1
+    ifc_scale = 1
+    fc_scale = FreeCAD.Units.Metre.Value
 
     def __init__(self, obj, ifc_entity):
         super().__init__(obj, ifc_entity)
@@ -1589,9 +1599,11 @@ if __name__ == "__main__":
         7: "OverSplitted_R20_2x3.ifc",
         8: "ExternalEarth_R20_2x3.ifc",
         9: "ExternalEarth_R20_IFC4.ifc",
-        10: "Testmodell_BEM_AC22.ifc"
+        10: "Testmodell_BEM_AC22.ifc",
+        11: "GRAPHISOFT_ARCHICAD_Sample_Project_Hillside_House_v1.ifczip",
+        12: "GRAPHISOFT_ARCHICAD_Sample_Project_S_Office_v1.ifczip",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[7])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[1])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
