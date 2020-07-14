@@ -145,6 +145,7 @@ def generate_ifc_rel_space_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
 
     # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
     Project.ifc_scale = get_unit_conversion_factor(ifc_file, "LENGTHUNIT")
+    Element.material_creator.ifc_scale = Project.ifc_scale
     elements_group = get_or_create_group("Elements", doc)
     ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)
     for ifc_entity in ifc_elements:

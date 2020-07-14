@@ -1,6 +1,7 @@
 # coding: utf8
 import FreeCAD
 
+
 class MaterialCreator:
     def __init__(self):
         self.obj = None
@@ -13,24 +14,52 @@ class MaterialCreator:
         self.parse_material(ifc_entity)
 
     def parse_material(self, ifc_entity):
+        # When an element is composed of multiple elements
+        if ifc_entity.IsDecomposedBy:
+            # TODO: See in a real case how to handle every part and not only the first
+            ifc_entity = ifc_entity.IsDecomposedBy[0].RelatedObjects[0]
         for association in ifc_entity.HasAssociations:
             if association.is_a("IfcRelAssociatesMaterial"):
                 material_select = association.RelatingMaterial
-                if material_select.is_a("IfcMaterialDefinition"):
+                if self.is_material_definition(material_select):
                     self.assign_material(material_select)
                 elif material_select.is_a("IfcMaterialLayerSetUsage"):
                     self.create_layer_set_usage(material_select)
+                elif material_select.is_a("IfcMaterialList"):
+                    # TODO: Shall we handle IfcMaterialList as they havo no fraction
+                    pass
+                else:
+                    raise NotImplementedError(
+                        f"{material_select.is_a()} not handled yet"
+                    )
+
+    @staticmethod
+    def is_material_definition(material_select):
+        """Material Definition is new to IFC4. So doing material_select.is_a("MaterialDefinition") 
+        in IFC2x3 would return False event if it is in IFC4 schema."""
+        valid_class = (
+            "IfcMaterial",
+            "IfcMaterialLayer",
+            "IfcMaterialLayerSet",
+            "IfcMaterialProfile",
+            "IfcMaterialProfileSet",
+            "IfcMaterialConstituent",
+            "IfcMaterialConstituentSet",
+        )
+        return material_select.is_a() in valid_class
 
     def create_layer_set_usage(self, usage):
         self.assign_material(usage.ForLayerSet)
 
-    def assign_material(self, material):
-        if material.is_a("IfcMaterial"):
-            self.obj.Material = self.create_single(material)
-        elif material.is_a("IfcMaterialLayerSet"):
-            self.obj.Material = self.create_layer_set(material)
-        elif material.is_a("IfcMaterialConstituentSet"):
-            self.obj.Material = self.create_constituent_set(material)
+    def assign_material(self, material_select):
+        if material_select.is_a("IfcMaterial"):
+            self.obj.Material = self.create_single(material_select)
+        elif material_select.is_a("IfcMaterialLayerSet"):
+            self.obj.Material = self.create_layer_set(material_select)
+        elif material_select.is_a("IfcMaterialConstituentSet"):
+            self.obj.Material = self.create_constituent_set(material_select)
+        else:
+            raise NotImplementedError(f"{material_select.is_a()} not handled yet")
 
     def create_single(self, material):
         if material.Name not in self.materials:
@@ -51,10 +80,12 @@ class MaterialCreator:
                 layers.append(self.create_single(layer.Material))
                 layers_thickness.append(layer.LayerThickness)
             fc_layer_set.MaterialLayers = layers
-            fc_layer_set.MaterialLayersThickness = layers_thickness
+            fc_layer_set.Thicknesses = layers_thickness
             if not fc_layer_set.TotalThickness:
-                fc_layer_set.TotalThickness = sum(layers_thickness) * FreeCAD.Units.Metre.Value
-            self.material_layer_sets[fc_layer_set.LayerSetName] = fc_layer_set
+                fc_layer_set.TotalThickness = (
+                    sum(layers_thickness) * FreeCAD.Units.Metre.Value
+                )
+            self.material_layer_sets[fc_layer_set.IfcName] = fc_layer_set
             return fc_layer_set
         return self.material_layer_sets[layer_set.LayerSetName]
 
@@ -73,7 +104,7 @@ class MaterialCreator:
             fc_constituent_set.MaterialConstituentCategories = constituents_categories
             self.material_constituent_sets[fc_constituent_set.Name] = fc_constituent_set
             return fc_constituent_set
-        return self.material_constituent_sets[constituent_set.LayerSetName]
+        return self.material_constituent_sets[constituent_set.IfcName]
 
 
 class ConstituentSet:
@@ -88,17 +119,20 @@ class ConstituentSet:
         """Stantard FreeCAD FeaturePython Object creation method
         ifc_entity : Optionnally provide a base entity.
         """
-        obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "MaterialConstituentSet")
+        obj = FreeCAD.ActiveDocument.addObject(
+            "Part::FeaturePython", "MaterialConstituentSet"
+        )
         ConstituentSet(obj, ifc_entity)
         return obj
 
     def setProperties(self, obj, ifc_entity):
-        obj.addProperty("App::PropertyFloatList", "MaterialConstituentFraction", "BEM")
-        obj.addProperty("App::PropertyStringList", "MaterialConstituentCategories", "BEM")
+        obj.addProperty("App::PropertyFloatList", "Fractions", "BEM")
+        obj.addProperty("App::PropertyStringList", "Categories", "BEM")
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
         obj.addProperty("App::PropertyString", "IfcName", ifc_attributes)
         obj.addProperty("App::PropertyString", "Description", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "MaterialConstituents", ifc_attributes)
 
         obj.Id = ifc_entity.id()
         obj.Name = ifc_entity.Name or ""
@@ -124,22 +158,22 @@ class LayerSet:
         return obj
 
     def setProperties(self, obj, ifc_entity):
-        obj.addProperty("App::PropertyFloatList", "MaterialLayersThickness", "BEM")
+        obj.addProperty("App::PropertyFloatList", "Thicknesses", "BEM")
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "MaterialLayers", ifc_attributes)
-        obj.addProperty("App::PropertyString", "LayerSetName", ifc_attributes)
+        obj.addProperty("App::PropertyString", "IfcName", ifc_attributes)
         obj.addProperty("App::PropertyString", "Description", ifc_attributes)
         obj.addProperty("App::PropertyLength", "TotalThickness", ifc_attributes)
 
         obj.Id = ifc_entity.id()
-        obj.LayerSetName = ifc_entity.LayerSetName or ""
+        obj.IfcName = ifc_entity.LayerSetName or ""
         # Description is new to IFC4 so IFC2x3 raise attribute error
         try:
             obj.Description = ifc_entity.Description or ""
         except AttributeError:
             pass
-        obj.Label = f"{obj.Id}_{obj.LayerSetName}"
+        obj.Label = f"{obj.Id}_{obj.IfcName}"
 
 
 class Material:
