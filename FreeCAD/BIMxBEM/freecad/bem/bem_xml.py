@@ -134,12 +134,27 @@ class BEMxml:
     def write_material(self, fc_object):
         if isinstance(fc_object.Proxy, materials.Material):
             properties = [p for l in materials.Material.pset_dict.values() for p in l]
-            material_dict = {p: getattr(fc_object, p) for p in properties}
-            material = ET.SubElement(self.materials, "Material", material_dict)
+            properties[0:0] = ["Category"]
+            material = ET.SubElement(self.materials, "Material")
         elif isinstance(fc_object.Proxy, materials.LayerSet):
-            layer_set = ET.SubElement(self.materials, "LayerSet")
+            material = ET.SubElement(self.materials, "LayerSet")
+            properties = ["TotalThickness"]
+            layers = ET.SubElement(material, "Layers")
+            for fc_material, thickness in zip(fc_object.MaterialLayers, fc_object.Thicknesses):
+                layer = ET.SubElement(layers, "Layer")
+                ET.SubElement(layer, "Id").text = str(fc_material.Id)
+                ET.SubElement(layer, "Thickness").text = str(thickness)
         elif isinstance(fc_object.Proxy, materials.ConstituentSet):
-            constituent_set = ET.SubElement(self.materials, "ConstituentSet")
+            material = ET.SubElement(self.materials, "ConstituentSet")
+            properties = []
+            for fc_material, category, fraction in zip(fc_object.MaterialLayers, fc_object.Categories, fc_object.Fractions):
+                layer = ET.SubElement(layers, "Layer")
+                ET.SubElement(layer, "Id").text = str(fc_material.Id)
+                ET.SubElement(layer, "Category").text = str(category)
+                ET.SubElement(layer, "Fraction").text = str(fraction)
+        properties[0:0] = ["Id", "IfcName", "Description"]
+        for prop in properties:
+            ET.SubElement(material, prop).text = str(getattr(fc_object, prop))
 
     @staticmethod
     def write_shape(xml_element, fc_object):
