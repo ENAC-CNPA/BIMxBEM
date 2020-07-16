@@ -8,6 +8,7 @@ class MaterialCreator:
         self.materials = {}
         self.material_layer_sets = {}
         self.material_constituent_sets = {}
+        self.ifc_scale = 1
 
     def create(self, obj, ifc_entity):
         self.obj = obj
@@ -68,7 +69,7 @@ class MaterialCreator:
 
     def create_new_single(self, material):
         fc_material = Material.create(material)
-        self.materials[fc_material.Name] = fc_material
+        self.materials[material.Name] = fc_material
         return fc_material
 
     def create_layer_set(self, layer_set):
@@ -83,7 +84,7 @@ class MaterialCreator:
             fc_layer_set.Thicknesses = layers_thickness
             if not fc_layer_set.TotalThickness:
                 fc_layer_set.TotalThickness = (
-                    sum(layers_thickness) * FreeCAD.Units.Metre.Value
+                    sum(layers_thickness) * FreeCAD.Units.Metre.Value * self.ifc_scale
                 )
             self.material_layer_sets[fc_layer_set.IfcName] = fc_layer_set
             return fc_layer_set
@@ -102,7 +103,7 @@ class MaterialCreator:
             fc_constituent_set.MaterialConstituents = constituents
             fc_constituent_set.MaterialConstituentFraction = constituents_fraction
             fc_constituent_set.MaterialConstituentCategories = constituents_categories
-            self.material_constituent_sets[fc_constituent_set.Name] = fc_constituent_set
+            self.material_constituent_sets[fc_constituent_set.IfcName] = fc_constituent_set
             return fc_constituent_set
         return self.material_constituent_sets[constituent_set.IfcName]
 
@@ -183,7 +184,6 @@ class Material:
             "VisibleTransmittance",
             "SolarTransmittance",
             "ThermalIrTransmittance",
-            "ThermalIrEmissivityBack",
             "ThermalIrEmissivityBack",
             "ThermalIrEmissivityFront",
         ),
