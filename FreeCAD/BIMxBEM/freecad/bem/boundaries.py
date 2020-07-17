@@ -1556,6 +1556,8 @@ class Space(Root):
 
     def setProperties(self, obj):
         ifc_entity = self.ifc_entity
+        ifc_attributes = "IFC Attributes"
+        obj.addProperty("App::PropertyString", "LongName", ifc_attributes)
         category_name = "Boundaries"
         obj.addProperty("App::PropertyLink", "Boundaries", category_name)
         obj.addProperty("App::PropertyLink", "SecondLevel", category_name)
@@ -1563,6 +1565,7 @@ class Space(Root):
         obj.addProperty("App::PropertyLink", "SIA_Interiors", category_name)
         obj.addProperty("App::PropertyLink", "SIA_Exteriors", category_name)
 
+        obj.LongName = ifc_entity.LongName or ""
         space_full_name = f"{ifc_entity.Name} {ifc_entity.LongName}"
         obj.Label = space_full_name
         try:
@@ -1600,11 +1603,11 @@ if __name__ == "__main__":
         7: "OverSplitted_R20_2x3.ifc",
         8: "ExternalEarth_R20_2x3.ifc",
         9: "ExternalEarth_R20_IFC4.ifc",
-        10: "Testmodell_BEM_AC22.ifc",
+        10: "Ersatzneubau Alphütte_1-1210_31_23.ifc",
         11: "GRAPHISOFT_ARCHICAD_Sample_Project_Hillside_House_v1.ifczip",
         12: "GRAPHISOFT_ARCHICAD_Sample_Project_S_Office_v1.ifczip",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[1])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[10])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
