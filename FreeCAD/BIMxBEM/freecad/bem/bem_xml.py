@@ -35,6 +35,11 @@ class BEMxml:
         ET.SubElement(xml_element, "Name").text = fc_object.Name
         ET.SubElement(xml_element, "Description").text = fc_object.Description
         ET.SubElement(xml_element, "IfcType").text = fc_object.IfcType
+        
+    @staticmethod
+    def write_attrib(parent, fc_object, attributes):
+        for attrib in attributes:
+            ET.SubElement(parent, attrib).text = str(getattr(fc_object, attrib))
 
     def write_project(self, fc_object):
         project = ET.SubElement(self.projects, "Project")
@@ -72,6 +77,7 @@ class BEMxml:
     def write_space(self, fc_object):
         space = ET.SubElement(self.spaces, "Space")
         self.write_root_attrib(space, fc_object)
+        self.write_attrib(space, fc_object, ("LongName",))
         boundaries = ET.SubElement(space, "Boundaries")
         for boundary in fc_object.SecondLevel.Group:
             ET.SubElement(boundaries, "Boundary").text = str(boundary.Id)
