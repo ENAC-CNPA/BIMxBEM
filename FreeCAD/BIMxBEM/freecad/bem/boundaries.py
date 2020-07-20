@@ -52,48 +52,8 @@ Especially when inner boundaries touch outer boundary"""
 BREP = False
 
 
-def generate_space(ifc_space, parent, doc=FreeCAD.ActiveDocument):
-    """Generate Space and RelSpaceBoundaries as defined in ifc_file. No post process."""
-    fc_space = create_space_from_entity(ifc_space)
-    parent.addObject(fc_space)
-
-    boundaries = fc_space.newObject("App::DocumentObjectGroup", "Boundaries")
-    fc_space.Boundaries = boundaries
-    second_levels = boundaries.newObject("App::DocumentObjectGroup", "SecondLevel")
-    fc_space.SecondLevel = second_levels
-
-    # All boundaries have their placement relative to space placement
-    space_placement = get_placement(ifc_space)
-    for ifc_boundary in (b for b in ifc_space.BoundedBy if b.Name == "2ndLevel"):
-        try:
-            face = RelSpaceBoundary.create(ifc_entity=ifc_boundary)
-            second_levels.addObject(face)
-            face.Placement = space_placement
-            element = get_related_element(ifc_boundary, doc)
-            if element:
-                face.RelatedBuildingElement = element
-                append(element, "ProvidesBoundaries", face.Id)
-            face.RelatingSpace = fc_space.Id
-        except ShapeCreationError:
-            logger.warning(
-                f"Failed to create fc_shape for RelSpaceBoundary <{ifc_boundary.id()}> even with fallback methode _part_by_mesh. IfcOpenShell bug ?"
-            )
-
-
 class ShapeCreationError(RuntimeError):
     pass
-
-
-def generate_containers(ifc_parent, fc_parent, doc=FreeCAD.ActiveDocument):
-    for rel_aggregates in ifc_parent.IsDecomposedBy:
-        for element in rel_aggregates.RelatedObjects:
-            if element.is_a("IfcSpace"):
-                if element.BoundedBy:
-                    generate_space(element, fc_parent, doc)
-            else:
-                fc_container = create_container_from_entity(element)
-                fc_parent.addObject(fc_container)
-                generate_containers(element, fc_container, doc)
 
 
 def get_by_class(doc=FreeCAD.ActiveDocument, by_class=object):
@@ -139,41 +99,200 @@ def get_unit_conversion_factor(ifc_file, unit_type, default=None):
     return unit_factor * prefix_factor
 
 
-def generate_ifc_rel_space_boundaries(ifc_path, doc=FreeCAD.ActiveDocument):
-    """Display IfcRelSpaceBoundaries from selected IFC file into FreeCAD documennt"""
-    ifc_file = ifcopenshell.open(ifc_path)
+class IfcImporter():
+    def __init__(self, ifc_path, doc=None):
+        if not doc:
+            doc = FreeCAD.newDocument()
+        self.doc = doc
+        self.ifc_file = ifcopenshell.open(ifc_path)
+        self.ifc_scale = get_unit_conversion_factor(self.ifc_file, "LENGTHUNIT")
+        self.fc_scale = FreeCAD.Units.Metre.Value
+        self.material_creator = materials.MaterialCreator(self)
 
-    # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
-    Project.ifc_scale = get_unit_conversion_factor(ifc_file, "LENGTHUNIT")
-    Element.material_creator.ifc_scale = Project.ifc_scale
-    elements_group = get_or_create_group("Elements", doc)
-    ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)
-    for ifc_entity in ifc_elements:
-        elements_group.addObject(create_fc_object_from_entity(ifc_entity))
+    def generate_rel_space_boundaries(self):
+        """Display IfcRelSpaceBoundaries from selected IFC file into FreeCAD documennt"""
+        ifc_file = self.ifc_file
+        doc = self.doc
 
-    # Generate projects structure and boundaries
-    for ifc_project in ifc_file.by_type("IfcProject"):
-        project = create_project_from_entity(ifc_project)
-        generate_containers(ifc_project, project, doc)
+        # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
+        elements_group = get_or_create_group("Elements", doc)
+        ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)
+        for ifc_entity in ifc_elements:
+            elements_group.addObject(self.create_fc_object_from_entity(ifc_entity))
 
-    # Associate CorrespondingBoundary
-    associate_corresponding_boundaries(doc)
+        # Generate projects structure and boundaries
+        for ifc_project in ifc_file.by_type("IfcProject"):
+            project = create_project_from_entity(ifc_project)
+            self.generate_containers(ifc_project, project)
 
-    # Associate Host / Hosted elements
-    associate_host_element(ifc_file, elements_group)
+        # Associate CorrespondingBoundary
+        associate_corresponding_boundaries(doc)
 
-    # Associate hosted elements an fill gaps
-    for fc_space in get_elements_by_ifctype("IfcSpace", doc):
-        fc_boundaries = fc_space.SecondLevel.Group
-        # Minimal number of boundary is 5: 3 vertical faces, 2 horizontal faces
-        # If there is less than 5 boundaries there is an issue or a new case to analyse
-        if len(fc_boundaries) == 5:
-            continue
-        elif len(fc_boundaries) < 5:
-            assert ValueError, f"{fc_space.Label} has less than 5 boundaries"
+        # Associate Host / Hosted elements
+        associate_host_element(ifc_file, elements_group)
 
-        # Associate hosted elements
-        associate_inner_boundaries(fc_boundaries, doc)
+        # Associate hosted elements an fill gaps
+        for fc_space in get_elements_by_ifctype("IfcSpace", doc):
+            fc_boundaries = fc_space.SecondLevel.Group
+            # Minimal number of boundary is 5: 3 vertical faces, 2 horizontal faces
+            # If there is less than 5 boundaries there is an issue or a new case to analyse
+            if len(fc_boundaries) == 5:
+                continue
+            elif len(fc_boundaries) < 5:
+                assert ValueError, f"{fc_space.Label} has less than 5 boundaries"
+
+            # Associate hosted elements
+            associate_inner_boundaries(fc_boundaries, doc)
+
+    def create_fc_object_from_entity(self, ifc_entity):
+        """Stantard FreeCAD FeaturePython Object creation method"""
+        obj_name = "Element"
+        obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
+        Element(obj, ifc_entity)
+        self.material_creator.create(obj, ifc_entity)
+        try:
+            obj.Thickness = obj.Material.TotalThickness
+        except AttributeError:
+            pass
+
+        if FreeCAD.GuiUp:
+            obj.ViewObject.Proxy = 0
+        return obj
+
+    def generate_containers(self, ifc_parent, fc_parent):
+        for rel_aggregates in ifc_parent.IsDecomposedBy:
+            for element in rel_aggregates.RelatedObjects:
+                if element.is_a("IfcSpace"):
+                    if element.BoundedBy:
+                        self.generate_space(element, fc_parent)
+                else:
+                    fc_container = create_container_from_entity(element)
+                    fc_parent.addObject(fc_container)
+                    self.generate_containers(element, fc_container)
+
+    def generate_space(self, ifc_space, parent):
+        """Generate Space and RelSpaceBoundaries as defined in ifc_file. No post process."""
+        fc_space = create_space_from_entity(ifc_space)
+        parent.addObject(fc_space)
+
+        boundaries = fc_space.newObject("App::DocumentObjectGroup", "Boundaries")
+        fc_space.Boundaries = boundaries
+        second_levels = boundaries.newObject("App::DocumentObjectGroup", "SecondLevel")
+        fc_space.SecondLevel = second_levels
+
+        # All boundaries have their placement relative to space placement
+        space_placement = self.get_placement(ifc_space)
+        for ifc_boundary in (b for b in ifc_space.BoundedBy if b.Name == "2ndLevel"):
+            try:
+                face = RelSpaceBoundary.create(ifc_entity=ifc_boundary, ifc_importer=self)
+                second_levels.addObject(face)
+                face.Placement = space_placement
+                element = get_related_element(ifc_boundary, self.doc)
+                if element:
+                    face.RelatedBuildingElement = element
+                    append(element, "ProvidesBoundaries", face.Id)
+                face.RelatingSpace = fc_space.Id
+            except ShapeCreationError:
+                logger.warning(
+                    f"Failed to create fc_shape for RelSpaceBoundary <{ifc_boundary.id()}> even with fallback methode _part_by_mesh. IfcOpenShell bug ?"
+                )
+
+    def get_placement(self, space):
+        """Retrieve object placement"""
+        space_geom = ifcopenshell.geom.create_shape(BREP_SETTINGS, space)
+        # IfcOpenShell matrix values FreeCAD matrix values are transposed
+        ios_matrix = space_geom.transformation.matrix.data
+        m_l = list()
+        for i in range(3):
+            line = list(ios_matrix[i::3])
+            line[-1] *= self.fc_scale
+            m_l.extend(line)
+        return FreeCAD.Matrix(*m_l)
+
+    def get_matrix(self, position):
+        """Transform position to FreeCAD.Matrix"""
+        total_scale = self.fc_scale * self.ifc_scale
+        location = FreeCAD.Vector(position.Location.Coordinates)
+        location.scale(*list(3 * [total_scale]))
+
+        v_1 = FreeCAD.Vector(position.RefDirection.DirectionRatios)
+        v_3 = FreeCAD.Vector(position.Axis.DirectionRatios)
+        v_2 = v_3.cross(v_1)
+
+        # fmt: off
+        matrix = FreeCAD.Matrix(
+            v_1.x, v_2.x, v_3.x, location.x,
+            v_1.y, v_2.y, v_3.y, location.y,
+            v_1.z, v_2.z, v_3.z, location.z,
+            0, 0, 0, 1,
+        )
+        # fmt: on
+
+        return matrix
+
+    def _polygon_by_mesh(self, ifc_entity):
+        """Create a Polygon from a compatible ifc entity"""
+        ifc_shape = ifcopenshell.geom.create_shape(MESH_SETTINGS, ifc_entity)
+        ifc_verts = ifc_shape.verts
+        fc_verts = [
+            FreeCAD.Vector(ifc_verts[i : i + 3]).scale(*[self.fc_scale] * 3)
+            for i in range(0, len(ifc_verts), 3)
+        ]
+        fc_verts = verts_clean(fc_verts)
+
+        return Part.makePolygon(fc_verts)
+
+    def part_by_wires(self, ifc_entity):
+        """ Create a Part Shape from ifc geometry"""
+        inner_wires = list()
+        outer_wire = self._polygon_by_mesh(ifc_entity.OuterBoundary)
+        face = Part.Face(outer_wire)
+        try:
+            inner_boundaries = ifc_entity.InnerBoundaries
+            for inner_boundary in tuple(inner_boundaries) if inner_boundaries else tuple():
+                inner_wire = self._polygon_by_mesh(inner_boundary)
+                face = face.cut(Part.Face(inner_wire))
+                inner_wires.append(inner_wire)
+        except RuntimeError:
+            pass
+        fc_shape = Part.Compound([face, outer_wire, *inner_wires])
+        matrix = self.get_matrix(ifc_entity.BasisSurface.Position)
+        fc_shape = fc_shape.transformGeometry(matrix)
+        return fc_shape
+
+    def create_fc_shape(self, space_boundary):
+        """ Create Part shape from ifc geometry"""
+        if BREP:
+            try:
+                return _part_by_brep(
+                    space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
+                )
+            except RuntimeError:
+                print(f"Failed to generate brep from {space_boundary}")
+                fallback = True
+        if not BREP or fallback:
+            try:
+                return self.part_by_wires(
+                    space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
+                )
+            except RuntimeError:
+                print(f"Failed to generate mesh from {space_boundary}")
+                try:
+                    return self._part_by_mesh(
+                        space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
+                    )
+                except RuntimeError:
+                    raise ShapeCreationError
+
+
+def verts_clean(vertices):
+    """For some reason, vertices are not always clean and sometime a same vertex is repeated"""
+    new_verts = list()
+    for i in range(len(vertices) - 1):
+        if vertices[i] != vertices[i + 1]:
+            new_verts.append(vertices[i])
+    new_verts.append(vertices[-1])
+    return new_verts
 
 
 def processing_sia_boundaries(doc=FreeCAD.ActiveDocument):
@@ -871,7 +990,7 @@ def get_thickness(ifc_entity):
 
         for material_layer in material_layers:
             thickness += (
-                material_layer.LayerThickness * Project.fc_scale * Project.ifc_scale
+                material_layer.LayerThickness * Project.fc_scale * self.ifc_scale
             )
     return thickness
 
@@ -1071,31 +1190,6 @@ class NoIntersectionError(IndexError):
     pass
 
 
-def create_fc_shape(space_boundary):
-    """ Create Part shape from ifc geometry"""
-    if BREP:
-        try:
-            return _part_by_brep(
-                space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
-            )
-        except RuntimeError:
-            print(f"Failed to generate brep from {space_boundary}")
-            fallback = True
-    if not BREP or fallback:
-        try:
-            return part_by_wires(
-                space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
-            )
-        except RuntimeError:
-            print(f"Failed to generate mesh from {space_boundary}")
-            try:
-                return _part_by_mesh(
-                    space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
-                )
-            except RuntimeError:
-                raise ShapeCreationError
-
-
 def _part_by_brep(ifc_entity):
     """ Create a Part Shape from brep generated by ifcopenshell from ifc geometry"""
     ifc_shape = ifcopenshell.geom.create_shape(BREP_SETTINGS, ifc_entity)
@@ -1108,83 +1202,6 @@ def _part_by_brep(ifc_entity):
 def _part_by_mesh(ifc_entity):
     """ Create a Part Shape from mesh generated by ifcopenshell from ifc geometry"""
     return Part.Face(_polygon_by_mesh(ifc_entity))
-
-
-def _polygon_by_mesh(ifc_entity):
-    """Create a Polygon from a compatible ifc entity"""
-    ifc_shape = ifcopenshell.geom.create_shape(MESH_SETTINGS, ifc_entity)
-    ifc_verts = ifc_shape.verts
-    fc_verts = [
-        FreeCAD.Vector(ifc_verts[i : i + 3]).scale(*[Project.fc_scale] * 3)
-        for i in range(0, len(ifc_verts), 3)
-    ]
-    fc_verts = verts_clean(fc_verts)
-
-    return Part.makePolygon(fc_verts)
-
-
-def verts_clean(vertices):
-    """For some reason, vertices are not always clean and sometime a same vertex is repeated"""
-    new_verts = list()
-    for i in range(len(vertices) - 1):
-        if vertices[i] != vertices[i + 1]:
-            new_verts.append(vertices[i])
-    new_verts.append(vertices[-1])
-    return new_verts
-
-
-def part_by_wires(ifc_entity):
-    """ Create a Part Shape from ifc geometry"""
-    inner_wires = list()
-    outer_wire = _polygon_by_mesh(ifc_entity.OuterBoundary)
-    face = Part.Face(outer_wire)
-    try:
-        inner_boundaries = ifc_entity.InnerBoundaries
-        for inner_boundary in tuple(inner_boundaries) if inner_boundaries else tuple():
-            inner_wire = _polygon_by_mesh(inner_boundary)
-            face = face.cut(Part.Face(inner_wire))
-            inner_wires.append(inner_wire)
-    except RuntimeError:
-        pass
-    fc_shape = Part.Compound([face, outer_wire, *inner_wires])
-    matrix = get_matrix(ifc_entity.BasisSurface.Position)
-    fc_shape = fc_shape.transformGeometry(matrix)
-    return fc_shape
-
-
-def get_matrix(position):
-    """Transform position to FreeCAD.Matrix"""
-    total_scale = Project.fc_scale * Project.ifc_scale
-    location = FreeCAD.Vector(position.Location.Coordinates)
-    location.scale(*list(3 * [total_scale]))
-
-    v_1 = FreeCAD.Vector(position.RefDirection.DirectionRatios)
-    v_3 = FreeCAD.Vector(position.Axis.DirectionRatios)
-    v_2 = v_3.cross(v_1)
-
-    # fmt: off
-    matrix = FreeCAD.Matrix(
-        v_1.x, v_2.x, v_3.x, location.x,
-        v_1.y, v_2.y, v_3.y, location.y,
-        v_1.z, v_2.z, v_3.z, location.z,
-        0, 0, 0, 1,
-    )
-    # fmt: on
-
-    return matrix
-
-
-def get_placement(space):
-    """Retrieve object placement"""
-    space_geom = ifcopenshell.geom.create_shape(BREP_SETTINGS, space)
-    # IfcOpenShell matrix values FreeCAD matrix values are transposed
-    ios_matrix = space_geom.transformation.matrix.data
-    m_l = list()
-    for i in range(3):
-        line = list(ios_matrix[i::3])
-        line[-1] *= Project.fc_scale
-        m_l.extend(line)
-    return FreeCAD.Matrix(*m_l)
 
 
 def get_color(ifc_boundary):
@@ -1274,7 +1291,7 @@ class RelSpaceBoundary(Root):
     """Wrapping IFC entity : 
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcrelspaceboundary2ndlevel.htm"""
 
-    def __init__(self, obj, ifc_entity):
+    def __init__(self, obj, ifc_entity, ifc_importer=None):
         super().__init__(obj, ifc_entity)
         obj.Proxy = self
         bem_category = "BEM"
@@ -1330,7 +1347,7 @@ class RelSpaceBoundary(Root):
         obj.GlobalId = ifc_entity.GlobalId
         obj.InternalOrExternalBoundary = ifc_entity.InternalOrExternalBoundary
         obj.PhysicalOrVirtualBoundary = ifc_entity.PhysicalOrVirtualBoundary
-        obj.Shape = create_fc_shape(ifc_entity)
+        obj.Shape = ifc_importer.create_fc_shape(ifc_entity)
         obj.Area = obj.AreaWithHosted = obj.Shape.Area
         self.set_label(obj, ifc_entity)
         if not obj.PhysicalOrVirtualBoundary == "VIRTUAL":
@@ -1338,10 +1355,10 @@ class RelSpaceBoundary(Root):
         obj.LesoType = "Unknown"
 
     @staticmethod
-    def create(obj_name: str = "RelSpaceBoundary", ifc_entity=None):
+    def create(obj_name: str = "RelSpaceBoundary", ifc_entity=None, ifc_importer=None):
         """Stantard FreeCAD FeaturePython Object creation method"""
         obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
-        RelSpaceBoundary(obj, ifc_entity)
+        RelSpaceBoundary(obj, ifc_entity, ifc_importer)
         try:
             # ViewProviderRelSpaceBoundary(obj.ViewObject)
             obj.ViewObject.Proxy = 0
@@ -1380,29 +1397,10 @@ class RelSpaceBoundary(Root):
         return get_wires(obj)
 
 
-def create_fc_object_from_entity(ifc_entity):
-    """Stantard FreeCAD FeaturePython Object creation method"""
-    obj_name = "Element"
-    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
-    Element(obj, ifc_entity)
-    Element.material_creator.create(obj, ifc_entity)
-    try:
-        obj.Thickness = obj.Material.TotalThickness
-    except AttributeError:
-        pass
-
-    if FreeCAD.GuiUp:
-        obj.ViewObject.Proxy = 0
-    return obj
-
-
 class Element(Root):
     """Wrapping various IFC entity :
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/schema/ifcproductextension/lexical/ifcelement.htm
     """
-
-    material_creator = materials.MaterialCreator()
-
     def __init__(self, obj, ifc_entity):
         super().__init__(obj, ifc_entity)
         self.Type = "IfcRelSpaceBoundary"
@@ -1495,10 +1493,6 @@ def create_project_from_entity(ifc_entity):
 class Project(Root):
     """Representation of an IfcProject:
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
-
-    ifc_scale = 1
-    fc_scale = FreeCAD.Units.Metre.Value
-
     def __init__(self, obj, ifc_entity):
         super().__init__(obj, ifc_entity)
         self.ifc_entity = ifc_entity
@@ -1577,9 +1571,9 @@ class Space(Root):
 
 
 def generate_bem_xml_from_file(ifc_path: str, gui_up: bool = False) -> namedtuple:
-    doc = FreeCAD.newDocument()
-
-    generate_ifc_rel_space_boundaries(ifc_path, doc)
+    ifc_importer = IfcImporter(ifc_path)
+    ifc_importer.generate_rel_space_boundaries()
+    doc = ifc_importer.doc
     processing_sia_boundaries(doc)
     Result = namedtuple("Result", ["xml", "log"])
     xml_str = write_xml(doc).tostring()
@@ -1607,7 +1601,7 @@ if __name__ == "__main__":
         11: "GRAPHISOFT_ARCHICAD_Sample_Project_Hillside_House_v1.ifczip",
         12: "GRAPHISOFT_ARCHICAD_Sample_Project_S_Office_v1.ifczip",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[10])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[3])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
@@ -1625,7 +1619,8 @@ if __name__ == "__main__":
         FreeCADGui.showMainWindow()
         DOC = FreeCAD.newDocument()
 
-        generate_ifc_rel_space_boundaries(IFC_PATH, DOC)
+        ifc_importer = IfcImporter(IFC_PATH, DOC)
+        ifc_importer.generate_rel_space_boundaries()
         processing_sia_boundaries(DOC)
         bem_xml = write_xml(DOC)
         output_xml_to_path(bem_xml)
