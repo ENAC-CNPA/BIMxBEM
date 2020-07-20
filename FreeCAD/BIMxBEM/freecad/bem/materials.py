@@ -3,12 +3,17 @@ import FreeCAD
 
 
 class MaterialCreator:
-    def __init__(self):
+    def __init__(self, ifc_importer=None):
         self.obj = None
         self.materials = {}
         self.material_layer_sets = {}
         self.material_constituent_sets = {}
         self.ifc_scale = 1
+        self.fc_scale = 1
+        if ifc_importer:
+            self.ifc_scale = ifc_importer.ifc_scale
+            self.fc_scale = ifc_importer.fc_scale
+        self.ifc_importer = ifc_importer
 
     def create(self, obj, ifc_entity):
         self.obj = obj
@@ -79,12 +84,12 @@ class MaterialCreator:
             layers_thickness = []
             for layer in layer_set.MaterialLayers:
                 layers.append(self.create_single(layer.Material))
-                layers_thickness.append(layer.LayerThickness)
+                layers_thickness.append(layer.LayerThickness * self.ifc_scale)
             fc_layer_set.MaterialLayers = layers
             fc_layer_set.Thicknesses = layers_thickness
             if not fc_layer_set.TotalThickness:
                 fc_layer_set.TotalThickness = (
-                    sum(layers_thickness) * FreeCAD.Units.Metre.Value * self.ifc_scale
+                    sum(layers_thickness) * self.fc_scale
                 )
             self.material_layer_sets[fc_layer_set.IfcName] = fc_layer_set
             return fc_layer_set
