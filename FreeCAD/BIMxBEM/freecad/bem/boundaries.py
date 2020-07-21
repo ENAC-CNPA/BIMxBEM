@@ -99,7 +99,7 @@ def get_unit_conversion_factor(ifc_file, unit_type, default=None):
     return unit_factor * prefix_factor
 
 
-class IfcImporter():
+class IfcImporter:
     def __init__(self, ifc_path, doc=None):
         if not doc:
             doc = FreeCAD.newDocument()
@@ -116,7 +116,9 @@ class IfcImporter():
 
         # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
         elements_group = get_or_create_group("Elements", doc)
-        ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)
+        ifc_elements = (
+            e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries
+        )
         for ifc_entity in ifc_elements:
             elements_group.addObject(self.create_fc_object_from_entity(ifc_entity))
 
@@ -184,7 +186,9 @@ class IfcImporter():
         space_placement = self.get_placement(ifc_space)
         for ifc_boundary in (b for b in ifc_space.BoundedBy if b.Name == "2ndLevel"):
             try:
-                face = RelSpaceBoundary.create(ifc_entity=ifc_boundary, ifc_importer=self)
+                face = RelSpaceBoundary.create(
+                    ifc_entity=ifc_boundary, ifc_importer=self
+                )
                 second_levels.addObject(face)
                 face.Placement = space_placement
                 element = get_related_element(ifc_boundary, self.doc)
@@ -249,7 +253,9 @@ class IfcImporter():
         face = Part.Face(outer_wire)
         try:
             inner_boundaries = ifc_entity.InnerBoundaries
-            for inner_boundary in tuple(inner_boundaries) if inner_boundaries else tuple():
+            for inner_boundary in (
+                tuple(inner_boundaries) if inner_boundaries else tuple()
+            ):
                 inner_wire = self._polygon_by_mesh(inner_boundary)
                 face = face.cut(Part.Face(inner_wire))
                 inner_wires.append(inner_wire)
@@ -343,7 +349,7 @@ def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
         except AttributeError:
             if rel_boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
                 logger.info("IfcElement %s is VIRTUAL. Modeling error ?")
-                key = None
+                key = "VIRTUAL"
             else:
                 logger.warning(
                     "IfcElement %s has no RelatedBuildingElement", rel_boundary.Id
@@ -1021,6 +1027,7 @@ def rejoin_boundaries(space, sia_type):
         if (
             base_boundary.IsHosted
             or base_boundary.PhysicalOrVirtualBoundary == "VIRTUAL"
+            or not base_boundary.RelatedBuildingElement
         ):
             continue
         for b2_id, (ei1, ei2) in zip(
@@ -1121,6 +1128,8 @@ def create_sia_ext_boundaries(space, is_from_revit, is_from_archicad):
             continue
         bem_boundary = BEMBoundary.create(boundary1, "SIA_Exterior")
         sia_group_obj.addObject(bem_boundary)
+        if not boundary1.RelatedBuildingElement:
+            continue
         thickness = boundary1.RelatedBuildingElement.Thickness.Value
         ifc_type = boundary1.RelatedBuildingElement.IfcType
         normal = boundary1.Shape.Faces[0].normalAt(0, 0)
@@ -1159,6 +1168,8 @@ def create_sia_int_boundaries(space, is_from_revit, is_from_archicad):
 
         bem_boundary = BEMBoundary.create(boundary, "SIA_Interior")
         sia_group_obj.addObject(bem_boundary)
+        if not boundary.RelatedBuildingElement:
+            continue
 
         ifc_type = boundary.RelatedBuildingElement.IfcType
         if is_from_revit and ifc_type.startswith("IfcWall"):
@@ -1217,6 +1228,8 @@ def get_color(ifc_boundary):
         return (1.0, 0.0, 1.0)
 
     ifc_product = ifc_boundary.RelatedBuildingElement
+    if not ifc_product:
+        return (1.0, 0.0, 0.0)
     for product, color in product_colors.items():
         # Not only test if IFC class is in dictionnary but it is a subclass
         if ifc_product.is_a(product):
@@ -1350,8 +1363,10 @@ class RelSpaceBoundary(Root):
         obj.Shape = ifc_importer.create_fc_shape(ifc_entity)
         obj.Area = obj.AreaWithHosted = obj.Shape.Area
         self.set_label(obj, ifc_entity)
-        if not obj.PhysicalOrVirtualBoundary == "VIRTUAL":
+        try:
             obj.IsHosted = bool(ifc_entity.RelatedBuildingElement.FillsVoids)
+        except AttributeError:
+            obj.IsHosted = False
         obj.LesoType = "Unknown"
 
     @staticmethod
@@ -1401,6 +1416,7 @@ class Element(Root):
     """Wrapping various IFC entity :
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/schema/ifcproductextension/lexical/ifcelement.htm
     """
+
     def __init__(self, obj, ifc_entity):
         super().__init__(obj, ifc_entity)
         self.Type = "IfcRelSpaceBoundary"
@@ -1493,6 +1509,7 @@ def create_project_from_entity(ifc_entity):
 class Project(Root):
     """Representation of an IfcProject:
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
+
     def __init__(self, obj, ifc_entity):
         super().__init__(obj, ifc_entity)
         self.ifc_entity = ifc_entity
@@ -1600,8 +1617,12 @@ if __name__ == "__main__":
         10: "Ersatzneubau Alphütte_1-1210_31_23.ifc",
         11: "GRAPHISOFT_ARCHICAD_Sample_Project_Hillside_House_v1.ifczip",
         12: "GRAPHISOFT_ARCHICAD_Sample_Project_S_Office_v1.ifczip",
+        13: "Cas1_EXPORT_REVIT_IFC2x3 (EDITED)_Space_Boundaries.ifc",
+        14: "Cas1_EXPORT_REVIT_IFC4DTV (EDITED)_Space_Boundaries.ifc",
+        15: "Cas1_EXPORT_REVIT_IFC4RV (EDITED)_Space_Boundaries.ifc",
+        16: "Cas1_EXPORT_REVIT_IFC4RV (EDITED)_Space_Boundaries_RECREATED.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[3])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[13])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
