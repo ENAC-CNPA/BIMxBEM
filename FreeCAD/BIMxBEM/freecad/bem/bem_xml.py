@@ -35,7 +35,7 @@ class BEMxml:
         ET.SubElement(xml_element, "Name").text = fc_object.Name
         ET.SubElement(xml_element, "Description").text = fc_object.Description
         ET.SubElement(xml_element, "IfcType").text = fc_object.IfcType
-        
+
     @staticmethod
     def write_attrib(parent, fc_object, attributes):
         for attrib in attributes:
@@ -59,14 +59,14 @@ class BEMxml:
         self.buildings = ET.SubElement(site, "Buildings")
         for building in fc_object.Group:
             self.write_building(building)
-    
+
     def write_building(self, fc_object):
         site = ET.SubElement(self.buildings, "Building")
         self.write_root_attrib(site, fc_object)
         self.storeys = ET.SubElement(site, "Storeys")
         for storey in fc_object.Group:
             self.write_storey(storey)
-    
+
     def write_storey(self, fc_object):
         storey = ET.SubElement(self.storeys, "Storey")
         self.write_root_attrib(storey, fc_object)
@@ -96,7 +96,7 @@ class BEMxml:
         text_references = (
             "InternalOrExternalBoundary",
             "PhysicalOrVirtualBoundary",
-            "LesoType"
+            "LesoType",
         )
 
         for name in text_references:
@@ -135,7 +135,9 @@ class BEMxml:
         for element_id in fc_object.ProvidesBoundaries:
             ET.SubElement(boundaries, "Id").text = str(element_id)
         if fc_object.Material:
-            ET.SubElement(building_element, "Material").text = str(fc_object.Material.Id or "")
+            ET.SubElement(building_element, "Material").text = str(
+                fc_object.Material.Id or ""
+            )
 
     def write_material(self, fc_object):
         if isinstance(fc_object.Proxy, materials.Material):
@@ -146,18 +148,25 @@ class BEMxml:
             material = ET.SubElement(self.materials, "LayerSet")
             properties = ["TotalThickness"]
             layers = ET.SubElement(material, "Layers")
-            for fc_material, thickness in zip(fc_object.MaterialLayers, fc_object.Thicknesses):
+            for fc_material, thickness in zip(
+                fc_object.MaterialLayers, fc_object.Thicknesses
+            ):
                 layer = ET.SubElement(layers, "Layer")
                 ET.SubElement(layer, "Id").text = str(fc_material.Id)
                 ET.SubElement(layer, "Thickness").text = str(thickness)
         elif isinstance(fc_object.Proxy, materials.ConstituentSet):
             material = ET.SubElement(self.materials, "ConstituentSet")
             properties = []
-            for fc_material, category, fraction in zip(fc_object.MaterialLayers, fc_object.Categories, fc_object.Fractions):
-                layer = ET.SubElement(layers, "Layer")
-                ET.SubElement(layer, "Id").text = str(fc_material.Id)
-                ET.SubElement(layer, "Category").text = str(category)
-                ET.SubElement(layer, "Fraction").text = str(fraction)
+            constituents = ET.SubElement(material, "Layers")
+            for fc_material, category, fraction in zip(
+                fc_object.MaterialConstituents,
+                fc_object.Categories,
+                fc_object.Fractions,
+            ):
+                constituent = ET.SubElement(constituents, "Layer")
+                ET.SubElement(constituent, "Id").text = str(fc_material.Id)
+                ET.SubElement(constituent, "Category").text = str(category)
+                ET.SubElement(constituent, "Fraction").text = str(fraction)
         properties[0:0] = ["Id", "IfcName", "Description"]
         for prop in properties:
             ET.SubElement(material, prop).text = str(getattr(fc_object, prop))

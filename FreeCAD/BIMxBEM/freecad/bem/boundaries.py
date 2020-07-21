@@ -1282,7 +1282,7 @@ class Root:
     @staticmethod
     def set_label(obj, ifc_entity):
         """Allow specific method for specific elements"""
-        obj.Label = "{} {}".format(ifc_entity.id(), obj.Name)
+        obj.Label = "{} {}".format(ifc_entity.id(), ifc_entity.Name)
 
     @classmethod
     def create(cls, obj_name, ifc_entity=None):
@@ -1622,7 +1622,7 @@ if __name__ == "__main__":
         15: "Cas1_EXPORT_REVIT_IFC4RV (EDITED)_Space_Boundaries.ifc",
         16: "Cas1_EXPORT_REVIT_IFC4RV (EDITED)_Space_Boundaries_RECREATED.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[13])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[16])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
