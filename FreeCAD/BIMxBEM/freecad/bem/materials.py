@@ -1,4 +1,13 @@
 # coding: utf8
+"""This module reads IfcRelSpaceBoundary from an IFC file and display them in FreeCAD
+
+© All rights reserved.
+ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland, Laboratory CNPA, 2019-2020
+
+See the LICENSE.TXT file for more details.
+
+Author : Cyril Waechter
+"""
 import FreeCAD
 
 
@@ -88,9 +97,7 @@ class MaterialCreator:
             fc_layer_set.MaterialLayers = layers
             fc_layer_set.Thicknesses = layers_thickness
             if not fc_layer_set.TotalThickness:
-                fc_layer_set.TotalThickness = (
-                    sum(layers_thickness) * self.fc_scale
-                )
+                fc_layer_set.TotalThickness = sum(layers_thickness) * self.fc_scale
             self.material_layer_sets[fc_layer_set.IfcName] = fc_layer_set
             return fc_layer_set
         return self.material_layer_sets[layer_set.LayerSetName]
@@ -101,16 +108,18 @@ class MaterialCreator:
             constituents = []
             constituents_fraction = []
             constituents_categories = []
-            for constituent in constituent_set.MaterialLayers:
+            for constituent in constituent_set.MaterialConstituents:
                 constituents.append(self.create_single(constituent.Material))
-                constituents_fraction.append(constituent.Fraction)
-                constituents_categories.append(constituent.Category)
+                constituents_fraction.append(constituent.Fraction or 0)
+                constituents_categories.append(constituent.Category or "")
             fc_constituent_set.MaterialConstituents = constituents
-            fc_constituent_set.MaterialConstituentFraction = constituents_fraction
-            fc_constituent_set.MaterialConstituentCategories = constituents_categories
-            self.material_constituent_sets[fc_constituent_set.IfcName] = fc_constituent_set
+            fc_constituent_set.Fractions = constituents_fraction
+            fc_constituent_set.Categories = constituents_categories
+            self.material_constituent_sets[
+                fc_constituent_set.IfcName
+            ] = fc_constituent_set
             return fc_constituent_set
-        return self.material_constituent_sets[constituent_set.IfcName]
+        return self.material_constituent_sets[constituent_set.Name]
 
 
 class ConstituentSet:
@@ -141,9 +150,9 @@ class ConstituentSet:
         obj.addProperty("App::PropertyLinkList", "MaterialConstituents", ifc_attributes)
 
         obj.Id = ifc_entity.id()
-        obj.Name = ifc_entity.Name or ""
+        obj.IfcName = ifc_entity.Name or ""
         obj.Description = ifc_entity.Description or ""
-        obj.Label = f"{obj.Id}_{obj.Name}"
+        obj.Label = f"{obj.Id}_{obj.IfcName}"
 
 
 class LayerSet:
