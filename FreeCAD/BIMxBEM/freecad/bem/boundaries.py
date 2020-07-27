@@ -1447,6 +1447,8 @@ class BEMBoundary:
         obj.addProperty("App::PropertyArea", "AreaWithHosted", category_name)
         obj.Shape = boundary.Shape.copy()
         self.set_label(obj, boundary)
+        obj.Area = boundary.Area
+        obj.AreaWithHosted = boundary.AreaWithHosted
 
     @staticmethod
     def create(boundary, geo_type):
@@ -1621,8 +1623,13 @@ if __name__ == "__main__":
         14: "Cas1_EXPORT_REVIT_IFC4DTV (EDITED)_Space_Boundaries.ifc",
         15: "Cas1_EXPORT_REVIT_IFC4RV (EDITED)_Space_Boundaries.ifc",
         16: "Cas1_EXPORT_REVIT_IFC4RV (EDITED)_Space_Boundaries_RECREATED.ifc",
+        17: "Cas2_EXPORT_REVIT_IFC4RV (EDITED)_Space_Boudaries.ifc",
+        18: "Cas2_EXPORT_REVIT_IFC4DTV (EDITED)_Space_Boundaries_RECREATED.ifc",
+        19: "Cas2_EXPORT_REVIT_IFC4DTV (EDITED)_Space_Boundaries.ifc",
+        20: "Cas2_EXPORT_REVIT_IFC2x3 (EDITED)_Space_Boundaries.ifc",
+        21: "Temoin.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[16])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[10])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd

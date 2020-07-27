@@ -32,7 +32,7 @@ class BEMxml:
     def write_root_attrib(xml_element, fc_object):
         ET.SubElement(xml_element, "Id").text = str(fc_object.Id)
         ET.SubElement(xml_element, "GlobalId").text = fc_object.GlobalId
-        ET.SubElement(xml_element, "Name").text = fc_object.Name
+        ET.SubElement(xml_element, "Name").text = fc_object.IfcName
         ET.SubElement(xml_element, "Description").text = fc_object.Description
         ET.SubElement(xml_element, "IfcType").text = fc_object.IfcType
 
