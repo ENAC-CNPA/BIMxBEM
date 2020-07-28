@@ -11,6 +11,8 @@ Author : Cyril Waechter
 
 import xml.etree.ElementTree as ET
 
+import FreeCAD
+
 from freecad.bem import materials
 
 SCALE = 1000
@@ -29,11 +31,22 @@ class BEMxml:
         self.materials = ET.SubElement(self.root, "Materials")
 
     @staticmethod
-    def write_root_attrib(xml_element, fc_object):
+    def write_id(xml_element, fc_object):
         ET.SubElement(xml_element, "Id").text = str(fc_object.Id)
-        ET.SubElement(xml_element, "GlobalId").text = fc_object.GlobalId
+
+    @staticmethod
+    def write_name(xml_element, fc_object):
         ET.SubElement(xml_element, "Name").text = fc_object.IfcName
+
+    @staticmethod
+    def write_description(xml_element, fc_object):
         ET.SubElement(xml_element, "Description").text = fc_object.Description
+
+    def write_root_attrib(self, xml_element, fc_object):
+        self.write_id(xml_element, fc_object)
+        ET.SubElement(xml_element, "GlobalId").text = fc_object.GlobalId
+        self.write_name(xml_element, fc_object)
+        self.write_description(xml_element, fc_object)
         ET.SubElement(xml_element, "IfcType").text = fc_object.IfcType
 
     @staticmethod
@@ -138,38 +151,41 @@ class BEMxml:
             ET.SubElement(building_element, "Material").text = str(
                 fc_object.Material.Id or ""
             )
+    @staticmethod
+    def write_class_attrib(xml_element, fc_object):
+        for attrib in fc_object.Proxy.attributes:
+            value = getattr(fc_object, attrib)
+            if isinstance(value, FreeCAD.Units.Quantity):
+                if value.Unit.Type == "Length":
+                    value = value.Value / SCALE
+                else:
+                    value = value.Value
+            ET.SubElement(xml_element, attrib).text = str(value)
+
+    @staticmethod
+    def write_psets(xml_element, fc_object):
+        for props in fc_object.Proxy.psets_dict.values():
+            for prop in props:
+                ET.SubElement(xml_element, prop).text = str(getattr(fc_object, prop))
 
     def write_material(self, fc_object):
-        if isinstance(fc_object.Proxy, materials.Material):
-            properties = [p for l in materials.Material.pset_dict.values() for p in l]
-            properties[0:0] = ["Category"]
-            material = ET.SubElement(self.materials, "Material")
-        elif isinstance(fc_object.Proxy, materials.LayerSet):
-            material = ET.SubElement(self.materials, "LayerSet")
-            properties = ["TotalThickness"]
-            layers = ET.SubElement(material, "Layers")
-            for fc_material, thickness in zip(
-                fc_object.MaterialLayers, fc_object.Thicknesses
-            ):
-                layer = ET.SubElement(layers, "Layer")
-                ET.SubElement(layer, "Id").text = str(fc_material.Id)
-                ET.SubElement(layer, "Thickness").text = str(thickness)
-        elif isinstance(fc_object.Proxy, materials.ConstituentSet):
-            material = ET.SubElement(self.materials, "ConstituentSet")
-            properties = []
-            constituents = ET.SubElement(material, "Layers")
-            for fc_material, category, fraction in zip(
-                fc_object.MaterialConstituents,
-                fc_object.Categories,
-                fc_object.Fractions,
-            ):
-                constituent = ET.SubElement(constituents, "Layer")
-                ET.SubElement(constituent, "Id").text = str(fc_material.Id)
-                ET.SubElement(constituent, "Category").text = str(category)
-                ET.SubElement(constituent, "Fraction").text = str(fraction)
-        properties[0:0] = ["Id", "IfcName", "Description"]
-        for prop in properties:
-            ET.SubElement(material, prop).text = str(getattr(fc_object, prop))
+        proxy = fc_object.Proxy
+        material = ET.SubElement(self.materials, type(proxy).__name__)
+        self.write_id(material, fc_object)
+        self.write_name(material, fc_object)
+        self.write_description(material, fc_object)
+        self.write_class_attrib(material, fc_object)
+        self.write_psets(material, fc_object)
+        if not proxy.part_name:
+            return
+        parts = ET.SubElement(material, proxy.parts_name)
+        for values in zip(*[getattr(fc_object, prop) for prop in proxy.part_props]):
+            part = ET.SubElement(parts, proxy.part_name)
+            for i, value, attrib in zip(range(len(values)), values, proxy.part_attribs):
+                if i == 0:
+                    ET.SubElement(part, attrib).text = str(value.Id)
+                else:
+                    ET.SubElement(part, attrib).text = str(value)
 
     @staticmethod
     def write_shape(xml_element, fc_object):
