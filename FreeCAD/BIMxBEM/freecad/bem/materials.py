@@ -123,6 +123,12 @@ class MaterialCreator:
 
 
 class ConstituentSet:
+    attributes = ()
+    psets_dict = {}
+    parts_name = "Layers"
+    part_name = "Layer"
+    part_props = ("MaterialConstituents", "Fractions", "Categories")
+    part_attribs = ("Id", "Fraction", "Category")
     def __init__(self, obj, ifc_entity):
         self.ifc_entity = ifc_entity
         self.setProperties(obj, ifc_entity)
@@ -156,6 +162,13 @@ class ConstituentSet:
 
 
 class LayerSet:
+    attributes = ("TotalThickness",)
+    psets_dict = {}
+    parts_name = "Layers"
+    part_name = "Layer"
+    part_props = ("MaterialLayers", "Thicknesses")
+    part_attribs = ("Id", "Thickness")
+
     def __init__(self, obj, ifc_entity):
         self.ifc_entity = ifc_entity
         self.setProperties(obj, ifc_entity)
@@ -192,7 +205,8 @@ class LayerSet:
 
 
 class Material:
-    pset_dict = {
+    attributes = ("Category",)
+    psets_dict = {
         "Pset_MaterialCommon": ("MassDensity", "Porosity"),
         "Pset_MaterialOptical": (
             "VisibleTransmittance",
@@ -203,6 +217,10 @@ class Material:
         ),
         "Pset_MaterialThermal": ("SpecificHeatCapacity", "ThermalConductivity",),
     }
+    parts_name = ""
+    part_name = ""
+    part_props = ()
+    part_attribs = ()
 
     def __init__(self, obj, ifc_entity=None):
         self.ifc_entity = ifc_entity
