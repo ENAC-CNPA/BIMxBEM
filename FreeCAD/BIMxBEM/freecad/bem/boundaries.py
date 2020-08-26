@@ -302,10 +302,8 @@ class IfcImporter:
         outer_wire = self._polygon_by_mesh(ifc_entity.OuterBoundary)
         face = Part.Face(outer_wire)
         try:
-            inner_boundaries = ifc_entity.InnerBoundaries
-            for inner_boundary in (
-                tuple(inner_boundaries) if inner_boundaries else tuple()
-            ):
+            inner_boundaries = ifc_entity.InnerBoundaries or tuple()
+            for inner_boundary in inner_boundaries:
                 inner_wire = self._polygon_by_mesh(inner_boundary)
                 face = face.cut(Part.Face(inner_wire))
                 inner_wires.append(inner_wire)
