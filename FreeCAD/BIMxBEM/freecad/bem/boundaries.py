@@ -352,7 +352,8 @@ def verts_clean(vertices):
 def processing_sia_boundaries(doc=FreeCAD.ActiveDocument):
     """Create SIA specific boundaries cf. https://www.sia.ch/fr/services/sia-norm/"""
     for space in get_elements_by_ifctype("IfcSpace", doc):
-        ensure_hosted_element_are(space, doc)
+        ensure_hosted_element_are(space)
+        ensure_hosted_are_coplanar(space)
         join_over_splitted_boundaries(space, doc)
         find_closest_edges(space)
         set_leso_type(space)
@@ -606,7 +607,7 @@ def generate_boundary_compound(boundary, outer_wire: Part.Wire, inner_wires: lis
     boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
 
 
-def ensure_hosted_element_are(space, doc=FreeCAD.ActiveDocument):
+def ensure_hosted_element_are(space):
     for boundary in space.SecondLevel.Group:
         try:
             ifc_type = boundary.RelatedBuildingElement.IfcType
@@ -652,6 +653,50 @@ def ensure_hosted_element_are(space, doc=FreeCAD.ActiveDocument):
         boundary.IsHosted = True
         boundary.ParentBoundary = host.Id
         append(host, "InnerBoundaries", boundary)
+
+
+def ensure_hosted_are_coplanar(space):
+    for boundary in space.SecondLevel.Group:
+        for inner_boundary in boundary.InnerBoundaries:
+            if is_coplanar(inner_boundary, boundary):
+                continue
+            project_boundary_onto_plane(inner_boundary, get_plane(boundary))
+            outer_wire = get_outer_wire(boundary)
+            inner_wires = get_inner_wires(boundary)
+            inner_wire = get_outer_wire(inner_boundary)
+            inner_wires.append(inner_wire)
+
+            try:
+                face = boundary.Shape.Faces[0]
+                face = face.cut(Part.Face(inner_wire))
+            except RuntimeError:
+                pass
+
+            boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
+
+
+def project_boundary_onto_plane(boundary, plane: Part.Plane):
+    outer_wire = get_outer_wire(boundary)
+    inner_wires = get_inner_wires(boundary)
+    outer_wire = project_wire_to_plane(outer_wire, plane)
+    inner_wires = [project_wire_to_plane(wire, plane) for wire in inner_wires]
+
+    face = Part.Face(outer_wire)
+    try:
+        for inner_wire in inner_wires:
+            face = face.cut(Part.Face(inner_wire))
+    except RuntimeError:
+        pass
+
+    boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
+
+
+def project_wire_to_plane(wire, plane):
+    new_vectors = [
+        v.Point.projectToPlane(plane.Position, plane.Axis) for v in wire.Vertexes
+    ]
+    close_vectors(new_vectors)
+    return Part.makePolygon(new_vectors)
 
 
 def is_typically_hosted(ifc_type: str):
