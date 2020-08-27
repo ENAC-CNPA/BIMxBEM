@@ -886,16 +886,6 @@ def associate_inner_boundaries(fc_boundaries, doc):
         append(host_element, "InnerBoundaries", fc_boundary)
 
 
-def associate_coplanar_boundaries(fc_boundaries):
-    """ Find coplanar boundaries to identify hosted boundaries and fill gaps (2b)
-    FIXME: Apparently in ArchiCAD, doors are not coplanar.
-    Idea: Make it coplanar with other boundaries sharing the same space+wall before"""
-    for fc_boundary_1, fc_boundary_2 in itertools.combinations(fc_boundaries, 2):
-        if is_coplanar(fc_boundary_1, fc_boundary_2):
-            append(fc_boundary_1, "ShareRelatedElementWith", fc_boundary_2)
-            append(fc_boundary_2, "ShareRelatedElementWith", fc_boundary_1)
-
-
 def associate_corresponding_boundaries(doc=FreeCAD.ActiveDocument):
     # Associate CorrespondingBoundary
     for fc_boundary in get_elements_by_ifctype("IfcRelSpaceBoundary", doc):
