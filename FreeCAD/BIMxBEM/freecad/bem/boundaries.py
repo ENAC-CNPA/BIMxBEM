@@ -224,16 +224,16 @@ class IfcImporter:
         space_placement = self.get_placement(ifc_space)
         for ifc_boundary in (b for b in ifc_space.BoundedBy if b.Name == "2ndLevel"):
             try:
-                face = RelSpaceBoundary.create(
+                fc_boundary = RelSpaceBoundary.create(
                     ifc_entity=ifc_boundary, ifc_importer=self
                 )
-                second_levels.addObject(face)
-                face.Placement = space_placement
+                second_levels.addObject(fc_boundary)
+                fc_boundary.Placement = space_placement
                 element = get_related_element(ifc_boundary, self.doc)
                 if element:
-                    face.RelatedBuildingElement = element
-                    append(element, "ProvidesBoundaries", face.Id)
-                face.RelatingSpace = fc_space.Id
+                    fc_boundary.RelatedBuildingElement = element
+                    append(element, "ProvidesBoundaries", fc_boundary.Id)
+                fc_boundary.RelatingSpace = fc_space.Id
             except ShapeCreationError:
                 logger.warning(
                     f"Failed to create fc_shape for RelSpaceBoundary <{ifc_boundary.id()}> even with fallback methode _part_by_mesh. IfcOpenShell bug ?"
@@ -272,26 +272,26 @@ class IfcImporter:
 
         return matrix
 
-    def create_fc_shape(self, space_boundary):
+    def create_fc_shape(self, ifc_boundary):
         """ Create Part shape from ifc geometry"""
         if BREP:
             try:
-                return _part_by_brep(
-                    space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
+                return self._part_by_brep(
+                    ifc_boundary.ConnectionGeometry.SurfaceOnRelatingElement
                 )
             except RuntimeError:
-                print(f"Failed to generate brep from {space_boundary}")
+                print(f"Failed to generate brep from {ifc_boundary}")
                 fallback = True
         if not BREP or fallback:
             try:
                 return self.part_by_wires(
-                    space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
+                    ifc_boundary.ConnectionGeometry.SurfaceOnRelatingElement
                 )
             except RuntimeError:
-                print(f"Failed to generate mesh from {space_boundary}")
+                print(f"Failed to generate mesh from {ifc_boundary}")
                 try:
                     return self._part_by_mesh(
-                        space_boundary.ConnectionGeometry.SurfaceOnRelatingElement
+                        ifc_boundary.ConnectionGeometry.SurfaceOnRelatingElement
                     )
                 except RuntimeError:
                     raise ShapeCreationError
@@ -335,6 +335,7 @@ class IfcImporter:
             for i in range(0, len(ifc_verts), 3)
         ]
         fc_verts = verts_clean(fc_verts)
+        close_vectors(fc_verts)
 
         return Part.makePolygon(fc_verts)
 
@@ -389,7 +390,7 @@ def output_xml_to_path(bem_xml, xml_path=None):
 def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
     boundaries = space.SecondLevel.Group
     # Considered as the minimal size for an oversplit to occur (1 ceiling, 3 wall, 1 flooring)
-    if len(boundaries) < 5:
+    if len(boundaries) <= 5:
         return
     elements_dict = dict()
     for rel_boundary in boundaries:
@@ -747,7 +748,8 @@ def get_inner_wires(boundary):
 
 
 def close_vectors(vectors):
-    vectors.append(vectors[0])
+    if vectors[0] != vectors[-1]:
+        vectors.append(vectors[0])
 
 
 def vectors_dir(p1, p2) -> FreeCAD.Vector:
