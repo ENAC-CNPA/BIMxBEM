@@ -950,7 +950,7 @@ def get_plane(fc_boundary):
     return Part.Plane(fc_boundary.Shape.Vertexes[0].Point, get_normal_at(fc_boundary))
 
 
-def get_normal_at(fc_boundary, at=(0, 0)):
+def get_normal_at(fc_boundary, at=(0, 0)) -> FreeCAD.Vector:
     return fc_boundary.Shape.Faces[0].normalAt(*at)
 
 
@@ -1115,6 +1115,8 @@ def rejoin_boundaries(space, sia_type):
             or not base_boundary.RelatedBuildingElement
         ):
             continue
+        b1_plane = get_plane(boundary1)
+        b1_normal = get_normal_at(boundary1)
         for b2_id, (ei1, ei2) in zip(
             base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges)
         ):
@@ -1125,12 +1127,12 @@ def rejoin_boundaries(space, sia_type):
                 logger.warning(f"Cannot find corresponding boundary with id <{b2_id}>")
                 lines.append(line_from_edge(get_outer_wire(base_boundary).Edges[ei1]))
                 continue
-            base_plane = get_plane(boundary1)
             # Case 1 : boundaries are not parallel
-            plane_intersect = base_plane.intersect(get_plane(boundary2))
-            if plane_intersect:
-                lines.append(plane_intersect[0])
-                continue
+            if not b1_normal.isEqual(get_normal_at(boundary2), TOLERANCE):
+                plane_intersect = b1_plane.intersect(get_plane(boundary2))
+                if plane_intersect:
+                    lines.append(plane_intersect[0])
+                    continue
             # Case 2 : boundaries are parallel
             line1 = line_from_edge(get_outer_wire(boundary1).Edges[ei1])
             try:
@@ -1143,16 +1145,15 @@ def rejoin_boundaries(space, sia_type):
                 continue
 
             # Case 2a : edges are not parallel
-            line_intersect = line1.intersect2d(line2, base_plane)
-            if line_intersect:
-                point1 = line_intersect[0]
-                # TODO: Investigate to see if line.intersect2d(line2, base_plane) might cause some real issues
-                if not isinstance(point1, FreeCAD.Vector):
-                    point1 = FreeCAD.Vector(*point1)
-                if line1.Direction.dot(line2.Direction) > 0:
-                    point2 = point1 + line1.Direction + line2.Direction
-                else:
-                    point2 = point1 + line1.Direction - line2.Direction
+            if abs(line1.Direction.dot(line2.Direction)) < 1 - TOLERANCE:
+                line_intersect = line1.intersect2d(line2, b1_plane)
+                if line_intersect:
+                    point1 = b1_plane.value(*line_intersect[0])
+                    if line1.Direction.dot(line2.Direction) > 0:
+                        point2 = point1 + line1.Direction + line2.Direction
+                    else:
+                        point2 = point1 + line1.Direction - line2.Direction
+                        continue
             # Case 2b : edges are parallel
             else:
                 point1 = (line1.Location + line2.Location) * 0.5
@@ -1167,7 +1168,7 @@ def rejoin_boundaries(space, sia_type):
 
         # Generate new shape
         try:
-            outer_wire = polygon_from_lines(lines)
+            outer_wire = polygon_from_lines(lines, b1_plane)
         except NoIntersectionError:
             # TODO: Investigate to see why this happens
             logger.exception(f"Unable to rejoin boundary Id <{base_boundary.Id}>")
@@ -1268,14 +1269,14 @@ def line_from_edge(edge: Part.Edge) -> Part.Line:
     return Part.Line(*points)
 
 
-def polygon_from_lines(lines):
+def polygon_from_lines(lines, base_plane):
     new_points = []
     for line1, line2 in zip(lines, lines[1:] + lines[:1]):
         try:
             # Need to ensure direction are not same to avoid crash
             if abs(line1.Direction.dot(line2.Direction)) >= 1 - TOLERANCE:
                 continue
-            new_points.append(line1.intersectCC(line2, 1)[0].toShape().Point)
+            new_points.append(base_plane.value(*line1.intersect2d(line2, base_plane)[0]))
         except IndexError:
             raise NoIntersectionError
     new_points[0:0] = new_points[-1:]
@@ -1700,7 +1701,7 @@ if __name__ == "__main__":
         20: "Cas2_EXPORT_REVIT_IFC2x3 (EDITED)_Space_Boundaries.ifc",
         21: "Temoin.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[10])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
