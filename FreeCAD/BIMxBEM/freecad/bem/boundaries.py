@@ -718,19 +718,14 @@ def clean_vectors(vectors):
     """Clean vectors for polygons creation
     Keep only 1 point if 2 consecutive points are equal.
     Remove point if it makes border go back and forth"""
-    count = len(vectors)
     i = 0
-    while count:
-        count -= 1
+    while i < len(vectors):
         p1 = vectors[i - 1]
         p2 = vectors[i]
         p3 = vectors[(i + 1) % len(vectors)]
-        if (
-            p2.isEqual(p3, TOLERANCE)
-            or p1.isEqual(p2, TOLERANCE)
-            or are_3points_collinear(p1, p2, p3)
-        ):
-            vectors.remove(p2)
+        if are_3points_collinear(p1, p2, p3):
+            vectors.pop(i)
+            i -= 1
             continue
         i += 1
 
@@ -757,6 +752,9 @@ def vectors_dir(p1, p2) -> FreeCAD.Vector:
 
 
 def are_3points_collinear(p1, p2, p3) -> bool:
+    for v1, v2 in itertools.combinations((p1, p2, p3), 2):
+        if v1.isEqual(v2, TOLERANCE):
+            return True
     dir1 = vectors_dir(p1, p2)
     dir2 = vectors_dir(p2, p3)
     return dir1.isEqual(dir2, TOLERANCE) or dir1.isEqual(-dir2, TOLERANCE)
@@ -873,7 +871,7 @@ def define_leso_type(boundary):
     elif ifc_type.startswith("IfcDoor"):
         return "Door"
     elif ifc_type.startswith("IfcWall"):
-        return "Façade"
+        return "Wall"
     elif ifc_type.startswith("IfcSlab") or ifc_type == "IfcRoof":
         # Pointing up => Ceiling. Pointing down => Flooring
         if boundary.Shape.Faces[0].normalAt(0, 0).z > 0:
@@ -1276,7 +1274,9 @@ def polygon_from_lines(lines, base_plane):
             # Need to ensure direction are not same to avoid crash
             if abs(line1.Direction.dot(line2.Direction)) >= 1 - TOLERANCE:
                 continue
-            new_points.append(base_plane.value(*line1.intersect2d(line2, base_plane)[0]))
+            new_points.append(
+                base_plane.value(*line1.intersect2d(line2, base_plane)[0])
+            )
         except IndexError:
             raise NoIntersectionError
     new_points[0:0] = new_points[-1:]
@@ -1416,7 +1416,7 @@ class RelSpaceBoundary(Root):
             "App::PropertyEnumeration", "LesoType", bem_category
         ).LesoType = [
             "Ceiling",
-            "Façade",
+            "Wall",
             "Flooring",
             "Window",
             "Door",
@@ -1700,8 +1700,9 @@ if __name__ == "__main__":
         19: "Cas2_EXPORT_REVIT_IFC4DTV (EDITED)_Space_Boundaries.ifc",
         20: "Cas2_EXPORT_REVIT_IFC2x3 (EDITED)_Space_Boundaries.ifc",
         21: "Temoin.ifc",
+        22: "1708 maquette test 01.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[10])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[22])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
