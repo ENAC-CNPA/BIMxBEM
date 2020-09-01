@@ -532,6 +532,7 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
         close_vectors(vectors1)
         wire1 = Part.makePolygon(vectors1)
         generate_boundary_compound(boundary1, wire1, inner_wires)
+        RelSpaceBoundary.recompute_areas(boundary1)
         
         return True
 
@@ -582,6 +583,7 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
         close_vectors(vectors1)
         wire1 = Part.makePolygon(vectors1)
         generate_boundary_compound(boundary1, wire1, inner_wires)
+        RelSpaceBoundary.recompute_areas(boundary1)
 
     # Clean FreeCAD document if join operation was a success
     for fc_object in remove_from_doc:
@@ -1453,15 +1455,20 @@ class RelSpaceBoundary(Root):
     def onChanged(self, obj, prop):
         super().onChanged(obj, prop)
         if prop == "InnerBoundaries":
-            obj.AreaWithHosted = self.recompute_area_with_hosted(obj)
+            self.recompute_area_with_hosted(obj)
 
+    @classmethod
+    def recompute_areas(cls, obj):
+        obj.Area = obj.Shape.Faces[0].Area
+        cls.recompute_area_with_hosted(obj)
+    
     @staticmethod
     def recompute_area_with_hosted(obj):
         """Recompute area including inner boundaries"""
         area = obj.Area
         for boundary in obj.InnerBoundaries:
             area = area + boundary.Area
-        return area
+        obj.AreaWithHosted = area
 
     @staticmethod
     def set_label(obj, ifc_entity):
