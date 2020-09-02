@@ -41,8 +41,7 @@ class MaterialCreator:
                 elif material_select.is_a("IfcMaterialLayerSetUsage"):
                     self.create_layer_set_usage(material_select)
                 elif material_select.is_a("IfcMaterialList"):
-                    # TODO: Shall we handle IfcMaterialList as they havo no fraction
-                    pass
+                    self.create_constituent_set_from_material_list(material_select, ifc_entity)
                 else:
                     raise NotImplementedError(
                         f"{material_select.is_a()} not handled yet"
@@ -121,6 +120,26 @@ class MaterialCreator:
             return fc_constituent_set
         return self.material_constituent_sets[constituent_set.Name]
 
+    def create_constituent_set_from_material_list(self, material_list, ifc_element):
+        constituent_set = ConstituentSet.create()
+        constituent_set.IfcName = self.get_type_name(ifc_element)
+        constituent_set.Id = material_list.id()
+        constituent_set.Label = f"{constituent_set.Id}_{constituent_set.IfcName}"
+        materials = material_list.Materials
+        constituent_set.Fractions = [1 / len(materials)] * len(materials)
+        constituent_set.Categories = ["MaterialList"] * len(materials)
+        material_constituents = list()
+        for material in materials:
+            material_constituents.append(self.create_single(material))
+        constituent_set.MaterialConstituents = material_constituents
+
+    def get_type_name(self, ifc_element):
+        if ifc_element.ObjectType:
+            return ifc_element.ObjectType
+        for definition in ifc_element.IsDefinedBy:
+            if definition.is_a("IfcRelDefinesByType"):
+                return definition.RelatingType.Name
+
 
 class ConstituentSet:
     attributes = ()
@@ -155,6 +174,8 @@ class ConstituentSet:
         obj.addProperty("App::PropertyString", "Description", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "MaterialConstituents", ifc_attributes)
 
+        if not ifc_entity:
+            return
         obj.Id = ifc_entity.id()
         obj.IfcName = ifc_entity.Name or ""
         obj.Description = ifc_entity.Description or ""
@@ -194,6 +215,8 @@ class LayerSet:
         obj.addProperty("App::PropertyString", "Description", ifc_attributes)
         obj.addProperty("App::PropertyLength", "TotalThickness", ifc_attributes)
 
+        if not ifc_entity:
+            return
         obj.Id = ifc_entity.id()
         obj.IfcName = ifc_entity.LayerSetName or ""
         # Description is new to IFC4 so IFC2x3 raise attribute error
