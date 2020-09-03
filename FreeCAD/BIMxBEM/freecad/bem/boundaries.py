@@ -16,7 +16,8 @@ from collections import namedtuple
 
 import ifcopenshell
 import ifcopenshell.geom
-from ifcopenshell.util import unit
+import ifcopenshell.util.unit
+import ifcopenshell.util.element
 
 import FreeCAD
 import Part
@@ -94,7 +95,7 @@ def get_unit_conversion_factor(ifc_file, unit_type, default=None):
         unit_factor = ifc_unit.wrappedValue
 
     assert ifc_unit.is_a("IfcSIUnit")
-    prefix_factor = unit.get_prefix_multiplier(ifc_unit.Prefix)
+    prefix_factor = ifcopenshell.util.unit.get_prefix_multiplier(ifc_unit.Prefix)
 
     return unit_factor * prefix_factor
 
@@ -124,7 +125,7 @@ class IfcImporter:
 
         # Generate projects structure and boundaries
         for ifc_project in ifc_file.by_type("IfcProject"):
-            project = create_project_from_entity(ifc_project)
+            project = Project.create(ifc_project)
             self.generate_containers(ifc_project, project)
 
         # Associate CorrespondingBoundary
@@ -207,13 +208,13 @@ class IfcImporter:
                     if element.BoundedBy:
                         self.generate_space(element, fc_parent)
                 else:
-                    fc_container = create_container_from_entity(element)
+                    fc_container = Container.create(element)
                     fc_parent.addObject(fc_container)
                     self.generate_containers(element, fc_container)
 
     def generate_space(self, ifc_space, parent):
         """Generate Space and RelSpaceBoundaries as defined in ifc_file. No post process."""
-        fc_space = create_space_from_entity(ifc_space)
+        fc_space = Space.create(ifc_space)
         parent.addObject(fc_space)
 
         boundaries = fc_space.newObject("App::DocumentObjectGroup", "Boundaries")
@@ -230,11 +231,6 @@ class IfcImporter:
                 )
                 second_levels.addObject(fc_boundary)
                 fc_boundary.Placement = space_placement
-                element = get_related_element(ifc_boundary, self.doc)
-                if element:
-                    fc_boundary.RelatedBuildingElement = element
-                    append(element, "ProvidesBoundaries", fc_boundary.Id)
-                fc_boundary.RelatingSpace = fc_space.Id
             except ShapeCreationError:
                 logger.warning(
                     f"Failed to create fc_shape for RelSpaceBoundary <{ifc_boundary.id()}> even with fallback methode _part_by_mesh. IfcOpenShell bug ?"
@@ -522,7 +518,7 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
         if not common_segment:
             return False
         ei1, ei2, opposite_dir = common_segment
-            
+
         # join vectors1 and vectors2 at indexes
         new_points = vectors2[ei2 + 1 :] + vectors2[: ei2 + 1]
         if not opposite_dir:
@@ -537,14 +533,14 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
             for inner_boundary in boundary2.InnerBoundaries:
                 append(boundary1, "InnerBoundaries", inner_boundary)
                 inner_boundary.ParentBoundary = boundary1.Id
-        
+
         # Update shape
         clean_vectors(vectors1)
         close_vectors(vectors1)
         wire1 = Part.makePolygon(vectors1)
         generate_boundary_compound(boundary1, wire1, inner_wires)
         RelSpaceBoundary.recompute_areas(boundary1)
-        
+
         return True
 
     while True:
@@ -558,7 +554,7 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
                 f"Unable to join boundaries RelSpaceBoundary Id <{boundary1.Id}> with boundaries <{(b.Id for b in boundaries)}>"
             )
             break
-    
+
     wire1 = get_outer_wire(boundary1)
     vectors1 = get_vectors_from_shape(wire1)
     inner_wires = get_inner_wires(boundary1)[:]
@@ -574,12 +570,8 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
         vectors_split2 = vectors1[ei1 + 1 : ei2 + 1]
         clean_vectors(vectors_split1)
         clean_vectors(vectors_split2)
-        area1 = Part.Face(
-            Part.makePolygon(vectors_split1 + [vectors_split1[0]])
-        ).Area
-        area2 = Part.Face(
-            Part.makePolygon(vectors_split2 + [vectors_split2[0]])
-        ).Area
+        area1 = Part.Face(Part.makePolygon(vectors_split1 + [vectors_split1[0]])).Area
+        area2 = Part.Face(Part.makePolygon(vectors_split2 + [vectors_split2[0]])).Area
         if area1 > area2:
             vectors1 = vectors_split1
             inner_vectors = vectors_split2
@@ -1346,12 +1338,13 @@ class Root:
         obj.addProperty("App::PropertyString", "IfcName", ifc_attributes)
         obj.addProperty("App::PropertyString", "Description", ifc_attributes)
 
-        obj.Id = ifc_entity.id()
-        obj.GlobalId = ifc_entity.GlobalId
-        obj.IfcType = ifc_entity.is_a()
-        obj.IfcName = ifc_entity.Name or ""
-        self.set_label(obj, ifc_entity)
-        obj.Description = ifc_entity.Description or ""
+        if ifc_entity:
+            self.ifc_entity = ifc_entity
+            obj.Id = ifc_entity.id()
+            obj.GlobalId = ifc_entity.GlobalId
+            obj.IfcType = ifc_entity.is_a()
+            obj.IfcName = ifc_entity.Name or ""
+            obj.Description = ifc_entity.Description or ""
 
     def onChanged(self, obj, prop):
         """Do something when a property has changed"""
@@ -1362,9 +1355,9 @@ class Root:
         return
 
     @staticmethod
-    def set_label(obj, ifc_entity):
+    def set_label(obj):
         """Allow specific method for specific elements"""
-        obj.Label = "{} {}".format(ifc_entity.id(), ifc_entity.Name)
+        obj.Label = f"{obj.Id}_{obj.IfcName or obj.IfcType}"
 
     @classmethod
     def create(cls, obj_name, ifc_entity=None):
@@ -1372,8 +1365,16 @@ class Root:
         ifc_entity : Optionnally provide a base entity.
         """
         obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
-        feature_python_object = cls(obj)
+        cls(obj, ifc_entity)
+        cls.set_label(obj)
         return obj
+
+    def set_pset_properties(self, obj, properties: str) -> None:
+        psets = ifcopenshell.util.element.get_psets(self.ifc_entity)
+        for pset_name, pset in psets.items():
+            for prop_name, prop in pset.items():
+                if prop_name in properties:
+                    setattr(obj, prop_name, prop.wrappedValue)
 
 
 class ViewProviderRoot:
@@ -1444,18 +1445,28 @@ class RelSpaceBoundary(Root):
         obj.PhysicalOrVirtualBoundary = ifc_entity.PhysicalOrVirtualBoundary
         obj.Shape = ifc_importer.create_fc_shape(ifc_entity)
         obj.Area = obj.AreaWithHosted = obj.Shape.Area
-        self.set_label(obj, ifc_entity)
         try:
             obj.IsHosted = bool(ifc_entity.RelatedBuildingElement.FillsVoids)
         except AttributeError:
             obj.IsHosted = False
         obj.LesoType = "Unknown"
 
-    @staticmethod
-    def create(obj_name: str = "RelSpaceBoundary", ifc_entity=None, ifc_importer=None):
+    @classmethod
+    def create(
+        cls,
+        obj_name: str = "RelSpaceBoundary",
+        ifc_entity=None,
+        ifc_importer: IfcImporter = None,
+    ):
         """Stantard FreeCAD FeaturePython Object creation method"""
         obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
-        RelSpaceBoundary(obj, ifc_entity, ifc_importer)
+        cls(obj, ifc_entity, ifc_importer)
+        element = get_related_element(ifc_entity, ifc_importer.doc)
+        if element:
+            obj.RelatedBuildingElement = element
+            append(element, "ProvidesBoundaries", obj.Id)
+        obj.RelatingSpace = ifc_entity.RelatingSpace.id()
+        cls.set_label(obj)
         try:
             # ViewProviderRelSpaceBoundary(obj.ViewObject)
             obj.ViewObject.Proxy = 0
@@ -1472,7 +1483,7 @@ class RelSpaceBoundary(Root):
     def recompute_areas(cls, obj):
         obj.Area = obj.Shape.Faces[0].Area
         cls.recompute_area_with_hosted(obj)
-    
+
     @staticmethod
     def recompute_area_with_hosted(obj):
         """Recompute area including inner boundaries"""
@@ -1481,17 +1492,15 @@ class RelSpaceBoundary(Root):
             area = area + boundary.Area
         obj.AreaWithHosted = area
 
-    @staticmethod
-    def set_label(obj, ifc_entity):
+    @classmethod
+    def set_label(cls, obj):
         try:
-            obj.Label = "{} {}".format(
-                ifc_entity.id(), ifc_entity.RelatedBuildingElement.Name,
-            )
+            obj.Label = f"{obj.Id}_{obj.RelatedBuildingElement.IfcName}"
         except AttributeError:
-            obj.Label = f"{ifc_entity.id()} VIRTUAL"
-            if ifc_entity.PhysicalOrVirtualBoundary != "VIRTUAL":
+            obj.Label = f"{obj.Id} VIRTUAL"
+            if obj.PhysicalOrVirtualBoundary != "VIRTUAL":
                 logger.warning(
-                    f"{ifc_entity.id()} is not VIRTUAL and has no RelatedBuildingElement"
+                    f"{obj.Id} is not VIRTUAL and has no RelatedBuildingElement"
                 )
 
     @staticmethod
@@ -1521,6 +1530,11 @@ class Element(Root):
         obj.addProperty("App::PropertyLength", "Thickness", bem_category)
 
         obj.Label = f"{obj.Id}_{obj.IfcType}"
+
+        obj.addProperty("App::PropertyFloat", "ThermalTransmittance", ifc_attributes)
+        if not ifc_entity:
+            return
+        self.set_pset_properties(obj, ["ThermalTransmittance",])
 
 
 class BEMBoundary:
@@ -1560,17 +1574,6 @@ class BEMBoundary:
         return get_wires(obj)
 
 
-def create_container_from_entity(ifc_entity):
-    """Stantard FreeCAD FeaturePython Object creation method"""
-    obj_name = ifc_entity.is_a()
-    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
-    Container(obj, ifc_entity)
-    if FreeCAD.GuiUp:
-        obj.ViewObject.Proxy = ViewProviderRoot(obj.ViewObject)
-        obj.ViewObject.DisplayMode = "Wireframe"
-    return obj
-
-
 class Container(Root):
     """Representation of an IfcProject:
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
@@ -1583,16 +1586,17 @@ class Container(Root):
     def setProperties(self, obj):
         return
 
-
-def create_project_from_entity(ifc_entity):
-    """Stantard FreeCAD FeaturePython Object creation method"""
-    obj_name = "Project"
-    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
-    Project(obj, ifc_entity)
-    if FreeCAD.GuiUp:
-        obj.ViewObject.Proxy = ViewProviderRoot(obj.ViewObject)
-        obj.ViewObject.DisplayMode = "Wireframe"
-    return obj
+    @classmethod
+    def create(cls, ifc_entity):
+        """Stantard FreeCAD FeaturePython Object creation method"""
+        obj_name = ifc_entity.is_a()
+        obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
+        cls(obj, ifc_entity)
+        cls.set_label(obj)
+        if FreeCAD.GuiUp:
+            obj.ViewObject.Proxy = ViewProviderRoot(obj.ViewObject)
+            obj.ViewObject.DisplayMode = "Wireframe"
+        return obj
 
 
 class Project(Root):
@@ -1603,6 +1607,18 @@ class Project(Root):
         super().__init__(obj, ifc_entity)
         self.ifc_entity = ifc_entity
         self.setProperties(obj)
+
+    @classmethod
+    def create(cls, ifc_entity):
+        """Stantard FreeCAD FeaturePython Object creation method"""
+        obj_name = "Project"
+        obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
+        cls(obj, ifc_entity)
+        cls.set_label(obj)
+        if FreeCAD.GuiUp:
+            obj.ViewObject.Proxy = ViewProviderRoot(obj.ViewObject)
+            obj.ViewObject.DisplayMode = "Wireframe"
+        return obj
 
     def setProperties(self, obj):
         ifc_entity = self.ifc_entity
@@ -1633,16 +1649,9 @@ class Project(Root):
         obj.ApplicationVersion = owning_application.Version
         obj.ApplicationFullName = owning_application.ApplicationFullName
 
-
-def create_space_from_entity(ifc_entity):
-    """Stantard FreeCAD FeaturePython Object creation method"""
-    obj_name = "Space"
-    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
-    Space(obj, ifc_entity)
-    if FreeCAD.GuiUp:
-        obj.ViewObject.Proxy = ViewProviderRoot(obj.ViewObject)
-        obj.ViewObject.DisplayMode = "Wireframe"
-    return obj
+    @classmethod
+    def set_label(cls, obj):
+        obj.Label = f"{obj.IfcName}_{obj.LongName}"
 
 
 class Space(Root):
@@ -1653,6 +1662,18 @@ class Space(Root):
         super().__init__(obj, ifc_entity)
         self.ifc_entity = ifc_entity
         self.setProperties(obj)
+
+    @classmethod
+    def create(cls, ifc_entity):
+        """Stantard FreeCAD FeaturePython Object creation method"""
+        obj_name = "Space"
+        obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", obj_name)
+        cls(obj, ifc_entity)
+        cls.set_label(obj)
+        if FreeCAD.GuiUp:
+            obj.ViewObject.Proxy = ViewProviderRoot(obj.ViewObject)
+            obj.ViewObject.DisplayMode = "Wireframe"
+        return obj
 
     def setProperties(self, obj):
         ifc_entity = self.ifc_entity
@@ -1674,6 +1695,10 @@ class Space(Root):
             pass
 
         return obj
+
+    @classmethod
+    def set_label(cls, obj):
+        obj.Label = f"{obj.IfcName}_{obj.LongName}"
 
 
 def generate_bem_xml_from_file(ifc_path: str, gui_up: bool = False) -> namedtuple:
@@ -1717,7 +1742,7 @@ if __name__ == "__main__":
         21: "Temoin.ifc",
         22: "1708 maquette test 01.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[22])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[1])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd

@@ -144,6 +144,9 @@ class BEMxml:
         ET.SubElement(building_element, "Thickness").text = str(
             fc_object.Thickness.Value / SCALE
         )
+        ET.SubElement(building_element, "ThermalTransmittance").text = str(
+            fc_object.ThermalTransmittance or ""
+        )
         boundaries = ET.SubElement(building_element, "ProvidesBoundaries")
         for element_id in fc_object.ProvidesBoundaries:
             ET.SubElement(boundaries, "Id").text = str(element_id)
@@ -151,6 +154,7 @@ class BEMxml:
             ET.SubElement(building_element, "Material").text = str(
                 fc_object.Material.Id or ""
             )
+
     @staticmethod
     def write_class_attrib(xml_element, fc_object):
         for attrib in fc_object.Proxy.attributes:
