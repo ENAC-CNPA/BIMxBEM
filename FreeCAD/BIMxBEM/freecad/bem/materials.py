@@ -29,10 +29,16 @@ class MaterialCreator:
         self.parse_material(ifc_entity)
 
     def parse_material(self, ifc_entity):
+        self.parse_associations(ifc_entity)
+        if self.obj.Material:
+            return
         # When an element is composed of multiple elements
         if ifc_entity.IsDecomposedBy:
             # TODO: See in a real case how to handle every part and not only the first
             ifc_entity = ifc_entity.IsDecomposedBy[0].RelatedObjects[0]
+            self.parse_associations(ifc_entity)
+
+    def parse_associations(self, ifc_entity):
         for association in ifc_entity.HasAssociations:
             if association.is_a("IfcRelAssociatesMaterial"):
                 material_select = association.RelatingMaterial
