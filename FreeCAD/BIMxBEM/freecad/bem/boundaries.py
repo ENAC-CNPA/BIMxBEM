@@ -208,9 +208,28 @@ class IfcImporter:
                     if element.BoundedBy:
                         self.generate_space(element, fc_parent)
                 else:
+                    if element.is_a("IfcSite"):
+                        self.workaround_site_coordinates(element)
                     fc_container = Container.create(element)
                     fc_parent.addObject(fc_container)
                     self.generate_containers(element, fc_container)
+
+    def workaround_site_coordinates(self, ifc_site):
+        """Multiple softwares (eg. Revit) are storing World Coordinate system in IfcSite location
+        instead of using IfcProject IfcGeometricRepresentationContext. This is a bad practice
+        should be solved over time"""
+        ifc_location = ifc_site.ObjectPlacement.RelativePlacement.Location
+        fc_location = FreeCAD.Vector(ifc_location.Coordinates)
+        fc_location.scale(*[self.ifc_scale * self.fc_scale] * 3)
+        if not fc_location.Length > 1000000:  # 1 km
+            return
+        for project in get_by_class(self.doc, Project):
+            project.WorldCoordinateSystem += fc_location
+        ifc_location.Coordinates = (
+            0.0,
+            0.0,
+            0.0,
+        )
 
     def generate_space(self, ifc_space, parent):
         """Generate Space and RelSpaceBoundaries as defined in ifc_file. No post process."""
