@@ -59,7 +59,7 @@ class BEMxml:
         self.write_root_attrib(project, fc_object)
         ET.SubElement(project, "LongName").text = fc_object.LongName
         north = ET.SubElement(project, "TrueNorth")
-        ET.SubElement(north, "point", vector_to_dict(fc_object.TrueNorth))
+        ET.SubElement(north, "point", unitary_vector_to_dict(fc_object.TrueNorth))
         wcs = ET.SubElement(project, "WorldCoordinateSystem")
         ET.SubElement(wcs, "point", vector_to_dict(fc_object.WorldCoordinateSystem))
         self.sites = ET.SubElement(project, "Sites")
@@ -226,6 +226,8 @@ def vector_to_dict(vector):
     """Convert a FreeCAD.Vector into a dict to write it as attribute in xml"""
     return {key: str(getattr(vector, key) / SCALE) for key in ("x", "y", "z")}
 
+def unitary_vector_to_dict(vector):
+    return {key: str(getattr(vector, key)) for key in ("x", "y", "z")}
 
 def fc_area_to_si_xml(fc_area):
     return str(fc_area.getValueAs("m^2"))
