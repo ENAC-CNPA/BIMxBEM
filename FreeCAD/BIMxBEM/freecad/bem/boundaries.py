@@ -1248,9 +1248,9 @@ def create_sia_int_boundaries(space, is_from_revit, is_from_archicad):
     for boundary in space.SecondLevel.Group:
         if boundary.IsHosted or boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
             continue
-        normal = boundary.Shape.Faces[0].normalAt(0, 0)
+        normal = get_normal_at(boundary)
         if is_from_archicad:
-            normal = -normal
+            normal = normal.negative()
 
         bem_boundary = BEMBoundary.create(boundary, "SIA_Interior")
         sia_group_obj.addObject(bem_boundary)
@@ -1260,8 +1260,8 @@ def create_sia_int_boundaries(space, is_from_revit, is_from_archicad):
         ifc_type = boundary.RelatedBuildingElement.IfcType
         if is_from_revit and ifc_type.startswith("IfcWall"):
             thickness = boundary.RelatedBuildingElement.Thickness.Value
-            lenght = -thickness / 2
-            bem_boundary.Placement.move(normal * lenght)
+            lenght = thickness / 2
+            bem_boundary.Placement.move(normal.negative() * lenght)
 
 
 def line_from_edge(edge: Part.Edge) -> Part.Line:
@@ -1741,8 +1741,11 @@ if __name__ == "__main__":
         20: "Cas2_EXPORT_REVIT_IFC2x3 (EDITED)_Space_Boundaries.ifc",
         21: "Temoin.ifc",
         22: "1708 maquette test 01.ifc",
+        23: "test 02-03 mur int baseslab dalle de sol.ifc",
+        24: "test 02-06 murs composites.ifc",
+        25: "test 02-07 dalle étage et locaux mansardés.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[1])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[8])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
