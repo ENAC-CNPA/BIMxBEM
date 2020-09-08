@@ -382,13 +382,50 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument):
         ensure_hosted_element_are(space)
         ensure_hosted_are_coplanar(space)
         join_over_splitted_boundaries(space, doc)
+        handle_curtain_walls(space, doc)
         find_closest_edges(space)
         set_leso_type(space)
     create_sia_boundaries(doc)
     doc.recompute()
 
 
-def write_xml(doc=FreeCAD.ActiveDocument):
+def handle_curtain_walls(space, doc):
+    """Add an hosted window with full area in curtain wall boundaries as they are not handled 
+    by BEM softwares"""
+    for boundary in space.SecondLevel.Group:
+        if getattr(boundary.RelatedBuildingElement, "IfcType", "") != "IfcCurtainWall":
+            continue
+        fake_window = doc.copyObject(boundary)
+        fake_window.IsHosted = True
+        fake_window.LesoType = "Window"
+        fake_window.ParentBoundary = boundary.Id
+        fake_window.GlobalId = ifcopenshell.guid.new()
+        fake_window.Id = IfcId.new(doc)
+        RelSpaceBoundary.set_label(fake_window)
+        space.SecondLevel.addObject(fake_window)
+        # Host cannot be an empty face so inner wire is scaled down a little
+        inner_wire = get_outer_wire(boundary).scale(0.999)
+        inner_wire = project_wire_to_plane(inner_wire, get_plane(boundary))
+        append_inner_wire(boundary, inner_wire)
+        append(boundary, "InnerBoundaries", fake_window)
+        if FreeCAD.GuiUp:
+            fake_window.ViewObject.ShapeColor = (0.0, 0.7, 1.0)
+
+
+class IfcId:
+    """Generate new id for generated boundaries missing from ifc and keep track of last id used"""
+    current_id = 0
+    @classmethod
+    def new(cls, doc) -> int:
+        if not cls.current_id:
+            cls.current_id = max((getattr(obj, "Id", 0) for obj in doc.Objects))
+        cls.current_id += 1
+        return cls.current_id
+
+
+def write_xml(doc=FreeCAD.ActiveDocument) -> BEMxml:
+    """Read BEM infos for FreeCAD file and write it to an xml.
+    xml is stored in an object to allow different outputs"""
     bem_xml = BEMxml()
     for project in get_elements_by_ifctype("IfcProject", doc):
         bem_xml.write_project(project)
@@ -619,7 +656,7 @@ def generate_boundary_compound(boundary, outer_wire: Part.Wire, inner_wires: lis
         new_face = face.cut(Part.Face(inner_wire))
         if not new_face.Area:
             b_id = (
-                boundary.Id if isinstance(boundary, Root) else boundary.SourceBoundary
+                boundary.Id if isinstance(boundary.Proxy, Root) else boundary.SourceBoundary
             )
             logger.warning(
                 f"Failure. An inner_wire did not cut face correctly in boundary <{b_id}>. OuterWire area = {Part.Face(outer_wire).Area / 10 ** 6}, InnerWire area = {Part.Face(inner_wire).Area / 10 ** 6}"
@@ -713,7 +750,7 @@ def project_boundary_onto_plane(boundary, plane: Part.Plane):
     boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
 
 
-def project_wire_to_plane(wire, plane):
+def project_wire_to_plane(wire, plane) -> Part.Wire:
     new_vectors = [
         v.Point.projectToPlane(plane.Position, plane.Axis) for v in wire.Vertexes
     ]
@@ -895,7 +932,7 @@ def define_leso_type(boundary):
         return "Wall"
     elif ifc_type.startswith("IfcSlab") or ifc_type == "IfcRoof":
         # Pointing up => Ceiling. Pointing down => Flooring
-        if boundary.Shape.Faces[0].normalAt(0, 0).z > 0:
+        if get_normal_at(boundary).z > 0:
             return "Ceiling"
         return "Flooring"
     elif ifc_type.startswith("IfcOpeningElement"):
@@ -964,7 +1001,7 @@ def is_coplanar(shape_1, shape_2):
     return get_plane(shape_1).toShape().isCoplanar(get_plane(shape_2).toShape())
 
 
-def get_plane(fc_boundary):
+def get_plane(fc_boundary) -> Part.Plane:
     """Intended for RelSpaceBoundary use only"""
     return Part.Plane(fc_boundary.Shape.Vertexes[0].Point, get_normal_at(fc_boundary))
 
@@ -978,6 +1015,14 @@ def append(doc_object, fc_property, value):
     current_value = getattr(doc_object, fc_property)
     current_value.append(value)
     setattr(doc_object, fc_property, current_value)
+
+
+def append_inner_wire(boundary, wire):
+    """Intended to manipulate FreeCAD list like properties only"""
+    outer_wire = get_outer_wire(boundary)
+    inner_wires = get_inner_wires(boundary)
+    inner_wires.append(wire)
+    generate_boundary_compound(boundary, outer_wire, inner_wires)
 
 
 def clean_corresponding_candidates(fc_boundary, doc):
@@ -1763,8 +1808,10 @@ if __name__ == "__main__":
         23: "test 02-03 mur int baseslab dalle de sol.ifc",
         24: "test 02-06 murs composites.ifc",
         25: "test 02-07 dalle étage et locaux mansardés.ifc",
+        26: "test 02-08 raccords nettoyés étage.ifc",
+        27: "test 02-09 sous-sol.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[8])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[13])
     DOC = FreeCAD.ActiveDocument
     if DOC:  # Remote debugging
         import ptvsd
@@ -1785,8 +1832,8 @@ if __name__ == "__main__":
         ifc_importer = IfcImporter(IFC_PATH, DOC)
         ifc_importer.generate_rel_space_boundaries()
         processing_sia_boundaries(DOC)
-        bem_xml = write_xml(DOC)
-        output_xml_to_path(bem_xml)
+        BEM_XML = write_xml(DOC)
+        output_xml_to_path(BEM_XML)
 
         # xml_str = generate_bem_xml_from_file(IFC_PATH)
 
