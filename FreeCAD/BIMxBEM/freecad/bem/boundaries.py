@@ -1813,6 +1813,18 @@ if __name__ == "__main__":
     }
     IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[13])
     DOC = FreeCAD.ActiveDocument
+
+    def process_test_file(ifc_path, doc):
+        ifc_importer = IfcImporter(IFC_PATH, DOC)
+        ifc_importer.generate_rel_space_boundaries()
+        processing_sia_boundaries(DOC)
+        BEM_XML = write_xml(DOC)
+        output_xml_to_path(BEM_XML)
+        FreeCADGui.activeView().viewIsometric()
+        FreeCADGui.SendMsgToActiveView("ViewFit")
+        with open("./boundaries.log", "w") as f:
+            f.write(LOG_STREAM.getvalue())
+
     if DOC:  # Remote debugging
         import ptvsd
 
@@ -1822,25 +1834,12 @@ if __name__ == "__main__":
         ptvsd.wait_for_attach()
         # breakpoint()
 
-        display_boundaries(ifc_path=IFC_PATH, doc=DOC)
-        FreeCADGui.activeView().viewIsometric()
-        FreeCADGui.SendMsgToActiveView("ViewFit")
+        process_test_file(IFC_PATH, DOC)
     else:
         FreeCADGui.showMainWindow()
         DOC = FreeCAD.newDocument()
 
-        ifc_importer = IfcImporter(IFC_PATH, DOC)
-        ifc_importer.generate_rel_space_boundaries()
-        processing_sia_boundaries(DOC)
-        BEM_XML = write_xml(DOC)
-        output_xml_to_path(BEM_XML)
-
+        process_test_file(IFC_PATH, DOC)
         # xml_str = generate_bem_xml_from_file(IFC_PATH)
-
-        with open("./boundaries.log", "w") as f:
-            f.write(LOG_STREAM.getvalue())
-
-        FreeCADGui.activeView().viewIsometric()
-        FreeCADGui.SendMsgToActiveView("ViewFit")
 
         FreeCADGui.exec_loop()

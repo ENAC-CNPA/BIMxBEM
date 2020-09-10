@@ -8,8 +8,8 @@ See the LICENSE.TXT file for more details.
 
 Author : Cyril Waechter
 """
-import pytest
 import os
+import pytest
 from freecad.bem.boundaries import generate_bem_xml_from_file
 
 
@@ -21,8 +21,8 @@ TEST_FILES = [
         "OverSplitted_R20_2x3.ifc",
         # "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
         # "Investigation_test_R19.ifc",
-        # "ExternalEarth_R20_2x3.ifc",
-        # "ExternalEarth_R20_IFC4.ifc",
+        "ExternalEarth_R20_2x3.ifc",
+        "ExternalEarth_R20_IFC4.ifc",
         # "Ersatzneubau Alphütte_1-1210_31_23.ifc",
         # "GRAPHISOFT_ARCHICAD_Sample_Project_Hillside_House_v1.ifczip",
         # "GRAPHISOFT_ARCHICAD_Sample_Project_S_Office_v1.ifczip",
