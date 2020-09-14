@@ -1364,7 +1364,7 @@ class Root:
         cls._init_properties(obj)
 
         if FreeCAD.GuiUp:
-            obj.ViewObject.Proxy = 0
+            obj.ViewObject.Proxy = ViewProviderRoot(obj.ViewObject)
         return obj
 
     @classmethod
@@ -1615,7 +1615,6 @@ class Container(Root):
         obj = super().create_from_ifc(ifc_entity, ifc_importer)
         cls.set_label(obj)
         if FreeCAD.GuiUp:
-            obj.ViewObject.Proxy = ViewProviderRoot(obj.ViewObject)
             obj.ViewObject.DisplayMode = "Wireframe"
         return obj
 
