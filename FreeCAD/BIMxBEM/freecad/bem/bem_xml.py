@@ -13,8 +13,6 @@ import xml.etree.ElementTree as ET
 
 import FreeCAD
 
-from freecad.bem import materials
-
 SCALE = 1000
 
 
@@ -29,6 +27,9 @@ class BEMxml:
         self.boundaries = ET.SubElement(self.root, "Boundaries")
         self.building_elements = ET.SubElement(self.root, "BuildingElements")
         self.materials = ET.SubElement(self.root, "Materials")
+        self.sites = None
+        self.buildings = None
+        self.storeys = None
 
     @staticmethod
     def write_id(xml_element, fc_object):
@@ -226,8 +227,10 @@ def vector_to_dict(vector):
     """Convert a FreeCAD.Vector into a dict to write it as attribute in xml"""
     return {key: str(getattr(vector, key) / SCALE) for key in ("x", "y", "z")}
 
+
 def unitary_vector_to_dict(vector):
     return {key: str(getattr(vector, key)) for key in ("x", "y", "z")}
+
 
 def fc_area_to_si_xml(fc_area):
     return str(fc_area.getValueAs("m^2"))
