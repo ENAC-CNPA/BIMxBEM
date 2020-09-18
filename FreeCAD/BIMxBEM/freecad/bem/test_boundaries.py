@@ -9,14 +9,17 @@ See the LICENSE.TXT file for more details.
 Author : Cyril Waechter
 """
 import os
+
 import pytest
 from pytest import approx
+
 import FreeCAD
 import FreeCADGui
+
+from freecad.bem import utils
 from freecad.bem.boundaries import (
     generate_bem_xml_from_file,
     process_test_file,
-    get_element_by_guid,
 )
 
 
@@ -70,5 +73,5 @@ class TestTriangleDoc:
 
     @pytest.mark.parametrize(("ifc_type", "color", "global_id"), COLORS)
     def test_color(self, ifc_type, color, global_id):
-        element = get_element_by_guid(global_id, self.ifc_importer.doc.Objects)
+        element = utils.get_element_by_guid(global_id, self.ifc_importer.doc.Objects)
         assert element.ViewObject.ShapeColor == approx(color)
