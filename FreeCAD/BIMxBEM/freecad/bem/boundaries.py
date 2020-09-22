@@ -39,12 +39,23 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
     for space in utils.get_elements_by_ifctype("IfcSpace", doc):
         ensure_hosted_element_are(space)
         ensure_hosted_are_coplanar(space)
+        compute_space_area(space)
         join_over_splitted_boundaries(space, doc)
         handle_curtain_walls(space, doc)
         find_closest_edges(space)
         set_leso_type(space)
     create_sia_boundaries(doc)
     doc.recompute()
+
+
+def compute_space_area(space: Part.Feature):
+    """Compute both gross and net area"""
+    z_min = space.Shape.BoundBox.ZMin
+    z_sre = z_min + 1000  # 1 m above ground. See SIA 380:2015 &3.2.3 p.26-27
+    sre_plane = Part.Plane(FreeCAD.Vector(0, 0, z_sre), FreeCAD.Vector(0, 0, 1))
+    space.Area = space.Shape.common(sre_plane.toShape()).Area
+    # TODO: Not valid yet as it return net area. Find a way to get gross space volume
+    space.AreaAE = space.Area
 
 
 def handle_curtain_walls(space, doc) -> None:
