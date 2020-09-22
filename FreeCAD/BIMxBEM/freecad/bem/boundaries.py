@@ -40,12 +40,33 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
         ensure_hosted_element_are(space)
         ensure_hosted_are_coplanar(space)
         compute_space_area(space)
+        set_boundary_normal(space)
         join_over_splitted_boundaries(space, doc)
         handle_curtain_walls(space, doc)
         find_closest_edges(space)
         set_leso_type(space)
     create_sia_boundaries(doc)
     doc.recompute()
+
+
+def set_boundary_normal(space):
+    faces = space.Shape.Faces
+    for boundary in space.SecondLevel.Group:
+        if boundary.IsHosted:
+            continue
+        center_of_mass = utils.get_outer_wire(boundary).CenterOfMass
+        face = min(
+            faces, key=lambda x: x.Surface.projectPoint(center_of_mass, "LowerDistance")
+        )
+        face_normal = face.normalAt(
+            *face.Surface.projectPoint(center_of_mass, "LowerDistanceParameters")
+        )
+        normal = utils.get_normal_at(boundary)
+        if normal.dot(face_normal) < 0:
+            normal = -normal
+        boundary.Normal = normal
+        for hosted in boundary.InnerBoundaries:
+            hosted.Normal = normal
 
 
 def compute_space_area(space: Part.Feature):
@@ -333,11 +354,20 @@ def ensure_hosted_element_are(space):
         if boundary.IsHosted and boundary.ParentBoundary:
             continue
 
+        def are_too_far(boundary1, boundary2):
+            return (
+                boundary1.Shape.distToShape(boundary2.Shape)[0]
+                - boundary2.RelatedBuildingElement.Thickness.Value
+                > TOLERANCE
+            )
+
         def find_host(boundary):
             fallback_solution = None
-            normal = utils.get_normal_at(boundary)
             for boundary2 in space.SecondLevel.Group:
-                if not normal.isEqual(utils.get_normal_at(boundary2), TOLERANCE):
+                if not utils.are_parallel_boundaries(boundary, boundary2):
+                    continue
+
+                if are_too_far(boundary, boundary2):
                     continue
 
                 fallback_solution = boundary2
@@ -349,14 +379,14 @@ def ensure_hosted_element_are(space):
                         continue
 
                     return boundary2
-                if not fallback_solution:
-                    raise HostNotFound(
-                        f"No host found for RelSpaceBoundary Id<{boundary.Id}>"
-                    )
-                logger.warning(
-                    f"Using fallback solution to resolve host of RelSpaceBoundary Id<{boundary.Id}>"
+            if not fallback_solution:
+                raise HostNotFound(
+                    f"No host found for RelSpaceBoundary Id<{boundary.Id}>"
                 )
-                return fallback_solution
+            logger.warning(
+                f"Using fallback solution to resolve host of RelSpaceBoundary Id<{boundary.Id}>"
+            )
+            return fallback_solution
 
         try:
             host = find_host(boundary)
@@ -393,7 +423,7 @@ def is_typically_hosted(ifc_type: str):
     for usual_type in usually_hosted_types:
         if ifc_type.startswith(usual_type):
             return True
-        return False
+    return False
 
 
 class HostNotFound(LookupError):
@@ -425,7 +455,7 @@ def find_closest_edges(space):
 
         elif edge_to_edge - distance - TOLERANCE <= 0:
             # Case 1 : boundaries point in same direction so all solution are valid.
-            dot_dir = utils.get_normal_at(boundary2).dot(utils.get_normal_at(boundary1))
+            dot_dir = boundary2.Normal.dot(boundary1.Normal)
             if abs(dot_dir) >= 1 - TOLERANCE:
                 is_closest = True
             # Case 2 : boundaries intersect
@@ -453,10 +483,7 @@ def find_closest_edges(space):
     # Loop through all boundaries and edges to find the closest edge
     for boundary1, boundary2 in itertools.combinations(boundaries, 2):
         # If boundary1 and boundary2 are facing an opposite direction no match possible
-        if (
-            utils.get_normal_at(boundary2).dot(utils.get_normal_at(boundary1))
-            <= -1 + TOLERANCE
-        ):
+        if boundary2.Normal.dot(boundary1.Normal) <= -1 + TOLERANCE:
             continue
 
         edges1 = utils.get_outer_wire(boundary1).Edges
@@ -501,7 +528,7 @@ def define_leso_type(boundary):
         return "Wall"
     elif ifc_type.startswith("IfcSlab") or ifc_type == "IfcRoof":
         # Pointing up => Ceiling. Pointing down => Flooring
-        if utils.get_normal_at(boundary).z > 0:
+        if boundary.Normal.z > 0:
             return "Ceiling"
         return "Flooring"
     elif ifc_type.startswith("IfcOpeningElement"):
@@ -554,13 +581,11 @@ def rejoin_boundaries(space, sia_type):
         ):
             continue
         b1_plane = utils.get_plane(boundary1)
-        b1_normal = utils.get_normal_at(boundary1)
         for b2_id, (ei1, ei2) in zip(
             base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges)
         ):
-            boundary2 = getattr(
-                utils.get_in_list_by_id(base_boundaries, b2_id), sia_type, None
-            )
+            base_boundary2 = utils.get_in_list_by_id(base_boundaries, b2_id)
+            boundary2 = getattr(base_boundary2, sia_type, None)
             if not boundary2:
                 logger.warning(f"Cannot find corresponding boundary with id <{b2_id}>")
                 lines.append(
@@ -568,7 +593,7 @@ def rejoin_boundaries(space, sia_type):
                 )
                 continue
             # Case 1 : boundaries are not parallel
-            if not b1_normal.isEqual(utils.get_normal_at(boundary2), TOLERANCE):
+            if not base_boundary.Normal.isEqual(base_boundary2.Normal, TOLERANCE):
                 plane_intersect = b1_plane.intersect(utils.get_plane(boundary2))
                 if plane_intersect:
                     lines.append(plane_intersect[0])
@@ -678,9 +703,7 @@ def create_sia_int_boundaries(space, is_from_revit, is_from_archicad):
     for boundary in space.SecondLevel.Group:
         if boundary.IsHosted or boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
             continue
-        normal = utils.get_normal_at(boundary)
-        if is_from_archicad:
-            normal = normal.negative()
+        normal = boundary.Normal
 
         bem_boundary = BEMBoundary.create(boundary, "SIA_Interior")
         sia_group_obj.addObject(bem_boundary)
