@@ -192,8 +192,15 @@ class RelSpaceBoundary(Root):
         obj.RelatingSpace = ifc_entity.RelatingSpace.id()
         obj.InternalOrExternalBoundary = ifc_entity.InternalOrExternalBoundary
         obj.PhysicalOrVirtualBoundary = ifc_entity.PhysicalOrVirtualBoundary
-        obj.Shape = ifc_importer.create_fc_shape(ifc_entity)
+        try:
+            obj.Shape = ifc_importer.create_fc_shape(ifc_entity)
+        except utils.ShapeCreationError:
+            ifc_importer.doc.removeObject(obj.Name)
+            raise utils.ShapeCreationError
         obj.Area = obj.AreaWithHosted = obj.Shape.Area
+        if obj.Area < utils.TOLERANCE:
+            ifc_importer.doc.removeObject(obj.Name)
+            raise utils.IsTooSmall
         try:
             obj.IsHosted = bool(ifc_entity.RelatedBuildingElement.FillsVoids)
         except AttributeError:
