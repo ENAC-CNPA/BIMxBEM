@@ -248,7 +248,7 @@ class Element(Root):
         obj.Proxy = self
 
     @classmethod
-    def create_from_ifc(cls, ifc_entity, ifc_importer):
+    def create_from_ifc(cls, ifc_entity: "Part.Feature", ifc_importer: "IfcImporter"):
         """Stantard FreeCAD FeaturePython Object creation method"""
         obj = super().create_from_ifc(ifc_entity, ifc_importer)
         ifc_importer.material_creator.create(obj, ifc_entity)
@@ -399,7 +399,8 @@ class Space(Root):
     def create(cls):
         obj = super().create()
         if FreeCAD.GuiUp:
-            obj.ViewObject.DisplayMode = "Wireframe"
+            obj.ViewObject.ShapeColor = (0.33, 1.0, 1.0)
+            obj.ViewObject.Transparency = 90
         return obj
 
     @classmethod
@@ -413,11 +414,15 @@ class Space(Root):
         obj.addProperty("App::PropertyLink", "SIA", category_name)
         obj.addProperty("App::PropertyLink", "SIA_Interiors", category_name)
         obj.addProperty("App::PropertyLink", "SIA_Exteriors", category_name)
+        bem_category = "BEM"
+        obj.addProperty("App::PropertyArea", "Area", bem_category)
+        obj.addProperty("App::PropertyArea", "AreaAE", bem_category)
 
     @classmethod
     def read_from_ifc(cls, obj, ifc_entity):
         super().read_from_ifc(obj, ifc_entity)
-        # obj.Shape = self.ifc_importer.create_fc_shape(ifc_entity)
+        ifc_importer = obj.Proxy.ifc_importer
+        obj.Shape = ifc_importer.entity_shape_by_brep(ifc_entity)
         obj.LongName = ifc_entity.LongName or ""
         space_full_name = f"{ifc_entity.Name} {ifc_entity.LongName}"
         obj.Label = space_full_name
