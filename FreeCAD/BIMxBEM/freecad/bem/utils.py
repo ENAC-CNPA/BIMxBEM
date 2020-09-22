@@ -35,6 +35,10 @@ def append_inner_wire(boundary, wire):
     generate_boundary_compound(boundary, outer_wire, inner_wires)
 
 
+def are_parallel_boundaries(boundary1, boundary2):
+    return 1 - abs(get_normal_at(boundary1).dot(get_normal_at(boundary2))) < TOLERANCE
+
+
 def clean_vectors(vectors: List[FreeCAD.Vector]) -> None:
     """Clean vectors for polygons creation
     Keep only 1 point if 2 consecutive points are equal.

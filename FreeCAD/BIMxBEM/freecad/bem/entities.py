@@ -156,7 +156,7 @@ class RelSpaceBoundary(Root):
         obj.addProperty("App::PropertyLink", "CorrespondingBoundary", ifc_attributes)
         obj.addProperty("App::PropertyInteger", "ParentBoundary", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "InnerBoundaries", ifc_attributes)
-        obj.addProperty("App::PropertyLink", "ProcessedShape", bem_category)
+        obj.addProperty("App::PropertyVector", "Normal", bem_category)
         obj.addProperty("App::PropertyIntegerList", "ClosestBoundaries", bem_category)
         obj.addProperty("App::PropertyIntegerList", "ClosestEdges", bem_category)
         obj.addProperty("App::PropertyIntegerList", "ClosestDistance", bem_category)
