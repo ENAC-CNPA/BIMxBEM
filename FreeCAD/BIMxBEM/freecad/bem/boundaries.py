@@ -328,7 +328,9 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
             inner_vectors = vectors_split1
 
         utils.close_vectors(inner_vectors)
-        inner_wires.extend([Part.makePolygon(inner_vectors)])
+        inner_polygon = Part.makePolygon(inner_vectors)
+        if Part.Face(inner_polygon).Area > TOLERANCE:
+            inner_wires.extend([inner_polygon])
 
         # Update shape
         utils.close_vectors(vectors1)
@@ -355,9 +357,11 @@ def ensure_hosted_element_are(space):
             continue
 
         def are_too_far(boundary1, boundary2):
+            max_distance = getattr(
+                getattr(boundary2.RelatedBuildingElement, "Thickness", 0), "Value", 0
+            )
             return (
-                boundary1.Shape.distToShape(boundary2.Shape)[0]
-                - boundary2.RelatedBuildingElement.Thickness.Value
+                boundary1.Shape.distToShape(boundary2.Shape)[0] - max_distance
                 > TOLERANCE
             )
 
@@ -554,10 +558,9 @@ def create_sia_boundaries(doc=FreeCAD.ActiveDocument):
     """Create boundaries necessary for SIA calculations"""
     project = next(utils.get_elements_by_ifctype("IfcProject", doc))
     is_from_revit = project.ApplicationIdentifier == "Revit"
-    is_from_archicad = project.ApplicationFullName == "ARCHICAD-64"
     for space in utils.get_elements_by_ifctype("IfcSpace", doc):
         create_sia_ext_boundaries(space, is_from_revit)
-        create_sia_int_boundaries(space, is_from_revit, is_from_archicad)
+        create_sia_int_boundaries(space, is_from_revit)
         rejoin_boundaries(space, "SIA_Exterior")
         rejoin_boundaries(space, "SIA_Interior")
 
@@ -694,7 +697,7 @@ def create_sia_ext_boundaries(space, is_from_revit):
             bem_boundary.Placement.move(normal * lenght)
 
 
-def create_sia_int_boundaries(space, is_from_revit, is_from_archicad):
+def create_sia_int_boundaries(space, is_from_revit):
     """Create boundaries necessary for SIA calculations"""
     sia_group_obj = space.Boundaries.newObject(
         "App::DocumentObjectGroup", "SIA_Interiors"
@@ -743,7 +746,7 @@ def process_test_file(ifc_path, doc):
     if FreeCAD.GuiUp:
         FreeCADGui.activeView().viewIsometric()
         FreeCADGui.SendMsgToActiveView("ViewFit")
-    with open("./boundaries.log", "w") as log_file:
+    with open("./boundaries.log", "w", encoding="utf-8") as log_file:
         log_file.write(ifc_importer.log)
     return ifc_importer
 
