@@ -1,4 +1,0 @@
-ifcopenshell
-OCC
-black
-pylint
