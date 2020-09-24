@@ -13,9 +13,9 @@ setup(name='freecad.bem',
       version=str(__version__),
       packages=['freecad',
                 'freecad.bem'],
-      maintainer="looooo",
-      maintainer_email="sppedflyer@gmail.com",
-      url="https://github.com/FreeCAD/Workbench-Starterkit",
-      description="template for a freecad extensions, installable with pip",
-      install_requires=['numpy'], # should be satisfied by FreeCAD's system dependencies already
+      maintainer="CyrilWaechter",
+      maintainer_email="cyril.waechter@epfl.ch",
+      url="https://c4science.ch/source/BIMxBEM",
+      description=", installable with pip",
+      install_requires=['ifcopenshell'], # should be satisfied by FreeCAD's system dependencies already
       include_package_data=True)

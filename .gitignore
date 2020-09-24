@@ -180,3 +180,6 @@ OCC/
 *.rvt
 *.pln
 *.pla
+
+# boundaries script output
+output.xml

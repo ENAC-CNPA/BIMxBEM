@@ -59,3 +59,7 @@ Centre entre 2 droites :
 * Non parallèles : Origine -> Intersection des droites. Direction -> ???
 
 # TODO : Génerer un modèle test avec surfaces surdécoupées
+
+Mots clefs : Computational Geometry
+
+[3D line intersections](https://www.youtube.com/watch?v=ELQG5OvmAE8)
