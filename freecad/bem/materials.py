@@ -8,7 +8,15 @@ See the LICENSE.TXT file for more details.
 
 Author : Cyril Waechter
 """
+import typing
 import FreeCAD
+
+if typing.TYPE_CHECKING:
+    from freecad.bem.typing import (  # pylint: disable=no-name-in-module, import-error
+        MaterialFeature,
+        LayerSetFeature,
+        ConstituentSetFeature,
+    )
 
 
 class MaterialCreator:
@@ -47,7 +55,9 @@ class MaterialCreator:
                 elif material_select.is_a("IfcMaterialLayerSetUsage"):
                     self.create_layer_set_usage(material_select)
                 elif material_select.is_a("IfcMaterialList"):
-                    self.create_constituent_set_from_material_list(material_select, ifc_entity)
+                    self.create_constituent_set_from_material_list(
+                        material_select, ifc_entity
+                    )
                 else:
                     raise NotImplementedError(
                         f"{material_select.is_a()} not handled yet"
@@ -55,7 +65,7 @@ class MaterialCreator:
 
     @staticmethod
     def is_material_definition(material_select):
-        """Material Definition is new to IFC4. So doing material_select.is_a("MaterialDefinition") 
+        """Material Definition is new to IFC4. So doing material_select.is_a("MaterialDefinition")
         in IFC2x3 would return False event if it is in IFC4 schema."""
         valid_class = (
             "IfcMaterial",
@@ -154,14 +164,15 @@ class ConstituentSet:
     part_name = "Layer"
     part_props = ("MaterialConstituents", "Fractions", "Categories")
     part_attribs = ("Id", "Fraction", "Category")
+
     def __init__(self, obj, ifc_entity):
         self.ifc_entity = ifc_entity
-        self.setProperties(obj, ifc_entity)
-        self.Type = "MaterialConstituentSet"
+        self._init_properties(obj, ifc_entity)
+        self.Type = "MaterialConstituentSet"  # pylint: disable=invalid-name
         obj.Proxy = self
 
     @classmethod
-    def create(cls, ifc_entity=None):
+    def create(cls, ifc_entity=None) -> "ConstituentSetFeature":
         """Stantard FreeCAD FeaturePython Object creation method
         ifc_entity : Optionnally provide a base entity.
         """
@@ -171,7 +182,7 @@ class ConstituentSet:
         ConstituentSet(obj, ifc_entity)
         return obj
 
-    def setProperties(self, obj, ifc_entity):
+    def _init_properties(self, obj: "ConstituentSetFeature", ifc_entity) -> None:
         obj.addProperty("App::PropertyFloatList", "Fractions", "BEM")
         obj.addProperty("App::PropertyStringList", "Categories", "BEM")
         ifc_attributes = "IFC Attributes"
@@ -196,15 +207,15 @@ class LayerSet:
     part_props = ("MaterialLayers", "Thicknesses")
     part_attribs = ("Id", "Thickness")
 
-    def __init__(self, obj, ifc_entity):
+    def __init__(self, obj: "LayerSetFeature", ifc_entity) -> None:
         self.ifc_entity = ifc_entity
-        self.setProperties(obj, ifc_entity)
+        self._init_properties(obj, ifc_entity)
         self.materials = {}
-        self.Type = "MaterialLayerSet"
+        self.Type = "MaterialLayerSet"  # pylint: disable=invalid-name
         obj.Proxy = self
 
     @classmethod
-    def create(cls, ifc_entity=None, fallback_name=None):
+    def create(cls, ifc_entity=None) -> "ConstituentSetFeature":
         """Stantard FreeCAD FeaturePython Object creation method
         ifc_entity : Optionnally provide a base entity.
         """
@@ -212,7 +223,7 @@ class LayerSet:
         LayerSet(obj, ifc_entity)
         return obj
 
-    def setProperties(self, obj, ifc_entity):
+    def _init_properties(self, obj: "LayerSetFeature", ifc_entity) -> None:
         obj.addProperty("App::PropertyFloatList", "Thicknesses", "BEM")
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
@@ -244,7 +255,10 @@ class Material:
             "ThermalIrEmissivityBack",
             "ThermalIrEmissivityFront",
         ),
-        "Pset_MaterialThermal": ("SpecificHeatCapacity", "ThermalConductivity",),
+        "Pset_MaterialThermal": (
+            "SpecificHeatCapacity",
+            "ThermalConductivity",
+        ),
     }
     parts_name = ""
     part_name = ""
@@ -253,20 +267,20 @@ class Material:
 
     def __init__(self, obj, ifc_entity=None):
         self.ifc_entity = ifc_entity
-        self.setProperties(obj)
-        self.Type = "Material"
+        self._init_properties(obj)
+        self.Type = "Material"  # pylint: disable=invalid-name
         obj.Proxy = self
 
     @classmethod
-    def create(cls, ifc_entity=None):
+    def create(cls, ifc_entity=None) -> "MaterialFeature":
         """Stantard FreeCAD FeaturePython Object creation method
         ifc_entity : Optionnally provide a base entity.
         """
         obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "Material")
-        feature_python_object = cls(obj, ifc_entity)
+        cls(obj, ifc_entity)
         return obj
 
-    def setProperties(self, obj):
+    def _init_properties(self, obj) -> None:
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
         obj.addProperty("App::PropertyString", "IfcName", ifc_attributes)
@@ -306,50 +320,15 @@ class Material:
             if not definition.is_a("IfcRelDefinesByProperties"):
                 continue
             if definition.RelatingPropertyDefinition.is_a("IfcPropertySet"):
-                if definition.RelatingPropertyDefinition.Name in self.pset_dict.keys():
+                if definition.RelatingPropertyDefinition.Name in self.psets_dict.keys():
                     for prop in definition.RelatingPropertyDefinition.HasProperties:
                         if (
                             prop.Name
-                            in self.pset_dict[
+                            in self.psets_dict[
                                 definition.RelatingPropertyDefinition.Name
                             ]
                         ):
                             setattr(obj, prop.Name, prop.NominalValue)
-
-    def add_product_definitions(self, element, obj):
-        if not hasattr(element, "IsDefinedBy") or not element.IsDefinedBy:
-            return
-        for definition in element.IsDefinedBy:
-            if not definition.is_a("IfcRelDefinesByProperties"):
-                continue
-            if definition.RelatingPropertyDefinition.is_a("IfcPropertySet"):
-                self.add_pset(definition.RelatingPropertyDefinition, obj)
-            elif definition.RelatingPropertyDefinition.is_a("IfcElementQuantity"):
-                self.add_qto(definition.RelatingPropertyDefinition, obj)
-
-    def add_pset(self, pset, obj):
-        new_pset = obj.BIMObjectProperties.psets.add()
-        new_pset.name = pset.Name
-        if new_pset.name in schema.ifc.psets:
-            for prop_name in schema.ifc.psets[new_pset.name][
-                "HasPropertyTemplates"
-            ].keys():
-                prop = new_pset.properties.add()
-                prop.name = prop_name
-        # Invalid IFC, but some vendors like Solidworks do this so we accomodate it
-        if not pset.HasProperties:
-            return
-        for prop in pset.HasProperties:
-            if prop.is_a("IfcPropertySingleValue") and prop.NominalValue:
-                index = new_pset.properties.find(prop.Name)
-                if index >= 0:
-                    new_pset.properties[index].string_value = str(
-                        prop.NominalValue.wrappedValue
-                    )
-                else:
-                    new_prop = new_pset.properties.add()
-                    new_prop.name = prop.Name
-                    new_prop.string_value = str(prop.NominalValue.wrappedValue)
 
 
 def get_type(ifc_entity):

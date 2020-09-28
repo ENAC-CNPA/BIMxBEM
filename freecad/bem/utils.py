@@ -9,6 +9,7 @@ See the LICENSE.TXT file for more details.
 Author : Cyril Waechter
 """
 import itertools
+import typing
 from typing import Iterable, Any, Generator, List
 
 import FreeCAD
@@ -16,6 +17,8 @@ import Part
 
 from freecad.bem.entities import Root
 
+if typing.TYPE_CHECKING:
+    from freecad.bem.typing import RelSpaceBoundaryFeature  # pylint: disable=no-name-in-module, import-error
 
 TOLERANCE = 0.001
 
@@ -27,7 +30,7 @@ def append(doc_object, fc_property, value: Any):
     setattr(doc_object, fc_property, current_value)
 
 
-def append_inner_wire(boundary, wire):
+def append_inner_wire(boundary: "RelSpaceBoundaryFeature", wire: Part.Wire) -> None:
     """Intended to manipulate FreeCAD list like properties only"""
     outer_wire = get_outer_wire(boundary)
     inner_wires = get_inner_wires(boundary)
@@ -35,7 +38,9 @@ def append_inner_wire(boundary, wire):
     generate_boundary_compound(boundary, outer_wire, inner_wires)
 
 
-def are_parallel_boundaries(boundary1, boundary2):
+def are_parallel_boundaries(
+    boundary1: "RelSpaceBoundaryFeature", boundary2: "RelSpaceBoundaryFeature"
+) -> bool:
     return 1 - abs(get_normal_at(boundary1).dot(get_normal_at(boundary2))) < TOLERANCE
 
 
@@ -45,26 +50,30 @@ def clean_vectors(vectors: List[FreeCAD.Vector]) -> None:
     Remove point if it makes border go back and forth"""
     i = 0
     while i < len(vectors) and len(vectors) > 3:
-        p1 = vectors[i - 1]
-        p2 = vectors[i]
-        p3 = vectors[(i + 1) % len(vectors)]
-        if are_3points_collinear(p1, p2, p3):
+        pt1 = vectors[i - 1]
+        pt2 = vectors[i]
+        pt3 = vectors[(i + 1) % len(vectors)]
+        if are_3points_collinear(pt1, pt2, pt3):
             vectors.pop(i)
             i -= 1
             continue
         i += 1
 
 
-def close_vectors(vectors):
+def close_vectors(vectors: List[FreeCAD.Vector]) -> None:
     if vectors[0] != vectors[-1]:
         vectors.append(vectors[0])
 
 
-def direction(v0: FreeCAD.Vector, v1: FreeCAD.Vector) -> FreeCAD.Vector:
-    return (v0 - v1).normalize()
+def direction(vec0: FreeCAD.Vector, vec1: FreeCAD.Vector) -> FreeCAD.Vector:
+    return (vec0 - vec1).normalize()
 
 
-def generate_boundary_compound(boundary, outer_wire: Part.Wire, inner_wires: list):
+def generate_boundary_compound(
+    boundary: "RelSpaceBoundaryFeature",
+    outer_wire: Part.Wire,
+    inner_wires: List[Part.Wire],
+):
     """Generate boundary compound composed of 1 Face, 1 OuterWire, 0-n InnerWires"""
     face = Part.Face(outer_wire)
     for inner_wire in inner_wires:
@@ -76,7 +85,9 @@ def generate_boundary_compound(boundary, outer_wire: Part.Wire, inner_wires: lis
                 else boundary.SourceBoundary
             )
             raise RuntimeError(
-                f"Failure. An inner_wire did not cut face correctly in boundary <{b_id}>. OuterWire area = {Part.Face(outer_wire).Area / 10 ** 6}, InnerWire area = {Part.Face(inner_wire).Area / 10 ** 6}"
+                f"""Failure. An inner_wire did not cut face correctly in boundary <{b_id}>.
+                OuterWire area = {Part.Face(outer_wire).Area / 10 ** 6},
+                InnerWire area = {Part.Face(inner_wire).Area / 10 ** 6}"""
             )
         face = new_face
     boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
@@ -246,17 +257,17 @@ def project_boundary_onto_plane(boundary, plane: Part.Plane):
     boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
 
 
-def are_3points_collinear(p1, p2, p3) -> bool:
-    for v1, v2 in itertools.combinations((p1, p2, p3), 2):
-        if v1.isEqual(v2, TOLERANCE):
+def are_3points_collinear(pt1: FreeCAD.Vector, pt2: FreeCAD.Vector, pt3: FreeCAD.Vector) -> bool:
+    for vec1, vec2 in itertools.combinations((pt1, pt2, pt3), 2):
+        if vec1.isEqual(vec2, TOLERANCE):
             return True
-    dir1 = vectors_dir(p1, p2)
-    dir2 = vectors_dir(p2, p3)
+    dir1 = vectors_dir(pt1, pt2)
+    dir2 = vectors_dir(pt2, pt3)
     return dir1.isEqual(dir2, TOLERANCE) or dir1.isEqual(-dir2, TOLERANCE)
 
 
-def vectors_dir(p1, p2) -> FreeCAD.Vector:
-    return (p2 - p1).normalize()
+def vectors_dir(pt1: FreeCAD.Vector, pt2: FreeCAD.Vector) -> FreeCAD.Vector:
+    return (pt2 - pt1).normalize()
 
 
 class IsTooSmall(BaseException):

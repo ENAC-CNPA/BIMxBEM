@@ -21,6 +21,15 @@ from freecad.bem import utils
 
 if typing.TYPE_CHECKING:  # https://www.python.org/dev/peps/pep-0484/#id36
     from freecad.bem.ifc_importer import IfcImporter
+    from freecad.bem.typing import (  # pylint: disable=import-error, no-name-in-module
+        RootFeature,
+        BEMBoundaryFeature,
+        RelSpaceBoundaryFeature,
+        ContainerFeature,
+        SpaceFeature,
+        ProjectFeature,
+        ElementFeature,
+    )
 
 
 def get_color(ifc_boundary):
@@ -63,13 +72,13 @@ class Root:
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcroot.htm
     """
 
-    def __init__(self, obj: Part.Feature):
+    def __init__(self, obj: "RootFeature") -> None:
         self.Type = self.__class__.__name__  # pylint: disable=invalid-name
         obj.Proxy = self  # pylint: disable=invalid-name
         obj.addExtension("App::GroupExtensionPython", self)
 
     @classmethod
-    def _init_properties(cls, obj: Part.Feature):
+    def _init_properties(cls, obj: "RootFeature") -> None:
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyString", "IfcType", "IFC")
         obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
@@ -78,7 +87,7 @@ class Root:
         obj.addProperty("App::PropertyString", "Description", ifc_attributes)
 
     @classmethod
-    def create(cls) -> Part.Feature:
+    def create(cls) -> "RootFeature":
         """Stantard FreeCAD FeaturePython Object creation method"""
         obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", cls.__name__)
         cls(obj)
@@ -89,7 +98,7 @@ class Root:
         return obj
 
     @classmethod
-    def create_from_ifc(cls, ifc_entity, ifc_importer: "IfcImporter") -> Part.Feature:
+    def create_from_ifc(cls, ifc_entity, ifc_importer: "IfcImporter") -> "RootFeature":
         """As cls.create but providing an ifc source"""
         obj = cls.create()
         obj.Proxy.ifc_importer = ifc_importer
@@ -98,7 +107,7 @@ class Root:
         return obj
 
     @classmethod
-    def read_from_ifc(cls, obj, ifc_entity):
+    def read_from_ifc(cls, obj: "RootFeature", ifc_entity) -> None:
         obj.Id = ifc_entity.id()
         obj.GlobalId = ifc_entity.GlobalId
         obj.IfcType = ifc_entity.is_a()
@@ -106,12 +115,12 @@ class Root:
         obj.Description = ifc_entity.Description or ""
 
     @staticmethod
-    def set_label(obj: Part.Feature):
+    def set_label(obj: "RootFeature") -> None:
         """Allow specific method for specific elements"""
         obj.Label = f"{obj.Id}_{obj.IfcName or obj.IfcType}"
 
     @staticmethod
-    def read_pset_from_ifc(obj, ifc_entity, properties: Iterable[str]) -> None:
+    def read_pset_from_ifc(obj: "RootFeature", ifc_entity, properties: Iterable[str]) -> None:
         psets = ifcopenshell.util.element.get_psets(ifc_entity)
         for pset in psets.values():
             for prop_name, prop in pset.items():
@@ -129,12 +138,12 @@ class RelSpaceBoundary(Root):
     """Wrapping IFC entity :
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcrelspaceboundary2ndlevel.htm"""
 
-    def __init__(self, obj: Part.Feature):
+    def __init__(self, obj: "RelSpaceBoundaryFeature") -> None:
         super().__init__(obj)
         obj.Proxy = self
 
     @classmethod
-    def _init_properties(cls, obj: Part.Feature):
+    def _init_properties(cls, obj: "RelSpaceBoundaryFeature") -> None:
         super()._init_properties(obj)
         bem_category = "BEM"
         ifc_attributes = "IFC Attributes"
@@ -160,10 +169,6 @@ class RelSpaceBoundary(Root):
         obj.addProperty("App::PropertyIntegerList", "ClosestBoundaries", bem_category)
         obj.addProperty("App::PropertyIntegerList", "ClosestEdges", bem_category)
         obj.addProperty("App::PropertyIntegerList", "ClosestDistance", bem_category)
-        obj.addProperty("App::PropertyBoolList", "ClosestHasSameNormal", bem_category)
-        obj.addProperty(
-            "App::PropertyLinkList", "ShareRelatedElementWith", bem_category
-        )
         obj.addProperty("App::PropertyBool", "IsHosted", bem_category)
         obj.addProperty("App::PropertyArea", "Area", bem_category)
         obj.addProperty("App::PropertyArea", "AreaWithHosted", bem_category)
@@ -182,7 +187,7 @@ class RelSpaceBoundary(Root):
         ]
 
     @classmethod
-    def read_from_ifc(cls, obj: Part.Feature, ifc_entity):
+    def read_from_ifc(cls, obj: "RelSpaceBoundaryFeature", ifc_entity) -> None:
         super().read_from_ifc(obj, ifc_entity)
         ifc_importer = obj.Proxy.ifc_importer
         element = get_related_element(ifc_entity, ifc_importer.doc)
@@ -211,17 +216,17 @@ class RelSpaceBoundary(Root):
             obj.ViewObject.Proxy = 0
             obj.ViewObject.ShapeColor = get_color(ifc_entity)
 
-    def onChanged(self, obj, prop):  # pylint: disable=invalid-name
+    def onChanged(self, obj: "RelSpaceBoundaryFeature", prop):  # pylint: disable=invalid-name
         if prop == "InnerBoundaries":
             self.recompute_area_with_hosted(obj)
 
     @classmethod
-    def recompute_areas(cls, obj: Part.Feature):
+    def recompute_areas(cls, obj: "RelSpaceBoundaryFeature") -> None:
         obj.Area = obj.Shape.Faces[0].Area
         cls.recompute_area_with_hosted(obj)
 
     @staticmethod
-    def recompute_area_with_hosted(obj: Part.Feature):
+    def recompute_area_with_hosted(obj: "RelSpaceBoundaryFeature") -> None:
         """Recompute area including inner boundaries"""
         area = obj.Area
         for boundary in obj.InnerBoundaries:
@@ -229,7 +234,7 @@ class RelSpaceBoundary(Root):
         obj.AreaWithHosted = area
 
     @classmethod
-    def set_label(cls, obj):
+    def set_label(cls, obj: "RelSpaceBoundaryFeature") -> None:
         try:
             obj.Label = f"{obj.Id}_{obj.RelatedBuildingElement.IfcName}"
         except AttributeError:
@@ -249,13 +254,15 @@ class Element(Root):
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/schema/ifcproductextension/lexical/ifcelement.htm
     """
 
-    def __init__(self, obj):
+    def __init__(self, obj: "ElementFeature") -> None:
         super().__init__(obj)
         self.Type = "IfcRelSpaceBoundary"
         obj.Proxy = self
 
     @classmethod
-    def create_from_ifc(cls, ifc_entity: "Part.Feature", ifc_importer: "IfcImporter"):
+    def create_from_ifc(
+        cls, ifc_entity, ifc_importer: "IfcImporter"
+    ) -> "ElementFeature":
         """Stantard FreeCAD FeaturePython Object creation method"""
         obj = super().create_from_ifc(ifc_entity, ifc_importer)
         ifc_importer.material_creator.create(obj, ifc_entity)
@@ -266,7 +273,7 @@ class Element(Root):
         return obj
 
     @classmethod
-    def _init_properties(cls, obj):
+    def _init_properties(cls, obj: "ElementFeature") -> None:
         super()._init_properties(obj)
         ifc_attributes = "IFC Attributes"
         bem_category = "BEM"
@@ -296,7 +303,7 @@ class Element(Root):
 
 
 class BEMBoundary:
-    def __init__(self, obj, boundary):
+    def __init__(self, obj: "BEMBoundaryFeature", boundary: "RelSpaceBoundaryFeature") -> None:
         self.Type = "BEMBoundary"  # pylint: disable=invalid-name
         obj.Proxy = self
         category_name = "BEM"
@@ -310,7 +317,7 @@ class BEMBoundary:
         obj.AreaWithHosted = boundary.AreaWithHosted
 
     @staticmethod
-    def create(boundary, geo_type):
+    def create(boundary: "RelSpaceBoundaryFeature", geo_type) -> "BEMBoundaryFeature":
         """Stantard FreeCAD FeaturePython Object creation method"""
         obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "BEMBoundary")
         BEMBoundary(obj, boundary)
@@ -322,7 +329,7 @@ class BEMBoundary:
         return obj
 
     @staticmethod
-    def set_label(obj, source_boundary):
+    def set_label(obj: "RelSpaceBoundaryFeature", source_boundary) -> None:
         obj.Label = source_boundary.Label
 
     @staticmethod
@@ -352,14 +359,14 @@ class Project(Root):
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
 
     @classmethod
-    def create(cls):
+    def create(cls) -> "ProjectFeature":
         obj = super().create()
         if FreeCAD.GuiUp:
             obj.ViewObject.DisplayMode = "Wireframe"
         return obj
 
     @classmethod
-    def _init_properties(cls, obj):
+    def _init_properties(cls, obj: "ProjectFeature") -> None:
         super()._init_properties(obj)
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyString", "LongName", ifc_attributes)
@@ -376,7 +383,7 @@ class Project(Root):
         )
 
     @classmethod
-    def read_from_ifc(cls, obj, ifc_entity):
+    def read_from_ifc(cls, obj: "ProjectFeature", ifc_entity) -> None:
         super().read_from_ifc(obj, ifc_entity)
         obj.LongName = ifc_entity.LongName or ""
         obj.TrueNorth = FreeCAD.Vector(
@@ -403,7 +410,7 @@ class Space(Root):
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
 
     @classmethod
-    def create(cls):
+    def create(cls) -> "SpaceFeature":
         obj = super().create()
         if FreeCAD.GuiUp:
             obj.ViewObject.ShapeColor = (0.33, 1.0, 1.0)
@@ -411,7 +418,7 @@ class Space(Root):
         return obj
 
     @classmethod
-    def _init_properties(cls, obj):
+    def _init_properties(cls, obj: "SpaceFeature") -> None:
         super()._init_properties(obj)
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyString", "LongName", ifc_attributes)
@@ -426,7 +433,7 @@ class Space(Root):
         obj.addProperty("App::PropertyArea", "AreaAE", bem_category)
 
     @classmethod
-    def read_from_ifc(cls, obj, ifc_entity):
+    def read_from_ifc(cls, obj: "SpaceFeature", ifc_entity) -> None:
         super().read_from_ifc(obj, ifc_entity)
         ifc_importer = obj.Proxy.ifc_importer
         obj.Shape = ifc_importer.entity_shape_by_brep(ifc_entity)
@@ -436,5 +443,5 @@ class Space(Root):
         obj.Description = ifc_entity.Description or ""
 
     @classmethod
-    def set_label(cls, obj):
+    def set_label(cls, obj: "SpaceFeature") -> None:
         obj.Label = f"{obj.IfcName}_{obj.LongName}"
