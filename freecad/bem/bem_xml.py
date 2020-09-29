@@ -10,8 +10,12 @@ Author : Cyril Waechter
 """
 
 import xml.etree.ElementTree as ET
+import typing
 
 import FreeCAD
+
+if typing.TYPE_CHECKING:
+    from freecad.bem.entities import *
 
 SCALE = 1000
 
@@ -51,11 +55,17 @@ class BEMxml:
         ET.SubElement(xml_element, "IfcType").text = fc_object.IfcType
 
     @staticmethod
-    def write_attrib(parent, fc_object, attributes):
+    def write_attributes(parent, fc_object, attributes):
         for attrib in attributes:
-            ET.SubElement(parent, attrib).text = str(getattr(fc_object, attrib))
+            value = getattr(fc_object, attrib)
+            if isinstance(value, FreeCAD.Units.Quantity):
+                if value.Unit.Type == "Length":
+                    value = value.Value / SCALE
+                else:
+                    value = value.Value
+            ET.SubElement(parent, attrib).text = str(value or "")
 
-    def write_project(self, fc_object):
+    def write_project(self, fc_object: "ProjectFeature") -> None:
         project = ET.SubElement(self.projects, "Project")
         self.write_root_attrib(project, fc_object)
         ET.SubElement(project, "LongName").text = fc_object.LongName
@@ -67,36 +77,36 @@ class BEMxml:
         for site in fc_object.Group:
             self.write_site(site)
 
-    def write_site(self, fc_object):
+    def write_site(self, fc_object: "ContainerFeature") -> None:
         site = ET.SubElement(self.sites, "Site")
         self.write_root_attrib(site, fc_object)
         self.buildings = ET.SubElement(site, "Buildings")
         for building in fc_object.Group:
             self.write_building(building)
 
-    def write_building(self, fc_object):
+    def write_building(self, fc_object: "ContainerFeature") -> None:
         site = ET.SubElement(self.buildings, "Building")
         self.write_root_attrib(site, fc_object)
         self.storeys = ET.SubElement(site, "Storeys")
         for storey in fc_object.Group:
             self.write_storey(storey)
 
-    def write_storey(self, fc_object):
+    def write_storey(self, fc_object: "ContainerFeature") -> None:
         storey = ET.SubElement(self.storeys, "Storey")
         self.write_root_attrib(storey, fc_object)
         spaces = ET.SubElement(storey, "Spaces")
         for space in fc_object.Group:
             ET.SubElement(spaces, "Space").text = str(space.Id)
 
-    def write_space(self, fc_object):
+    def write_space(self, fc_object: "SpaceFeature") -> None:
         space = ET.SubElement(self.spaces, "Space")
         self.write_root_attrib(space, fc_object)
-        self.write_attrib(space, fc_object, ("LongName",))
+        self.write_attributes(space, fc_object, ("LongName",))
         boundaries = ET.SubElement(space, "Boundaries")
         for boundary in fc_object.SecondLevel.Group:
             ET.SubElement(boundaries, "Boundary").text = str(boundary.Id)
 
-    def write_boundary(self, fc_object):
+    def write_boundary(self, fc_object: "RelSpaceBoundaryFeature") -> None:
         boundary = ET.SubElement(self.boundaries, "Boundary")
         self.write_root_attrib(boundary, fc_object)
 
@@ -129,6 +139,7 @@ class BEMxml:
             ET.SubElement(inner_boundaries, "InnerBoundary").text = str(fc_inner_b.Id)
 
         self.write_shape(boundary, fc_object)
+        self.write_attributes(boundary, fc_object, ("UndergroundDepth",))
 
         is_hosted = fc_object.IsHosted
         ET.SubElement(boundary, "IsHosted").text = "true" if is_hosted else "false"
@@ -156,16 +167,8 @@ class BEMxml:
                 fc_object.Material.Id or ""
             )
 
-    @staticmethod
-    def write_class_attrib(xml_element, fc_object):
-        for attrib in fc_object.Proxy.attributes:
-            value = getattr(fc_object, attrib)
-            if isinstance(value, FreeCAD.Units.Quantity):
-                if value.Unit.Type == "Length":
-                    value = value.Value / SCALE
-                else:
-                    value = value.Value
-            ET.SubElement(xml_element, attrib).text = str(value)
+    def write_class_attrib(self, xml_element, fc_object):
+        self.write_attributes(xml_element, fc_object, fc_object.Proxy.attributes)
 
     @staticmethod
     def write_psets(xml_element, fc_object):

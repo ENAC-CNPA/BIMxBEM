@@ -11,7 +11,8 @@ Author : Cyril Waechter
 import itertools
 import os
 from collections import namedtuple
-from typing import NamedTuple
+import typing
+from typing import NamedTuple, Iterable, List
 
 import ifcopenshell
 import ifcopenshell.geom
@@ -33,6 +34,12 @@ from freecad.bem.entities import (
 )
 from freecad.bem.ifc_importer import IfcImporter, TOLERANCE
 
+if typing.TYPE_CHECKING:
+    from freecad.bem.typing import (
+        SpaceFeature,
+        ContainerFeature,
+    )  # pylint: disable=no-name-in-module, import-error
+
 
 def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
     """Create SIA specific boundaries cf. https://www.sia.ch/fr/services/sia-norm/"""
@@ -45,8 +52,66 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
         handle_curtain_walls(space, doc)
         find_closest_edges(space)
         set_leso_type(space)
+        ensure_external_earch_is_set(space, doc)
     create_sia_boundaries(doc)
     doc.recompute()
+
+
+def ensure_external_earch_is_set(space: "SpaceFeature", doc=FreeCAD.ActiveDocument):
+    sites: List["ContainerFeature"] = list(
+        utils.get_elements_by_ifctype("IfcSite", doc)
+    )
+    ground_bound_box = get_ground_bound_box(sites)
+    if space.Shape.BoundBox.ZMin - ground_bound_box.ZMax > 1000:
+        return
+    ground_shape = Part.Compound([])
+    for site in sites:
+        ground_shape.add(site.Shape)
+    if not ground_shape.BoundBox.isValid():
+        ground_shape = Part.Plane().toShape()
+    for boundary in space.SecondLevel.Group:
+        if boundary.InternalOrExternalBoundary in (
+            "INTERNAL",
+            "EXTERNAL_EARTH",
+            "EXTERNAL_WATER",
+            "EXTERNAL_FIRE",
+        ):
+            continue
+        if not is_underground(boundary, ground_shape):
+            continue
+        boundary.InternalOrExternalBoundary = "EXTERNAL_EARTH"
+
+
+def is_underground(boundary, ground_shape) -> bool:
+    closest_points = ground_shape.distToShape(boundary.Shape)[1][0]
+    direction: FreeCAD.Vector = closest_points[1] - closest_points[0]
+    if direction.z > 1000:
+        return False
+    if boundary.LesoType == "Flooring":
+        el_thickness = getattr(
+            getattr(getattr(boundary, "RelatedBuildingElement", 0), "Thickness", 0),
+            "Value",
+            0,
+        )
+        if direction.z - el_thickness * 1.5 > 0:
+            return False
+        boundary.UndergroundDepth = abs(direction.z - el_thickness)
+        return True
+    if boundary.LesoType == "Wall":
+        bbox = boundary.Shape.BoundBox
+        if (bbox.ZMax + bbox.ZMin)/2 + direction.z < 0:
+            return True
+    if boundary.LesoType == "Ceiling":
+        if direction.z < TOLERANCE:
+            return True
+    return False
+
+
+def get_ground_bound_box(sites: Iterable["ContainerFeature"]) -> FreeCAD.BoundBox:
+    boundbox = FreeCAD.BoundBox()
+    for site in sites:
+        boundbox.add(site.Shape.BoundBox)
+    return boundbox if boundbox.isValid() else FreeCAD.BoundBox(0, 0, -30000, 0, 0, 0)
 
 
 def set_boundary_normal(space):
@@ -299,7 +364,8 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
                 break
         else:
             logger.warning(
-                f"Unable to join boundaries RelSpaceBoundary Id <{boundary1.Id}> with boundaries <{(b.Id for b in boundaries)}>"
+                f"""Unable to join boundaries RelSpaceBoundary Id <{boundary1.Id}>
+                with boundaries <{(b.Id for b in boundaries)}>"""
             )
             break
 
@@ -434,7 +500,7 @@ class HostNotFound(LookupError):
     pass
 
 
-def find_closest_edges(space):
+def find_closest_edges(space: "SpaceFeature") -> None:
     """Find closest boundary and edge to be able to reconstruct a closed shell"""
     boundaries = [b for b in space.SecondLevel.Group if not b.IsHosted]
     Closest = namedtuple("Closest", ["boundary", "edge", "distance"])
@@ -467,7 +533,7 @@ def find_closest_edges(space):
                 # Check if projection on plane intersection cross boundary1.
                 # If so edge2 cannot be a valid solution.
                 pnt1 = edge1.CenterOfMass
-                plane_intersect = utils.get_plane(boundary1).intersect(
+                plane_intersect = utils.get_plane(boundary1).intersectSS(
                     utils.get_plane(boundary2)
                 )[0]
                 v_ab = plane_intersect.Direction
@@ -607,7 +673,8 @@ def rejoin_boundaries(space, sia_type):
                 line2 = utils.line_from_edge(utils.get_outer_wire(boundary2).Edges[ei2])
             except IndexError:
                 logger.warning(
-                    f"Cannot find closest edge index <{ei2}> in boundary id <{b2_id}> to rejoin boundary <{base_boundary.Id}>"
+                    f"""Cannot find closest edge index <{ei2}> in boundary id <{b2_id}>
+                    to rejoin boundary <{base_boundary.Id}>"""
                 )
                 lines.append(
                     utils.line_from_edge(utils.get_outer_wire(base_boundary).Edges[ei1])
@@ -784,8 +851,9 @@ if __name__ == "__main__":
         25: "test 02-07 dalle étage et locaux mansardés.ifc",
         26: "test 02-08 raccords nettoyés étage.ifc",
         27: "test 02-09 sous-sol.ifc",
+        28: "test 02-02 mur matériau simple.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[1])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[27])
     DOC = FreeCAD.ActiveDocument
 
     if DOC:  # Remote debugging
