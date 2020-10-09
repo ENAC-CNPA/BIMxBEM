@@ -434,6 +434,9 @@ def ensure_hosted_element_are(space):
         def find_host(boundary):
             fallback_solution = None
             for boundary2 in space.SecondLevel.Group:
+                if boundary is boundary2:
+                    continue
+                
                 if not utils.are_parallel_boundaries(boundary, boundary2):
                     continue
 
@@ -824,7 +827,7 @@ if __name__ == "__main__":
     else:
         TEST_FOLDER = "/home/cyril/git/BIMxBEM/IfcTestFiles/"
     TEST_FILES = {
-        0: "Triangle_2x3_A23.ifc",
+        0: "Triangle_A24_IFC4.ifc",
         1: "Triangle_2x3_R19.ifc",
         2: "2Storey_2x3_A22.ifc",
         3: "2Storey_2x3_R19.ifc",
@@ -853,7 +856,7 @@ if __name__ == "__main__":
         27: "test 02-09 sous-sol.ifc",
         28: "test 02-02 mur matériau simple.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[27])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
     DOC = FreeCAD.ActiveDocument
 
     if DOC:  # Remote debugging
