@@ -310,25 +310,12 @@ class Material:
         obj.IfcName = ifc_entity.Name
         obj.Label = f"{obj.Id}_{obj.IfcName}"
         # Description is new to IFC4 so IFC2x3 raise attribute error
-        try:
-            obj.Description = ifc_entity.Description or ""
-        except AttributeError:
-            pass
-        if not hasattr(ifc_entity, "IsDefinedBy") or not ifc_entity.IsDefinedBy:
-            return
-        for definition in ifc_entity.IsDefinedBy:
-            if not definition.is_a("IfcRelDefinesByProperties"):
-                continue
-            if definition.RelatingPropertyDefinition.is_a("IfcPropertySet"):
-                if definition.RelatingPropertyDefinition.Name in self.psets_dict.keys():
-                    for prop in definition.RelatingPropertyDefinition.HasProperties:
-                        if (
-                            prop.Name
-                            in self.psets_dict[
-                                definition.RelatingPropertyDefinition.Name
-                            ]
-                        ):
-                            setattr(obj, prop.Name, prop.NominalValue)
+        obj.Description = getattr(ifc_entity, "Description", "") or ""
+        for pset in getattr(ifc_entity, "HasProperties", ()):
+            if pset.Name in self.psets_dict.keys():
+                for prop in pset.Properties:
+                    if prop.Name in self.psets_dict[pset.Name]:
+                        setattr(obj, prop.Name, prop.NominalValue.wrappedValue)
 
 
 def get_type(ifc_entity):
