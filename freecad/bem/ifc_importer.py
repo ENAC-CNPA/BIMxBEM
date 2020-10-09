@@ -148,6 +148,23 @@ class IfcImporter:
             thickness = getattr(obj.Material, "TotalThickness", 0)
             if thickness:
                 return thickness
+
+        if ifc_entity.is_a("IfcWall"):
+            qto_lookup_name = "Qto_WallBaseQuantities"
+        elif ifc_entity.is_a("IfcSlab"):
+            qto_lookup_name = "Qto_SlabBaseQuantities"
+        else:
+            qto_lookup_name = ""
+        
+        if qto_lookup_name:
+            for definition in ifc_entity.IsDefinedBy:
+                if not definition.is_a("IfcRelDefinesByProperties"):
+                    continue
+                if definition.RelatingPropertyDefinition.Name == qto_lookup_name:
+                    for quantity in definition.RelatingPropertyDefinition.Quantities:
+                        if quantity.Name == "Width":
+                            return quantity.LengthValue * self.fc_scale * self.ifc_scale
+
         if not ifc_entity.Representation:
             return 0
         if ifc_entity.IsDecomposedBy:
