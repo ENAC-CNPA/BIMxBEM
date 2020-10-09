@@ -99,7 +99,7 @@ def is_underground(boundary, ground_shape) -> bool:
         return True
     if boundary.LesoType == "Wall":
         bbox = boundary.Shape.BoundBox
-        if (bbox.ZMax + bbox.ZMin)/2 + direction.z < 0:
+        if (bbox.ZMax + bbox.ZMin) / 2 + direction.z < 0:
             return True
     if boundary.LesoType == "Ceiling":
         if direction.z < TOLERANCE:
@@ -436,7 +436,7 @@ def ensure_hosted_element_are(space):
             for boundary2 in space.SecondLevel.Group:
                 if boundary is boundary2:
                     continue
-                
+
                 if not utils.are_parallel_boundaries(boundary, boundary2):
                     continue
 
