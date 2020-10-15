@@ -9,6 +9,8 @@ See the LICENSE.TXT file for more details.
 Author : Cyril Waechter
 """
 from typing import NamedTuple, Generator
+import os
+import zipfile
 
 import ifcopenshell
 import ifcopenshell.geom
@@ -99,12 +101,35 @@ class IfcImporter:
         if not doc:
             doc = FreeCAD.newDocument()
         self.doc = doc
-        self.ifc_file = ifcopenshell.open(ifc_path)
+        self.ifc_file = self.open(ifc_path)
         self.ifc_scale = get_unit_conversion_factor(self.ifc_file, "LENGTHUNIT")
         self.fc_scale = FreeCAD.Units.Metre.Value
         self.material_creator = materials.MaterialCreator(self)
         self.xml: str = ""
         self.log: str = ""
+
+    @staticmethod
+    def open(ifc_path: str) -> ifcopenshell.file:
+        ext = os.path.splitext(ifc_path)[1].lower()
+        if ext == ".ifc":
+            return ifcopenshell.open(ifc_path)
+        if ext == ".ifcxml":
+            # TODO: How to do this as ifcopenshell.ifcopenshell_wrapper has no parse_ifcxml ?
+            raise NotImplementedError("No support for .ifcXML yet")
+        if ext in (".ifczip", ".zip"):
+            zip_path = zipfile.Path(ifc_path)
+            for member in zip_path.iterdir():
+                zipped_ext = os.path.splitext(member.name)[1].lower()
+                if zipped_ext == ".ifc":
+                    return ifcopenshell.file.from_string(member.read_text())
+                if zipped_ext == ".ifcxml":
+                    # TODO: How to do this as ifcopenshell.ifcopenshell_wrapper has no parse_ifcxml ?
+                    raise NotImplementedError("No support for .ifcXML yet")
+        raise NotImplementedError(
+            """Supported files :
+    - unzipped : *.ifc | *.ifcXML
+    - zipped : *.ifczip | *.zip containing un unzipped type"""
+        )
 
     def generate_rel_space_boundaries(self):
         """Display IfcRelSpaceBoundaries from selected IFC file into FreeCAD documennt"""
@@ -155,7 +180,7 @@ class IfcImporter:
             qto_lookup_name = "Qto_SlabBaseQuantities"
         else:
             qto_lookup_name = ""
-        
+
         if qto_lookup_name:
             for definition in ifc_entity.IsDefinedBy:
                 if not definition.is_a("IfcRelDefinesByProperties"):
