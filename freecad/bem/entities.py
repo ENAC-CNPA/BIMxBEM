@@ -437,7 +437,7 @@ class Space(Root):
     def read_from_ifc(cls, obj: "SpaceFeature", ifc_entity) -> None:
         super().read_from_ifc(obj, ifc_entity)
         ifc_importer = obj.Proxy.ifc_importer
-        obj.Shape = ifc_importer.entity_shape_by_brep(ifc_entity)
+        obj.Shape = ifc_importer.space_shape_by_brep(ifc_entity)
         obj.LongName = ifc_entity.LongName or ""
         space_full_name = f"{ifc_entity.Name} {ifc_entity.LongName}"
         obj.Label = space_full_name

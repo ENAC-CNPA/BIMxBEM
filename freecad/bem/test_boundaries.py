@@ -24,7 +24,7 @@ from freecad.bem.boundaries import (
 
 
 TEST_FILES = [
-    "Triangle_2x3_A23.ifc",
+    "Triangle_A24_IFC4.ifc",
     "Triangle_2x3_R19.ifc",
     "2Storey_2x3_A22.ifc",
     "2Storey_2x3_R19.ifc",
