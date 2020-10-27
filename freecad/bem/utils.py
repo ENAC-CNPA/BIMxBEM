@@ -55,7 +55,7 @@ def clean_vectors(vectors: List[FreeCAD.Vector]) -> None:
         pt3 = vectors[(i + 1) % len(vectors)]
         if are_3points_collinear(pt1, pt2, pt3):
             vectors.pop(i)
-            i -= 1
+            i = i - 1 if i > 0 else 0
             continue
         i += 1
 
