@@ -144,7 +144,8 @@ def get_element_by_guid(guid, elements_group):
     for fc_element in getattr(elements_group, "Group", elements_group):
         if getattr(fc_element, "GlobalId", None) == guid:
             return fc_element
-    raise LookupError(f"Unable to get element by {guid}")
+    raise LookupError(f"""Unable to get element by {guid}.
+This error is known to occurs when you model 2 parallel walls instead of a multilayer wall.""")
 
 
 def get_host_guid(ifc_entity):

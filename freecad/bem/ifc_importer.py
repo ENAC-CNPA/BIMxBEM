@@ -419,9 +419,13 @@ def associate_host_element(ifc_file, elements_group):
     ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)
     for ifc_entity in ifc_elements:
         if ifc_entity.FillsVoids:
-            host = utils.get_element_by_guid(
+            try:
+                host = utils.get_element_by_guid(
                 utils.get_host_guid(ifc_entity), elements_group
             )
+            except LookupError as err:
+                logger.exception(err)
+                continue
             hosted = utils.get_element_by_guid(ifc_entity.GlobalId, elements_group)
             utils.append(host, "HostedElements", hosted)
             hosted.HostElement = host.Id
