@@ -725,7 +725,11 @@ def rejoin_boundaries(space, sia_type):
             continue
 
         inner_wires = utils.get_inner_wires(boundary1)
-        utils.generate_boundary_compound(boundary1, outer_wire, inner_wires)
+        try:
+            utils.generate_boundary_compound(boundary1, outer_wire, inner_wires)
+        except RuntimeError as err:
+            logger.exception(err)
+            continue
 
         boundary1.Area = area = boundary1.Shape.Area
         for inner_boundary in base_boundary.InnerBoundaries:
@@ -855,8 +859,10 @@ if __name__ == "__main__":
         26: "test 02-08 raccords nettoyés étage.ifc",
         27: "test 02-09 sous-sol.ifc",
         28: "test 02-02 mur matériau simple.ifc",
+        29: "3196 Aalseth Lane_R19_bem.ifc",
+        30: "Maison Privée.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[0])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[30])
     DOC = FreeCAD.ActiveDocument
 
     if DOC:  # Remote debugging
