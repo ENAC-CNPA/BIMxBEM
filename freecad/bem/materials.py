@@ -183,6 +183,7 @@ class ConstituentSet:
         return obj
 
     def _init_properties(self, obj: "ConstituentSetFeature", ifc_entity) -> None:
+        obj.addProperty("App::PropertyString", "IfcType", "IFC")
         obj.addProperty("App::PropertyFloatList", "Fractions", "BEM")
         obj.addProperty("App::PropertyStringList", "Categories", "BEM")
         ifc_attributes = "IFC Attributes"
@@ -197,6 +198,7 @@ class ConstituentSet:
         obj.IfcName = ifc_entity.Name or ""
         obj.Description = ifc_entity.Description or ""
         obj.Label = f"{obj.Id}_{obj.IfcName}"
+        obj.IfcType = ifc_entity.is_a()
 
 
 class LayerSet:
@@ -224,6 +226,7 @@ class LayerSet:
         return obj
 
     def _init_properties(self, obj: "LayerSetFeature", ifc_entity) -> None:
+        obj.addProperty("App::PropertyString", "IfcType", "IFC")
         obj.addProperty("App::PropertyFloatList", "Thicknesses", "BEM")
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
@@ -242,6 +245,7 @@ class LayerSet:
         except AttributeError:
             pass
         obj.Label = f"{obj.Id}_{obj.IfcName}"
+        obj.IfcType = ifc_entity.is_a()
 
 
 class Material:
@@ -281,6 +285,7 @@ class Material:
         return obj
 
     def _init_properties(self, obj) -> None:
+        obj.addProperty("App::PropertyString", "IfcType", "IFC")
         ifc_attributes = "IFC Attributes"
         obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
         obj.addProperty("App::PropertyString", "IfcName", ifc_attributes)
@@ -311,6 +316,7 @@ class Material:
         obj.Label = f"{obj.Id}_{obj.IfcName}"
         # Description is new to IFC4 so IFC2x3 raise attribute error
         obj.Description = getattr(ifc_entity, "Description", "") or ""
+        obj.IfcType = ifc_entity.is_a()
         for pset in getattr(ifc_entity, "HasProperties", ()):
             if pset.Name in self.psets_dict.keys():
                 for prop in pset.Properties:
