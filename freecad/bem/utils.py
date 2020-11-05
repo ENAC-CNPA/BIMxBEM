@@ -194,15 +194,10 @@ def get_wires(boundary: Part.Feature) -> Generator[Part.Wire, None, None]:
     return (s for s in boundary.Shape.SubShapes if isinstance(s, Part.Wire))
 
 
-def is_collinear(edge1, edge2):
-    v0_0, v0_1 = (vx.Point for vx in edge1.Vertexes)
-    v1_0, v1_1 = (vx.Point for vx in edge2.Vertexes)
-    if is_collinear_or_parallel(v0_0, v0_1, v1_0, v1_1):
-        return v0_0 == v1_0 or is_collinear_or_parallel(v0_0, v0_1, v0_0, v1_0)
-
-
-def is_collinear_or_parallel(v0_0, v0_1, v1_0, v1_1) -> bool:
-    return abs(direction(v0_0, v0_1).dot(direction(v1_0, v1_1))) > 0.9999
+def are_edges_parallel(edge1: Part.Edge, edge2: Part.Edge) -> bool:
+    dir1 = line_from_edge(edge1).Direction
+    dir2 = line_from_edge(edge2).Direction
+    return abs(dir1.dot(dir2)) > 1 - TOLERANCE
 
 
 def is_coplanar(shape_1, shape_2):

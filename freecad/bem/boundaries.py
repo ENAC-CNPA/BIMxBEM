@@ -52,12 +52,12 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
         handle_curtain_walls(space, doc)
         find_closest_edges(space)
         set_leso_type(space)
-        ensure_external_earch_is_set(space, doc)
+        ensure_external_earth_is_set(space, doc)
     create_sia_boundaries(doc)
     doc.recompute()
 
 
-def ensure_external_earch_is_set(space: "SpaceFeature", doc=FreeCAD.ActiveDocument):
+def ensure_external_earth_is_set(space: "SpaceFeature", doc=FreeCAD.ActiveDocument):
     sites: List["ContainerFeature"] = list(
         utils.get_elements_by_ifctype("IfcSite", doc)
     )
@@ -503,74 +503,82 @@ class HostNotFound(LookupError):
     pass
 
 
-def find_closest_edges(space: "SpaceFeature") -> None:
-    """Find closest boundary and edge to be able to reconstruct a closed shell"""
-    boundaries = [b for b in space.SecondLevel.Group if not b.IsHosted]
-    Closest = namedtuple("Closest", ["boundary", "edge", "distance"])
-    # Initialise defaults values
+Closest = namedtuple("Closest", ["boundary", "edge", "distance"])
+
+
+def init_closest_default_values(boundaries):
     for boundary in boundaries:
         n_edges = len(utils.get_outer_wire(boundary).Edges)
         boundary.Proxy.closest = [
             Closest(boundary=None, edge=-1, distance=100000)
         ] * n_edges
 
-    def compare_closest(boundary1, ei1, edge1, boundary2, ei2, edge2):
+
+def compare_closest_edges(boundary1, ei1, edge1, boundary2, ei2, edge2):
+    distance = boundary1.Proxy.closest[ei1].distance
+    edge_to_edge = edge_distance_to_edge(edge1, edge2)
+
+    if distance <= TOLERANCE:
+        return
+
+    elif edge_to_edge <= TOLERANCE or edge_to_edge - distance - TOLERANCE <= 0:
+        boundary1.Proxy.closest[ei1] = Closest(boundary2, ei2, edge_to_edge)
+
+
+def find_closest_by_distance(boundary1, boundary2):
+    edges1 = utils.get_outer_wire(boundary1).Edges
+    edges2 = utils.get_outer_wire(boundary2).Edges
+    for (ei1, edge1), (ei2, edge2) in itertools.product(
+        enumerate(edges1), enumerate(edges2)
+    ):
+        if not is_low_angle(edge1, edge2):
+            continue
+
+        compare_closest_edges(boundary1, ei1, edge1, boundary2, ei2, edge2)
+        compare_closest_edges(  # pylint: disable=arguments-out-of-order
+            boundary2, ei2, edge2, boundary1, ei1, edge1
+        )
+
+
+def find_closest_by_intersection(boundary1, boundary2):
+    intersect_line = utils.get_plane(boundary1).intersectSS(utils.get_plane(boundary2))[0]
+    edges1 = utils.get_outer_wire(boundary1).Edges
+    edges2 = utils.get_outer_wire(boundary2).Edges
+    for (ei1, edge1), (ei2, edge2) in itertools.product(
+        enumerate(edges1), enumerate(edges2)
+    ):
         is_closest = False
-        distance = boundary1.Proxy.closest[ei1].distance
-        edge_to_edge = compute_distance(edge1, edge2)
+        distance1 = edge_distance_to_line(edge1, intersect_line)
+        distance2 = edge_distance_to_line(edge2, intersect_line)
 
-        if distance <= TOLERANCE:
-            return
+        min_distance = boundary1.Proxy.closest[ei1].distance
+        if distance1 < min_distance:
+            boundary1.Proxy.closest[ei1] = Closest(boundary2, -1, distance1)
 
-        # Perfect match
-        if edge_to_edge <= TOLERANCE:
-            is_closest = True
+        min_distance = boundary2.Proxy.closest[ei2].distance
+        if distance2 < min_distance:
+            boundary2.Proxy.closest[ei2] = Closest(boundary1, -1, distance2)
 
-        elif edge_to_edge - distance - TOLERANCE <= 0:
-            # Case 1 : boundaries point in same direction so all solution are valid.
-            dot_dir = boundary2.Normal.dot(boundary1.Normal)
-            if abs(dot_dir) >= 1 - TOLERANCE:
-                is_closest = True
-            # Case 2 : boundaries intersect
-            else:
-                # Check if projection on plane intersection cross boundary1.
-                # If so edge2 cannot be a valid solution.
-                pnt1 = edge1.CenterOfMass
-                plane_intersect = utils.get_plane(boundary1).intersectSS(
-                    utils.get_plane(boundary2)
-                )[0]
-                v_ab = plane_intersect.Direction
-                v_ap = pnt1 - plane_intersect.Location
-                pnt2 = pnt1 + FreeCAD.Vector().projectToLine(v_ap, v_ab)
-                try:
-                    projection_edge = Part.makeLine(pnt1, pnt2)
-                    common = projection_edge.common(boundary1.Shape.Faces[0])
-                    if common.Length <= TOLERANCE:
-                        is_closest = True
-                # Catch case where pnt1 == pnt2 which is fore sure a valid solution.
-                except Part.OCCError:
-                    is_closest = True
-        if is_closest:
-            boundary1.Proxy.closest[ei1] = Closest(boundary2, ei2, edge_to_edge)
+
+def find_closest_edges(space: "SpaceFeature") -> None:
+    """Find closest boundary and edge to be able to reconstruct a closed shell"""
+    boundaries = [b for b in space.SecondLevel.Group if not b.IsHosted]
+    init_closest_default_values(boundaries)
 
     # Loop through all boundaries and edges to find the closest edge
     for boundary1, boundary2 in itertools.combinations(boundaries, 2):
-        # If boundary1 and boundary2 are facing an opposite direction no match possible
-        if boundary2.Normal.dot(boundary1.Normal) <= -1 + TOLERANCE:
+        # If boundary1 and boundary2 have opposite direction no match possible
+        normals_dot = boundary2.Normal.dot(boundary1.Normal)
+        if normals_dot <= -1 + TOLERANCE:
             continue
 
-        edges1 = utils.get_outer_wire(boundary1).Edges
-        edges2 = utils.get_outer_wire(boundary2).Edges
-        for (ei1, edge1), (ei2, edge2) in itertools.product(
-            enumerate(edges1), enumerate(edges2)
-        ):
-            if not is_low_angle(edge1, edge2):
-                continue
+        # If boundaries are not almost parallel, they must intersect
+        if not normals_dot >= 1 - TOLERANCE:
+            find_closest_by_intersection(boundary1, boundary2)
 
-            compare_closest(boundary1, ei1, edge1, boundary2, ei2, edge2)
-            compare_closest(  # pylint: disable=arguments-out-of-order
-                boundary2, ei2, edge2, boundary1, ei1, edge1
-            )
+        # If they are parallel all edges need to be compared
+        else:
+            find_closest_by_distance(boundary1, boundary2)
 
     # Store found values in standard FreeCAD properties
     for boundary in boundaries:
@@ -611,10 +619,15 @@ def define_leso_type(boundary):
         return "Unknown"
 
 
-def compute_distance(edge1, edge2):
+def edge_distance_to_edge(edge1: Part.Edge, edge2: Part.Edge) -> float:
     mid_point = edge1.CenterOfMass
     line_segment = (v.Point for v in edge2.Vertexes)
     return mid_point.distanceToLineSegment(*line_segment).Length
+
+
+def edge_distance_to_line(edge, line):
+    mid_point = edge.CenterOfMass
+    return mid_point.distanceToLine(line.Location, line.Direction)
 
 
 def is_low_angle(edge1, edge2):
@@ -665,11 +678,10 @@ def rejoin_boundaries(space, sia_type):
                 )
                 continue
             # Case 1 : boundaries are not parallel
-            if not base_boundary.Normal.isEqual(base_boundary2.Normal, TOLERANCE):
-                plane_intersect = b1_plane.intersect(utils.get_plane(boundary2))
-                if plane_intersect:
-                    lines.append(plane_intersect[0])
-                    continue
+            plane_intersect = b1_plane.intersectSS(utils.get_plane(boundary2))
+            if plane_intersect:
+                lines.append(plane_intersect[0])
+                continue
             # Case 2 : boundaries are parallel
             line1 = utils.line_from_edge(utils.get_outer_wire(boundary1).Edges[ei1])
             try:
@@ -752,7 +764,7 @@ def create_sia_ext_boundaries(space, is_from_revit):
             continue
         thickness = boundary1.RelatedBuildingElement.Thickness.Value
         ifc_type = boundary1.RelatedBuildingElement.IfcType
-        normal = boundary1.Shape.Faces[0].normalAt(0, 0)
+        normal = boundary1.Normal
         # EXTERNAL: there is multiple possible values for external so testing internal is better.
         if boundary1.InternalOrExternalBoundary != "INTERNAL":
             lenght = thickness
@@ -836,9 +848,8 @@ if __name__ == "__main__":
         2: "2Storey_2x3_A22.ifc",
         3: "2Storey_2x3_R19.ifc",
         4: "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
-        6: "Investigation_test_R19.ifc",
         7: "OverSplitted_R20_2x3.ifc",
-        8: "ExternalEarth_R20_2x3.ifc",
+        8: "3196 Aalseth Lane_R21_bem.ifc",
         9: "ExternalEarth_R20_IFC4.ifc",
         10: "Ersatzneubau Alphütte_1-1210_31_23.ifc",
         11: "GRAPHISOFT_ARCHICAD_Sample_Project_Hillside_House_v1.ifczip",
@@ -862,7 +873,7 @@ if __name__ == "__main__":
         29: "3196 Aalseth Lane_R19_bem.ifc",
         30: "Maison Privée.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[30])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[7])
     DOC = FreeCAD.ActiveDocument
 
     if DOC:  # Remote debugging
