@@ -150,6 +150,7 @@ def handle_curtain_walls(space, doc) -> None:
     for boundary in space.SecondLevel.Group:
         if getattr(boundary.RelatedBuildingElement, "IfcType", "") != "IfcCurtainWall":
             continue
+        boundary.LesoType = "Wall"
         fake_window = doc.copyObject(boundary)
         fake_window.IsHosted = True
         fake_window.LesoType = "Window"
@@ -591,6 +592,9 @@ def find_closest_edges(space: "SpaceFeature") -> None:
 
 def set_leso_type(space):
     for boundary in space.SecondLevel.Group:
+        # LesoType is defined in previous steps for curtain walls
+        if boundary.LesoType != "Unknown":
+            continue
         boundary.LesoType = define_leso_type(boundary)
 
 
