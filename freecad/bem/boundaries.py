@@ -12,7 +12,7 @@ import itertools
 import os
 from collections import namedtuple
 import typing
-from typing import NamedTuple, Iterable, List
+from typing import NamedTuple, Iterable, List, Optional
 
 import ifcopenshell
 import ifcopenshell.geom
@@ -633,7 +633,7 @@ def edge_distance_to_line(edge, line):
 def is_low_angle(edge1, edge2):
     dir1 = (edge1.Vertexes[1].Point - edge1.Vertexes[0].Point).normalize()
     dir2 = (edge2.Vertexes[1].Point - edge2.Vertexes[0].Point).normalize()
-    return abs(dir1.dot(dir2)) > 0.5  # Low angle considered as < 30°. cos(pi/3)=0.5.
+    return abs(dir1.dot(dir2)) > 0.866  # Low angle considered as < 30°. cos(pi/6)=0.866.
 
 
 def create_sia_boundaries(doc=FreeCAD.ActiveDocument):
@@ -647,6 +647,51 @@ def create_sia_boundaries(doc=FreeCAD.ActiveDocument):
         rejoin_boundaries(space, "SIA_Interior")
 
 
+def get_intersecting_line(boundary1, boundary2) -> Optional[Part.Line]:
+    plane_intersect = utils.get_plane(boundary1).intersectSS(utils.get_plane(boundary2))
+    return plane_intersect[0] if plane_intersect else None
+
+
+def get_medial_axis(boundary1, boundary2, ei1, ei2) -> Optional[Part.Line]:
+    line1 = utils.line_from_edge(utils.get_outer_wire(boundary1).Edges[ei1])
+    try:
+        line2 = utils.line_from_edge(utils.get_outer_wire(boundary2).Edges[ei2])
+    except IndexError:
+        logger.warning(
+            f"""Cannot find closest edge index <{ei2}> in boundary id <{boundary2.Id}>
+            to rejoin boundary <{boundary1.SourceBoundary}>"""
+        )
+        return None
+
+    # Case 2a : edges are not parallel
+    if abs(line1.Direction.dot(line2.Direction)) < 1 - TOLERANCE:
+        b1_plane = utils.get_plane(boundary1)
+        line_intersect = line1.intersect2d(line2, b1_plane)
+        if line_intersect:
+            point1 = b1_plane.value(*line_intersect[0])
+            if line1.Direction.dot(line2.Direction) > 0:
+                point2 = point1 + line1.Direction + line2.Direction
+            else:
+                point2 = point1 + line1.Direction - line2.Direction
+    # Case 2b : edges are parallel
+    else:
+        point1 = (line1.Location + line2.Location) * 0.5
+        point2 = point1 + line1.Direction
+
+    try:
+        return Part.Line(point1, point2)
+    except Part.OCCError:
+        logger.exception(
+            f"Failure in boundary id <{boundary1.SourceBoundary}> {point1} and {point2} are equal"
+        )
+        return None
+
+
+def is_valid_join(line, fallback_line):
+    """Angle < 15 ° is considered as valid join. cos(pi/6 ≈ 0.96)"""
+    return abs(line.Direction.dot(fallback_line.Direction)) > 0.96
+
+
 def rejoin_boundaries(space, sia_type):
     """
     Rejoin boundaries after their translation to get a correct close shell surfaces.
@@ -658,6 +703,7 @@ def rejoin_boundaries(space, sia_type):
     base_boundaries = space.SecondLevel.Group
     for base_boundary in base_boundaries:
         lines = []
+        fallback_lines = [utils.line_from_edge(edge) for edge in utils.get_outer_wire(base_boundary).Edges]
         boundary1 = getattr(base_boundary, sia_type)
         if (
             base_boundary.IsHosted
@@ -665,9 +711,10 @@ def rejoin_boundaries(space, sia_type):
             or not base_boundary.RelatedBuildingElement
         ):
             continue
+
         b1_plane = utils.get_plane(boundary1)
-        for b2_id, (ei1, ei2) in zip(
-            base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges)
+        for b2_id, (ei1, ei2), fallback_line in zip(
+            base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges), fallback_lines
         ):
             base_boundary2 = utils.get_in_list_by_id(base_boundaries, b2_id)
             boundary2 = getattr(base_boundary2, sia_type, None)
@@ -678,45 +725,19 @@ def rejoin_boundaries(space, sia_type):
                 )
                 continue
             # Case 1 : boundaries are not parallel
-            plane_intersect = b1_plane.intersectSS(utils.get_plane(boundary2))
-            if plane_intersect:
-                lines.append(plane_intersect[0])
+            line = get_intersecting_line(boundary1, boundary2)
+            if line:
+                if not is_valid_join(line, fallback_line):
+                    line = fallback_line
+                lines.append(line)
                 continue
             # Case 2 : boundaries are parallel
-            line1 = utils.line_from_edge(utils.get_outer_wire(boundary1).Edges[ei1])
-            try:
-                line2 = utils.line_from_edge(utils.get_outer_wire(boundary2).Edges[ei2])
-            except IndexError:
-                logger.warning(
-                    f"""Cannot find closest edge index <{ei2}> in boundary id <{b2_id}>
-                    to rejoin boundary <{base_boundary.Id}>"""
-                )
-                lines.append(
-                    utils.line_from_edge(utils.get_outer_wire(base_boundary).Edges[ei1])
-                )
+            line = get_medial_axis(boundary1, boundary2, ei1, ei2)
+            if line and is_valid_join(line, fallback_line):
+                lines.append(line)
                 continue
-
-            # Case 2a : edges are not parallel
-            if abs(line1.Direction.dot(line2.Direction)) < 1 - TOLERANCE:
-                line_intersect = line1.intersect2d(line2, b1_plane)
-                if line_intersect:
-                    point1 = b1_plane.value(*line_intersect[0])
-                    if line1.Direction.dot(line2.Direction) > 0:
-                        point2 = point1 + line1.Direction + line2.Direction
-                    else:
-                        point2 = point1 + line1.Direction - line2.Direction
-                        continue
-            # Case 2b : edges are parallel
-            else:
-                point1 = (line1.Location + line2.Location) * 0.5
-                point2 = point1 + line1.Direction
-
-            try:
-                lines.append(Part.Line(point1, point2))
-            except Part.OCCError:
-                logger.exception(
-                    f"Failure in boundary id <{base_boundary.Id}> {point1} and {point2} are equal"
-                )
+            
+            lines.append(fallback_line)
 
         # Generate new shape
         try:
