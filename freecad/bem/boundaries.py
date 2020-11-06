@@ -281,7 +281,8 @@ class CommonSegment(NamedTuple):
 
 def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     """Try to join coplanar boundaries"""
-    boundary1 = boundaries.pop()
+    boundary1 = max(boundaries, key=lambda x: x.Area)
+    boundaries.remove(boundary1)
     remove_from_doc = list()
 
     def find_common_segment(wire1, wire2):
