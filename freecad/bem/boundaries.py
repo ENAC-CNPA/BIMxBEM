@@ -215,7 +215,7 @@ def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
     elements_dict = dict()
     for rel_boundary in boundaries:
         try:
-            key = f"{rel_boundary.RelatedBuildingElement.Id}"
+            key = f"{rel_boundary.RelatedBuildingElement.Id}_{rel_boundary.InternalOrExternalBoundary}"
         except AttributeError:
             if rel_boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
                 logger.info("IfcElement %s is VIRTUAL. Modeling error ?")
@@ -763,24 +763,27 @@ def create_sia_ext_boundaries(space, is_from_revit):
         if not boundary1.RelatedBuildingElement:
             continue
         thickness = boundary1.RelatedBuildingElement.Thickness.Value
-        ifc_type = boundary1.RelatedBuildingElement.IfcType
+        leso_type = boundary1.LesoType
         normal = boundary1.Normal
         # EXTERNAL: there is multiple possible values for external so testing internal is better.
         if boundary1.InternalOrExternalBoundary != "INTERNAL":
-            lenght = thickness
-            if is_from_revit and ifc_type.startswith("IfcWall"):
-                lenght /= 2
-            bem_boundary.Placement.move(normal * lenght)
+            distance = thickness
+            if is_from_revit and leso_type == "Wall":
+                distance /= 2
+            bem_boundary.Placement.move(normal * distance)
         # INTERNAL. TODO: Check during tests if NOTDEFINED case need to be handled ?
         else:
-            type1 = {"IfcSlab"}
-            if ifc_type in type1:
-                lenght = thickness / 2
-            else:
+            if leso_type == "Flooring":
+                continue
+            if leso_type == "Ceiling":
                 if is_from_revit:
                     continue
-                lenght = thickness / 2
-            bem_boundary.Placement.move(normal * lenght)
+                distance = thickness
+            else:  # Walls
+                if is_from_revit:
+                    continue
+                distance = thickness / 2
+            bem_boundary.Placement.move(normal * distance)
 
 
 def create_sia_int_boundaries(space, is_from_revit):
@@ -799,11 +802,17 @@ def create_sia_int_boundaries(space, is_from_revit):
         if not boundary.RelatedBuildingElement:
             continue
 
-        ifc_type = boundary.RelatedBuildingElement.IfcType
-        if is_from_revit and ifc_type.startswith("IfcWall"):
+        leso_type = boundary.LesoType
+        if is_from_revit:
+            if leso_type == "Flooring":
+                continue
             thickness = boundary.RelatedBuildingElement.Thickness.Value
-            lenght = thickness / 2
-            bem_boundary.Placement.move(normal.negative() * lenght)
+            move_dir = - normal
+            if leso_type == "Wall":
+                distance = thickness / 2
+            if leso_type == "Ceiling" and boundary.InternalOrExternalBoundary == "INTERNAL":
+                distance = thickness
+            bem_boundary.Placement.move(move_dir * distance)
 
 
 class XmlResult(NamedTuple):
@@ -873,7 +882,7 @@ if __name__ == "__main__":
         29: "3196 Aalseth Lane_R19_bem.ifc",
         30: "Maison Privée.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[7])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[8])
     DOC = FreeCAD.ActiveDocument
 
     if DOC:  # Remote debugging
