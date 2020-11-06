@@ -12,7 +12,7 @@ import itertools
 import os
 from collections import namedtuple
 import typing
-from typing import NamedTuple, Iterable, List, Optional
+from typing import NamedTuple, Iterable, List, Optional, Dict
 
 import ifcopenshell
 import ifcopenshell.geom
@@ -208,11 +208,7 @@ def output_xml_to_path(bem_xml, xml_path=None):
     bem_xml.write_to_file(xml_path)
 
 
-def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
-    boundaries = space.SecondLevel.Group
-    # Considered as the minimal size for an oversplit to occur (1 ceiling, 3 wall, 1 flooring)
-    if len(boundaries) <= 5:
-        return
+def group_by_shared_element(boundaries) -> Dict[str, List["boundary"]]:
     elements_dict = dict()
     for rel_boundary in boundaries:
         try:
@@ -229,6 +225,31 @@ def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
         if corresponding_boundary:
             key += str(corresponding_boundary.Id)
         elements_dict.setdefault(key, []).append(rel_boundary)
+    return elements_dict
+
+
+def group_coplanar_boundaries(boundary_list) -> List[List["boundary"]]:
+    coplanar_boundaries = list()
+    for boundary in boundary_list:
+        if not coplanar_boundaries:
+            coplanar_boundaries.append([boundary])
+            continue
+        for coplanar_list in coplanar_boundaries:
+            # TODO: Test if comparison is not too strict considering precision
+            if utils.is_coplanar(boundary, coplanar_list[0]):
+                coplanar_list.append(boundary)
+                break
+        else:
+            coplanar_boundaries.append([boundary])
+    return coplanar_boundaries
+
+
+def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
+    boundaries = space.SecondLevel.Group
+    # Considered as the minimal size for an oversplit to occur (1 ceiling, 3 wall, 1 flooring)
+    if len(boundaries) <= 5:
+        return
+    elements_dict = group_by_shared_element(boundaries)
     for key, boundary_list in elements_dict.items():
         # None coplanar boundaries should not be connected.
         # eg. round wall splitted with multiple orientations.
@@ -237,26 +258,15 @@ def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
         if len(boundary_list) == 1:
             continue
 
-        coplanar_boundaries = list([])
-        for boundary in boundary_list:
-            if not coplanar_boundaries:
-                coplanar_boundaries.append([boundary])
-                continue
-            for coplanar_list in coplanar_boundaries:
-                # TODO: Test if this test is not too strict considering precision
-                if utils.is_coplanar(boundary, coplanar_list[0]):
-                    coplanar_list.append(boundary)
-                    break
-            else:
-                coplanar_boundaries.append([boundary])
+        coplanar_groups = group_coplanar_boundaries(boundary_list)
 
-        for coplanar_list in coplanar_boundaries:
+        for group in coplanar_groups:
             # Case 1 : only 1 boundary related to the same element. Cannot group boundaries.
-            if len(coplanar_list) == 1:
+            if len(group) == 1:
                 continue
             # Case 2 : more than 1 boundary related to the same element might be grouped.
             try:
-                join_coplanar_boundaries(coplanar_list, doc)
+                join_coplanar_boundaries(group, doc)
             except Part.OCCError:
                 logger.warning(
                     f"Cannot join boundaries in space <{space.Id}> with key <{key}>"
@@ -357,7 +367,7 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
 
         return True
 
-    while True:
+    while True and boundaries:
         for boundary2 in boundaries:
             if join_boundaries(boundary1, boundary2):
                 boundaries.remove(boundary2)
@@ -366,7 +376,7 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
         else:
             logger.warning(
                 f"""Unable to join boundaries RelSpaceBoundary Id <{boundary1.Id}>
-                with boundaries <{(b.Id for b in boundaries)}>"""
+                with boundaries <{", ".join(str(b.Id) for b in boundaries)}>"""
             )
             break
 
