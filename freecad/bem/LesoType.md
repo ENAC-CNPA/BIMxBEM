@@ -17,8 +17,8 @@ généralement IfcOpeningElement ou IfcVirtualElement (IFC4) ou inexistant (surf
 une surface virtuelle.
 
 Cas spéciaux :
-* Murs rideaux : ce type doit être converti en mur contenant une fenêtre occupant 100% de la 
-surface. (Cas pas encore traité, à discuter).
+* Murs rideaux : ce type est converti en mur contenant une fenêtre occupant 100% de la 
+surface.
 
 Schéma explicatif :
 ![](LesoType.svg)
