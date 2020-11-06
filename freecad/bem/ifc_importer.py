@@ -466,8 +466,9 @@ def associate_inner_boundaries(fc_boundaries, doc):
         try:
             host_element = candidates.pop()
         except KeyError:
-            logger.warning(
-                f"RelSpaceBoundary Id<{fc_boundary.Id}> is hosted but host not found. Investigations required."
+            # Common issue with both ArchiCAD and Revit
+            logger.info(
+                f"RelSpaceBoundary Id<{fc_boundary.Id}> is hosted but host not found."
             )
             continue
         fc_boundary.ParentBoundary = host_element.Id
