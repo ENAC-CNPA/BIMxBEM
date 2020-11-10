@@ -525,7 +525,10 @@ def associate_corresponding_boundary(fc_boundary, doc):
     except NameError:
         # Considering test above. Assume that it has been missclassified but log the issue.
         fc_boundary.InternalOrExternalBoundary = "EXTERNAL"
-        logger.warning(f"Boundary {fc_boundary.GlobalId} from space {fc_boundary}")
+        logger.warning(
+            f"""
+    No corresponding boundary found for {fc_boundary.Label} from space {fc_boundary.RelatingSpace}.
+    Assigning to EXTERNAL assuming it was missclassified as INTERNAL""")
         return
 
 

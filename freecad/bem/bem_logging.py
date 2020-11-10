@@ -11,7 +11,7 @@ Author : Cyril Waechter
 import io
 import logging
 
-LOG_FORMAT = "{levelname} {asctime} {funcName}-{message}"
+LOG_FORMAT = "{levelname} {asctime} [{funcName}] {message}"
 LOG_STREAM = io.StringIO()
 logging.basicConfig(
     stream=LOG_STREAM, level=logging.WARNING, format=LOG_FORMAT, style="{"
