@@ -493,6 +493,12 @@ def clean_corresponding_candidates(fc_boundary, doc):
     ]
 
 
+def seems_too_smal(boundary) -> bool:
+    """considered as too small if width or heigth < 100 mm"""
+    uv_nodes = boundary.Shape.Faces[0].getUVNodes()
+    return min(abs(n_2 - n_1) for n_1, n_2 in zip(uv_nodes[0], uv_nodes[2])) < 100
+
+
 def associate_corresponding_boundary(fc_boundary, doc):
     """Associate corresponding boundaries according to IFC definition.
 
@@ -506,6 +512,7 @@ def associate_corresponding_boundary(fc_boundary, doc):
     ):
         return
 
+    corresponding_boundary = None
     other_boundaries = clean_corresponding_candidates(fc_boundary, doc)
     if len(other_boundaries) == 1:
         corresponding_boundary = other_boundaries[0]
@@ -519,17 +526,22 @@ def associate_corresponding_boundary(fc_boundary, doc):
             if distance < min_lenght:
                 min_lenght = distance
                 corresponding_boundary = boundary
-    try:
+    if corresponding_boundary:
         fc_boundary.CorrespondingBoundary = corresponding_boundary
         corresponding_boundary.CorrespondingBoundary = fc_boundary
-    except NameError:
+    elif fc_boundary.PhysicalOrVirtualBoundary == "VIRTUAL" and seems_too_smal(fc_boundary):
+        logger.warning(
+            f"""
+    Boundary {fc_boundary.Label} from space {fc_boundary.RelatingSpace} has been removed.
+    It is VIRTUAL, INTERNAL, thin and has no corresponding boundary. It looks like a parasite.""")
+        doc.removeObject(fc_boundary.Name)
+    else:
         # Considering test above. Assume that it has been missclassified but log the issue.
         fc_boundary.InternalOrExternalBoundary = "EXTERNAL"
         logger.warning(
             f"""
     No corresponding boundary found for {fc_boundary.Label} from space {fc_boundary.RelatingSpace}.
     Assigning to EXTERNAL assuming it was missclassified as INTERNAL""")
-        return
 
 
 def get_or_create_group(name, doc=FreeCAD.ActiveDocument):
