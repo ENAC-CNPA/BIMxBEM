@@ -23,6 +23,7 @@ import Part
 from freecad.bem import materials
 from freecad.bem import utils
 from freecad.bem.bem_logging import logger
+from freecad.bem.progress import progress
 from freecad.bem.entities import (
     RelSpaceBoundary,
     Element,
@@ -154,6 +155,7 @@ class IfcImporter:
         doc = self.doc
 
         # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
+        progress.set(20, "IfcImport_Elements", "")
         elements_group = get_or_create_group("Elements", doc)
         ifc_elements = (
             e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries
@@ -164,17 +166,19 @@ class IfcImporter:
         for material in get_materials(doc):
             materials_group.addObject(material)
         # Generate projects structure and boundaries
+        progress.set(25, "IfcImport_StructureAndBoundaries", "")
         for ifc_project in ifc_file.by_type("IfcProject"):
             project = Project.create_from_ifc(ifc_project, self)
             self.generate_containers(ifc_project, project)
 
+        progress.set(30, "IfcImporter_EnrichingDatas", "")
         # Associate CorrespondingBoundary
         associate_corresponding_boundaries(doc)
 
         # Associate Host / Hosted elements
         associate_host_element(ifc_file, elements_group)
 
-        # Associate hosted elements an fill gaps
+        # Associate hosted elements
         for fc_space in get_elements_by_ifctype("IfcSpace", doc):
             fc_boundaries = fc_space.SecondLevel.Group
             # Minimal number of boundary is 5: 3 vertical faces, 2 horizontal faces

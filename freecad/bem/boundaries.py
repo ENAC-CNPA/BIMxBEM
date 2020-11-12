@@ -26,6 +26,7 @@ import Part
 from freecad.bem import materials
 from freecad.bem.bem_xml import BEMxml
 from freecad.bem.bem_logging import logger, LOG_STREAM
+from freecad.bem.progress import progress
 from freecad.bem import utils
 from freecad.bem.entities import (
     RelSpaceBoundary,
@@ -43,6 +44,7 @@ if typing.TYPE_CHECKING:
 
 def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
     """Create SIA specific boundaries cf. https://www.sia.ch/fr/services/sia-norm/"""
+    progress.set(35, "ProcessingSIABoundaries_Prepare", "")
     for space in utils.get_elements_by_ifctype("IfcSpace", doc):
         ensure_hosted_element_are(space)
         ensure_hosted_are_coplanar(space)
@@ -53,8 +55,10 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
         find_closest_edges(space)
         set_leso_type(space)
         ensure_external_earth_is_set(space, doc)
+    progress.set(45, "ProcessingSIABoundaries_Create", "")
     create_sia_boundaries(doc)
     doc.recompute()
+    progress.set(75, "ProcessingSIABoundaries_Communicate", "")
 
 
 def ensure_external_earth_is_set(space: "SpaceFeature", doc=FreeCAD.ActiveDocument):
