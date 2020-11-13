@@ -26,7 +26,7 @@ import Part
 from freecad.bem import materials
 from freecad.bem.bem_xml import BEMxml
 from freecad.bem.bem_logging import logger, LOG_STREAM
-from freecad.bem.progress import progress
+from freecad.bem.progress import Progress
 from freecad.bem import utils
 from freecad.bem.entities import (
     RelSpaceBoundary,
@@ -44,7 +44,7 @@ if typing.TYPE_CHECKING:
 
 def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
     """Create SIA specific boundaries cf. https://www.sia.ch/fr/services/sia-norm/"""
-    progress.set(35, "ProcessingSIABoundaries_Prepare", "")
+    Progress.set(30, "ProcessingSIABoundaries_Prepare", "")
     for space in utils.get_elements_by_ifctype("IfcSpace", doc):
         ensure_hosted_element_are(space)
         ensure_hosted_are_coplanar(space)
@@ -55,10 +55,9 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
         find_closest_edges(space)
         set_leso_type(space)
         ensure_external_earth_is_set(space, doc)
-    progress.set(45, "ProcessingSIABoundaries_Create", "")
+    Progress.set(70, "ProcessingSIABoundaries_Create", "")
     create_sia_boundaries(doc)
     doc.recompute()
-    progress.set(75, "ProcessingSIABoundaries_Communicate", "")
 
 
 def ensure_external_earth_is_set(space: "SpaceFeature", doc=FreeCAD.ActiveDocument):
@@ -861,12 +860,20 @@ class XmlResult(NamedTuple):
 
 
 def generate_bem_xml_from_file(ifc_path: str) -> XmlResult:
+    try:
+        import pyCaller
+        Progress.progress_func = pyCaller.SetProgress
+    except ImportError:
+        pass
+    Progress.set(0, "IfcImport_OpenIfcFile", "")
     ifc_importer = IfcImporter(ifc_path)
     ifc_importer.generate_rel_space_boundaries()
     doc = ifc_importer.doc
     processing_sia_boundaries(doc)
+    Progress.set(90, "Communicate_Write", "")
     xml_str = write_xml(doc).tostring()
     log_str = LOG_STREAM.getvalue()
+    Progress.set(100, "Communicate_Send", "")
     return XmlResult(xml_str, log_str)
 
 

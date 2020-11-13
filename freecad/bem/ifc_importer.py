@@ -23,7 +23,7 @@ import Part
 from freecad.bem import materials
 from freecad.bem import utils
 from freecad.bem.bem_logging import logger
-from freecad.bem.progress import progress
+from freecad.bem.progress import Progress
 from freecad.bem.entities import (
     RelSpaceBoundary,
     Element,
@@ -155,7 +155,7 @@ class IfcImporter:
         doc = self.doc
 
         # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
-        progress.set(20, "IfcImport_Elements", "")
+        Progress.set(1, "IfcImport_Elements", "")
         elements_group = get_or_create_group("Elements", doc)
         ifc_elements = (
             e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries
@@ -166,12 +166,12 @@ class IfcImporter:
         for material in get_materials(doc):
             materials_group.addObject(material)
         # Generate projects structure and boundaries
-        progress.set(25, "IfcImport_StructureAndBoundaries", "")
+        Progress.set(5, "IfcImport_StructureAndBoundaries", "")
         for ifc_project in ifc_file.by_type("IfcProject"):
             project = Project.create_from_ifc(ifc_project, self)
             self.generate_containers(ifc_project, project)
 
-        progress.set(30, "IfcImporter_EnrichingDatas", "")
+        Progress.set(15, "IfcImporter_EnrichingDatas", "")
         # Associate CorrespondingBoundary
         associate_corresponding_boundaries(doc)
 
