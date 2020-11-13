@@ -109,6 +109,7 @@ class BEMxml:
     def write_boundary(self, fc_object: "RelSpaceBoundaryFeature") -> None:
         boundary = ET.SubElement(self.boundaries, "Boundary")
         self.write_root_attrib(boundary, fc_object)
+        ET.SubElement(boundary, "Normal", unitary_vector_to_dict(fc_object.Normal))
 
         id_references = (
             "CorrespondingBoundary",
