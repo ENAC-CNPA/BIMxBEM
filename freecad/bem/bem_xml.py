@@ -128,11 +128,11 @@ class BEMxml:
             self.append_text_element(boundary, fc_object, name)
 
         ET.SubElement(boundary, "ParentBoundary").text = (
-            str(fc_object.ParentBoundary) if fc_object.ParentBoundary else ""
+            str(fc_object.ParentBoundary.Id) if fc_object.ParentBoundary else ""
         )
 
         ET.SubElement(boundary, "RelatingSpace").text = (
-            str(fc_object.RelatingSpace) if fc_object.RelatingSpace else ""
+            str(fc_object.RelatingSpace.Id) if fc_object.RelatingSpace else ""
         )
 
         inner_boundaries = ET.SubElement(boundary, "InnerBoundaries")
@@ -161,8 +161,8 @@ class BEMxml:
             fc_object.ThermalTransmittance or ""
         )
         boundaries = ET.SubElement(building_element, "ProvidesBoundaries")
-        for element_id in fc_object.ProvidesBoundaries:
-            ET.SubElement(boundaries, "Id").text = str(element_id)
+        for element in fc_object.ProvidesBoundaries:
+            ET.SubElement(boundaries, "Id").text = str(element.Id)
         if fc_object.Material:
             ET.SubElement(building_element, "Material").text = str(
                 fc_object.Material.Id or ""

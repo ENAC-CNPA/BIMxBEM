@@ -157,7 +157,7 @@ def handle_curtain_walls(space, doc) -> None:
         fake_window = doc.copyObject(boundary)
         fake_window.IsHosted = True
         fake_window.LesoType = "Window"
-        fake_window.ParentBoundary = boundary.Id
+        fake_window.ParentBoundary = boundary
         fake_window.GlobalId = ifcopenshell.guid.new()
         fake_window.Id = IfcId.new(doc)
         RelSpaceBoundary.set_label(fake_window)
@@ -360,7 +360,7 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
         if not boundary1.IsHosted:
             for inner_boundary in boundary2.InnerBoundaries:
                 utils.append(boundary1, "InnerBoundaries", inner_boundary)
-                inner_boundary.ParentBoundary = boundary1.Id
+                inner_boundary.ParentBoundary = boundary1
 
         # Update shape
         utils.clean_vectors(vectors1)
@@ -481,7 +481,7 @@ def ensure_hosted_element_are(space):
         except HostNotFound as err:
             logger.exception(err)
         boundary.IsHosted = True
-        boundary.ParentBoundary = host.Id
+        boundary.ParentBoundary = host
         utils.append(host, "InnerBoundaries", boundary)
 
 
@@ -677,7 +677,7 @@ def get_medial_axis(boundary1, boundary2, ei1, ei2) -> Optional[Part.Line]:
     except IndexError:
         logger.warning(
             f"""Cannot find closest edge index <{ei2}> in boundary id <{boundary2.Id}>
-            to rejoin boundary <{boundary1.SourceBoundary}>"""
+            to rejoin boundary <{boundary1.SourceBoundary.Id}>"""
         )
         return None
 
@@ -700,7 +700,7 @@ def get_medial_axis(boundary1, boundary2, ei1, ei2) -> Optional[Part.Line]:
         return Part.Line(point1, point2)
     except Part.OCCError:
         logger.exception(
-            f"Failure in boundary id <{boundary1.SourceBoundary}> {point1} and {point2} are equal"
+            f"Failure in boundary id <{boundary1.SourceBoundary.Id}> {point1} and {point2} are equal"
         )
         return None
 
@@ -754,7 +754,7 @@ def rejoin_boundaries(space, sia_type):
             if line and is_valid_join(line, fallback_line):
                 lines.append(line)
                 continue
-            
+
             lines.append(fallback_line)
 
         # Generate new shape

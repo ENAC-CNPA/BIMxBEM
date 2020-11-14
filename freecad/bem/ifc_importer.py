@@ -298,6 +298,7 @@ class IfcImporter:
                 fc_boundary = RelSpaceBoundary.create_from_ifc(
                     ifc_entity=ifc_boundary, ifc_importer=self
                 )
+                fc_boundary.RelatingSpace = fc_space
                 second_levels.addObject(fc_boundary)
                 fc_boundary.Placement = space_placement
             except utils.ShapeCreationError:
@@ -444,14 +445,14 @@ def associate_host_element(ifc_file, elements_group):
         if ifc_entity.FillsVoids:
             try:
                 host = utils.get_element_by_guid(
-                utils.get_host_guid(ifc_entity), elements_group
-            )
+                    utils.get_host_guid(ifc_entity), elements_group
+                )
             except LookupError as err:
                 logger.exception(err)
                 continue
             hosted = utils.get_element_by_guid(ifc_entity.GlobalId, elements_group)
             utils.append(host, "HostedElements", hosted)
-            hosted.HostElement = host.Id
+            hosted.HostElement = host
 
 
 def associate_inner_boundaries(fc_boundaries, doc):
@@ -460,9 +461,7 @@ def associate_inner_boundaries(fc_boundaries, doc):
         if not fc_boundary.IsHosted:
             continue
         candidates = set(fc_boundaries).intersection(
-            utils.get_boundaries_by_element_id(
-                fc_boundary.RelatedBuildingElement.HostElement, doc
-            )
+            fc_boundary.RelatedBuildingElement.HostElement.ProvidesBoundaries
         )
 
         # If there is more than 1 candidate it doesn't really matter
@@ -475,7 +474,7 @@ def associate_inner_boundaries(fc_boundaries, doc):
                 f"RelSpaceBoundary Id<{fc_boundary.Id}> is hosted but host not found."
             )
             continue
-        fc_boundary.ParentBoundary = host_element.Id
+        fc_boundary.ParentBoundary = host_element
         utils.append(host_element, "InnerBoundaries", fc_boundary)
 
 
@@ -503,7 +502,7 @@ def seems_too_smal(boundary) -> bool:
     return min(abs(n_2 - n_1) for n_1, n_2 in zip(uv_nodes[0], uv_nodes[2])) < 100
 
 
-def associate_corresponding_boundary(fc_boundary, doc):
+def associate_corresponding_boundary(boundary, doc):
     """Associate corresponding boundaries according to IFC definition.
 
     Reference to the other space boundary of the pair of two space boundaries on either side of a
@@ -511,17 +510,17 @@ def associate_corresponding_boundary(fc_boundary, doc):
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcrelspaceboundary2ndlevel.htm
     """
     if (
-        fc_boundary.InternalOrExternalBoundary != "INTERNAL"
-        or fc_boundary.CorrespondingBoundary
+        boundary.InternalOrExternalBoundary != "INTERNAL"
+        or boundary.CorrespondingBoundary
     ):
         return
 
     corresponding_boundary = None
-    other_boundaries = clean_corresponding_candidates(fc_boundary, doc)
+    other_boundaries = clean_corresponding_candidates(boundary, doc)
     if len(other_boundaries) == 1:
         corresponding_boundary = other_boundaries[0]
     else:
-        center_of_mass = utils.get_outer_wire(fc_boundary).CenterOfMass
+        center_of_mass = utils.get_outer_wire(boundary).CenterOfMass
         min_lenght = 10000  # No element has 10 m thickness
         for boundary in other_boundaries:
             distance = center_of_mass.distanceToPoint(
@@ -531,21 +530,23 @@ def associate_corresponding_boundary(fc_boundary, doc):
                 min_lenght = distance
                 corresponding_boundary = boundary
     if corresponding_boundary:
-        fc_boundary.CorrespondingBoundary = corresponding_boundary
-        corresponding_boundary.CorrespondingBoundary = fc_boundary
-    elif fc_boundary.PhysicalOrVirtualBoundary == "VIRTUAL" and seems_too_smal(fc_boundary):
+        boundary.CorrespondingBoundary = corresponding_boundary
+        corresponding_boundary.CorrespondingBoundary = boundary
+    elif boundary.PhysicalOrVirtualBoundary == "VIRTUAL" and seems_too_smal(boundary):
         logger.warning(
             f"""
-    Boundary {fc_boundary.Label} from space {fc_boundary.RelatingSpace} has been removed.
-    It is VIRTUAL, INTERNAL, thin and has no corresponding boundary. It looks like a parasite.""")
-        doc.removeObject(fc_boundary.Name)
+    Boundary {boundary.Label} from space {boundary.RelatingSpace.Id} has been removed.
+    It is VIRTUAL, INTERNAL, thin and has no corresponding boundary. It looks like a parasite."""
+        )
+        doc.removeObject(boundary.Name)
     else:
         # Considering test above. Assume that it has been missclassified but log the issue.
-        fc_boundary.InternalOrExternalBoundary = "EXTERNAL"
+        boundary.InternalOrExternalBoundary = "EXTERNAL"
         logger.warning(
             f"""
-    No corresponding boundary found for {fc_boundary.Label} from space {fc_boundary.RelatingSpace}.
-    Assigning to EXTERNAL assuming it was missclassified as INTERNAL""")
+    No corresponding boundary found for {boundary.Label} from space {boundary.RelatingSpace.Id}.
+    Assigning to EXTERNAL assuming it was missclassified as INTERNAL"""
+        )
 
 
 def get_or_create_group(name, doc=FreeCAD.ActiveDocument):

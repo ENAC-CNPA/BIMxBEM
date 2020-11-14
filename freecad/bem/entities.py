@@ -149,7 +149,7 @@ class RelSpaceBoundary(Root):
         super()._init_properties(obj)
         bem_category = "BEM"
         ifc_attributes = "IFC Attributes"
-        obj.addProperty("App::PropertyInteger", "RelatingSpace", ifc_attributes)
+        obj.addProperty("App::PropertyLinkHidden", "RelatingSpace", ifc_attributes)
         obj.addProperty("App::PropertyLink", "RelatedBuildingElement", ifc_attributes)
         obj.addProperty(
             "App::PropertyEnumeration", "PhysicalOrVirtualBoundary", ifc_attributes
@@ -164,8 +164,8 @@ class RelSpaceBoundary(Root):
             "EXTERNAL_FIRE",
             "NOTDEFINED",
         ]
-        obj.addProperty("App::PropertyLink", "CorrespondingBoundary", ifc_attributes)
-        obj.addProperty("App::PropertyInteger", "ParentBoundary", ifc_attributes)
+        obj.addProperty("App::PropertyLinkHidden", "CorrespondingBoundary", ifc_attributes)
+        obj.addProperty("App::PropertyLinkHidden", "ParentBoundary", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "InnerBoundaries", ifc_attributes)
         obj.addProperty("App::PropertyVector", "Normal", bem_category)
         obj.addProperty("App::PropertyLength", "UndergroundDepth", bem_category)
@@ -196,8 +196,7 @@ class RelSpaceBoundary(Root):
         element = get_related_element(ifc_entity, ifc_importer.doc)
         if element:
             obj.RelatedBuildingElement = element
-            utils.append(element, "ProvidesBoundaries", obj.Id)
-        obj.RelatingSpace = ifc_entity.RelatingSpace.id()
+            utils.append(element, "ProvidesBoundaries", obj)
         obj.InternalOrExternalBoundary = ifc_entity.InternalOrExternalBoundary
         obj.PhysicalOrVirtualBoundary = ifc_entity.PhysicalOrVirtualBoundary
         try:
@@ -286,11 +285,11 @@ class Element(Root):
         obj.addProperty("App::PropertyLinkList", "FillsVoids", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "HasOpenings", ifc_attributes)
         obj.addProperty(
-            "App::PropertyIntegerList", "ProvidesBoundaries", ifc_attributes
+            "App::PropertyLinkListHidden", "ProvidesBoundaries", ifc_attributes
         )
         obj.addProperty("App::PropertyFloat", "ThermalTransmittance", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "HostedElements", bem_category)
-        obj.addProperty("App::PropertyInteger", "HostElement", bem_category)
+        obj.addProperty("App::PropertyLinkHidden", "HostElement", bem_category)
         obj.addProperty("App::PropertyLength", "Thickness", bem_category)
 
     @classmethod
@@ -314,8 +313,8 @@ class BEMBoundary:
         self.Type = "BEMBoundary"  # pylint: disable=invalid-name
         obj.Proxy = self
         category_name = "BEM"
-        obj.addProperty("App::PropertyInteger", "SourceBoundary", category_name)
-        obj.SourceBoundary = boundary.Id
+        obj.addProperty("App::PropertyLinkHidden", "SourceBoundary", category_name)
+        obj.SourceBoundary = boundary
         obj.addProperty("App::PropertyArea", "Area", category_name)
         obj.addProperty("App::PropertyArea", "AreaWithHosted", category_name)
         obj.Shape = boundary.Shape.copy()

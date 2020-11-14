@@ -82,7 +82,7 @@ def generate_boundary_compound(
             b_id = (
                 boundary.Id
                 if isinstance(boundary.Proxy, Root)
-                else boundary.SourceBoundary
+                else boundary.SourceBoundary.Id
             )
             raise RuntimeError(
                 f"""Failure. An inner_wire did not cut face correctly in boundary <{b_id}>.
