@@ -155,6 +155,7 @@ class MaterialCreator:
         for material in materials:
             material_constituents.append(self.create_single(material))
         constituent_set.MaterialConstituents = material_constituents
+        self.obj.Material = constituent_set
 
     def get_type_name(self, ifc_element):
         if ifc_element.is_a("IfcTypeObject"):
