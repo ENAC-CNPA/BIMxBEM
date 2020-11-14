@@ -18,7 +18,9 @@ import Part
 from freecad.bem.entities import Root
 
 if typing.TYPE_CHECKING:
-    from freecad.bem.typing import RelSpaceBoundaryFeature  # pylint: disable=no-name-in-module, import-error
+    from freecad.bem.typing import (
+        RelSpaceBoundaryFeature,
+    )  # pylint: disable=no-name-in-module, import-error
 
 TOLERANCE = 0.001
 
@@ -144,8 +146,10 @@ def get_element_by_guid(guid, elements_group):
     for fc_element in getattr(elements_group, "Group", elements_group):
         if getattr(fc_element, "GlobalId", None) == guid:
             return fc_element
-    raise LookupError(f"""Unable to get element by {guid}.
-This error is known to occurs when you model 2 parallel walls instead of a multilayer wall.""")
+    raise LookupError(
+        f"""Unable to get element by {guid}.
+This error is known to occurs when you model 2 parallel walls instead of a multilayer wall."""
+    )
 
 
 def get_host_guid(ifc_entity):
@@ -253,7 +257,9 @@ def project_boundary_onto_plane(boundary, plane: Part.Plane):
     boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
 
 
-def are_3points_collinear(pt1: FreeCAD.Vector, pt2: FreeCAD.Vector, pt3: FreeCAD.Vector) -> bool:
+def are_3points_collinear(
+    pt1: FreeCAD.Vector, pt2: FreeCAD.Vector, pt3: FreeCAD.Vector
+) -> bool:
     for vec1, vec2 in itertools.combinations((pt1, pt2, pt3), 2):
         if vec1.isEqual(vec2, TOLERANCE):
             return True

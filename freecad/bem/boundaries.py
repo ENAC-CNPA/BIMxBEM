@@ -550,13 +550,15 @@ def find_closest_by_distance(boundary1, boundary2):
             continue
 
         compare_closest_edges(boundary1, ei1, edge1, boundary2, ei2, edge2)
-        compare_closest_edges(  # pylint: disable=arguments-out-of-order
+        compare_closest_edges(
             boundary2, ei2, edge2, boundary1, ei1, edge1
-        )
+        )  # pylint: disable=arguments-out-of-order
 
 
 def find_closest_by_intersection(boundary1, boundary2):
-    intersect_line = utils.get_plane(boundary1).intersectSS(utils.get_plane(boundary2))[0]
+    intersect_line = utils.get_plane(boundary1).intersectSS(utils.get_plane(boundary2))[
+        0
+    ]
     edges1 = utils.get_outer_wire(boundary1).Edges
     edges2 = utils.get_outer_wire(boundary2).Edges
     for (ei1, edge1), (ei2, edge2) in itertools.product(
@@ -651,7 +653,9 @@ def edge_distance_to_line(edge, line):
 def is_low_angle(edge1, edge2):
     dir1 = (edge1.Vertexes[1].Point - edge1.Vertexes[0].Point).normalize()
     dir2 = (edge2.Vertexes[1].Point - edge2.Vertexes[0].Point).normalize()
-    return abs(dir1.dot(dir2)) > 0.866  # Low angle considered as < 30°. cos(pi/6)=0.866.
+    return (
+        abs(dir1.dot(dir2)) > 0.866
+    )  # Low angle considered as < 30°. cos(pi/6)=0.866.
 
 
 def create_sia_boundaries(doc=FreeCAD.ActiveDocument):
@@ -721,7 +725,10 @@ def rejoin_boundaries(space, sia_type):
     base_boundaries = space.SecondLevel.Group
     for base_boundary in base_boundaries:
         lines = []
-        fallback_lines = [utils.line_from_edge(edge) for edge in utils.get_outer_wire(base_boundary).Edges]
+        fallback_lines = [
+            utils.line_from_edge(edge)
+            for edge in utils.get_outer_wire(base_boundary).Edges
+        ]
         boundary1 = getattr(base_boundary, sia_type)
         if (
             base_boundary.IsHosted
@@ -732,7 +739,9 @@ def rejoin_boundaries(space, sia_type):
 
         b1_plane = utils.get_plane(boundary1)
         for b2_id, (ei1, ei2), fallback_line in zip(
-            base_boundary.ClosestBoundaries, enumerate(base_boundary.ClosestEdges), fallback_lines
+            base_boundary.ClosestBoundaries,
+            enumerate(base_boundary.ClosestEdges),
+            fallback_lines,
         ):
             base_boundary2 = utils.get_in_list_by_id(base_boundaries, b2_id)
             boundary2 = getattr(base_boundary2, sia_type, None)
@@ -846,10 +855,13 @@ def create_sia_int_boundaries(space, is_from_revit):
             if leso_type == "Flooring":
                 continue
             thickness = boundary.RelatedBuildingElement.Thickness.Value
-            move_dir = - normal
+            move_dir = -normal
             if leso_type == "Wall":
                 distance = thickness / 2
-            if leso_type == "Ceiling" and boundary.InternalOrExternalBoundary == "INTERNAL":
+            if (
+                leso_type == "Ceiling"
+                and boundary.InternalOrExternalBoundary == "INTERNAL"
+            ):
                 distance = thickness
             else:
                 continue
@@ -864,6 +876,7 @@ class XmlResult(NamedTuple):
 def generate_bem_xml_from_file(ifc_path: str) -> XmlResult:
     try:
         import pyCaller
+
         Progress.progress_func = pyCaller.SetProgress
     except ImportError:
         pass

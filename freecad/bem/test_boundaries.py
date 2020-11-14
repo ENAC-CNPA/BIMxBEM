@@ -31,7 +31,6 @@ TEST_FILES = [
     "OverSplitted_R20_2x3.ifc",
     # "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
     # "Investigation_test_R19.ifc",
-    "ExternalEarth_R20_2x3.ifc",
     "ExternalEarth_R20_IFC4.ifc",
     # "Ersatzneubau Alphütte_1-1210_31_23.ifc",
     # "GRAPHISOFT_ARCHICAD_Sample_Project_Hillside_House_v1.ifczip",
