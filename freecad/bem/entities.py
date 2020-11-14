@@ -120,7 +120,9 @@ class Root:
         obj.Label = f"{obj.Id}_{obj.IfcName or obj.IfcType}"
 
     @staticmethod
-    def read_pset_from_ifc(obj: "RootFeature", ifc_entity, properties: Iterable[str]) -> None:
+    def read_pset_from_ifc(
+        obj: "RootFeature", ifc_entity, properties: Iterable[str]
+    ) -> None:
         psets = ifcopenshell.util.element.get_psets(ifc_entity)
         for pset in psets.values():
             for prop_name, prop in pset.items():
@@ -217,7 +219,9 @@ class RelSpaceBoundary(Root):
             obj.ViewObject.Proxy = 0
             obj.ViewObject.ShapeColor = get_color(ifc_entity)
 
-    def onChanged(self, obj: "RelSpaceBoundaryFeature", prop):  # pylint: disable=invalid-name
+    def onChanged(
+        self, obj: "RelSpaceBoundaryFeature", prop
+    ):  # pylint: disable=invalid-name
         if prop == "InnerBoundaries":
             self.recompute_area_with_hosted(obj)
 
@@ -304,7 +308,9 @@ class Element(Root):
 
 
 class BEMBoundary:
-    def __init__(self, obj: "BEMBoundaryFeature", boundary: "RelSpaceBoundaryFeature") -> None:
+    def __init__(
+        self, obj: "BEMBoundaryFeature", boundary: "RelSpaceBoundaryFeature"
+    ) -> None:
         self.Type = "BEMBoundary"  # pylint: disable=invalid-name
         obj.Proxy = self
         category_name = "BEM"
