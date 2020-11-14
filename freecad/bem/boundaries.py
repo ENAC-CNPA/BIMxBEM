@@ -851,6 +851,8 @@ def create_sia_int_boundaries(space, is_from_revit):
                 distance = thickness / 2
             if leso_type == "Ceiling" and boundary.InternalOrExternalBoundary == "INTERNAL":
                 distance = thickness
+            else:
+                continue
             bem_boundary.Placement.move(move_dir * distance)
 
 
@@ -904,6 +906,7 @@ if __name__ == "__main__":
         2: "2Storey_2x3_A22.ifc",
         3: "2Storey_2x3_R19.ifc",
         4: "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
+        5: "3196 Aalseth Lane_R21_bem_space5608.ifc",
         7: "OverSplitted_R20_2x3.ifc",
         8: "3196 Aalseth Lane_R21_bem.ifc",
         9: "ExternalEarth_R20_IFC4.ifc",
