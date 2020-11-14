@@ -393,8 +393,11 @@ class Project(Root):
     def read_from_ifc(cls, obj: "ProjectFeature", ifc_entity) -> None:
         super().read_from_ifc(obj, ifc_entity)
         obj.LongName = ifc_entity.LongName or ""
-        obj.TrueNorth = FreeCAD.Vector(
-            *ifc_entity.RepresentationContexts[0].TrueNorth.DirectionRatios
+        true_north = ifc_entity.RepresentationContexts[0].TrueNorth
+        obj.TrueNorth = (
+            FreeCAD.Vector(*true_north.DirectionRatios)
+            if true_north
+            else FreeCAD.Vector(0, 1)
         )
         obj.WorldCoordinateSystem = FreeCAD.Vector(
             ifc_entity.RepresentationContexts[
