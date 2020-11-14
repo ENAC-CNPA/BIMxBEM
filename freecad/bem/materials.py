@@ -9,6 +9,7 @@ See the LICENSE.TXT file for more details.
 Author : Cyril Waechter
 """
 import typing
+import ifcopenshell
 import FreeCAD
 
 if typing.TYPE_CHECKING:
@@ -40,6 +41,11 @@ class MaterialCreator:
         self.parse_associations(ifc_entity)
         if self.obj.Material:
             return
+        entity_type = ifcopenshell.util.element.get_type(ifc_entity)
+        if entity_type:
+            self.parse_associations(entity_type)
+            if self.obj.Material:
+                return
         # When an element is composed of multiple elements
         if ifc_entity.IsDecomposedBy:
             # TODO: See in a real case how to handle every part and not only the first
@@ -151,6 +157,8 @@ class MaterialCreator:
         constituent_set.MaterialConstituents = material_constituents
 
     def get_type_name(self, ifc_element):
+        if ifc_element.is_a("IfcTypeObject"):
+            return ifc_element.Name
         if ifc_element.ObjectType:
             return ifc_element.ObjectType
         for definition in ifc_element.IsDefinedBy:
