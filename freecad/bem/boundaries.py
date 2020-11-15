@@ -562,14 +562,14 @@ def find_closest_by_intersection(boundary1, boundary2):
     intersect_line = utils.get_plane(boundary1).intersectSS(utils.get_plane(boundary2))[
         0
     ]
+    boundaries_distance = boundary1.Shape.distToShape(boundary2.Shape)[0]
     edges1 = utils.get_outer_wire(boundary1).Edges
     edges2 = utils.get_outer_wire(boundary2).Edges
     for (ei1, edge1), (ei2, edge2) in itertools.product(
         enumerate(edges1), enumerate(edges2)
     ):
-        is_closest = False
-        distance1 = edge_distance_to_line(edge1, intersect_line)
-        distance2 = edge_distance_to_line(edge2, intersect_line)
+        distance1 = edge_distance_to_line(edge1, intersect_line) + boundaries_distance
+        distance2 = edge_distance_to_line(edge2, intersect_line) + boundaries_distance
 
         min_distance = boundary1.Proxy.closest[ei1].distance
         if distance1 < min_distance:
@@ -893,7 +893,7 @@ if __name__ == "__main__":
         2: "2Storey_2x3_A22.ifc",
         3: "2Storey_2x3_R19.ifc",
         4: "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
-        5: "3196 Aalseth Lane_R21_bem_space5608.ifc",
+        5: "3196 Aalseth Lane_R21_bem_space14578.ifc",
         7: "OverSplitted_R20_2x3.ifc",
         8: "3196 Aalseth Lane_R21_bem.ifc",
         9: "ExternalEarth_R20_IFC4.ifc",
