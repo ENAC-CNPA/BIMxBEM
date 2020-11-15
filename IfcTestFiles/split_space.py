@@ -1,5 +1,6 @@
 # coding: utf8
 """This patch extract a space and related component including boundaries into a new file"""
+from typing import List, Any
 import pathlib
 
 import ifcopenshell
@@ -13,10 +14,12 @@ class IfcPatch:
         self.space_id = space_id
         self.kwargs = kwargs
         self.new_file = None
+        self.elements: List[Any] = []
 
     def write_element(self, element):
-        if not element:
+        if not element or element in self.elements:
             return
+        self.elements.append(element)
         new_file = self.new_file
         new_file.add(element)
         for inverse in self.file.get_inverse(element):
@@ -25,8 +28,7 @@ class IfcPatch:
             if inverse.is_a("IfcRelAggregates"):
                 new_file.add(inverse)
                 for obj in inverse.RelatedObjects:
-                    if not obj == element:
-                        self.write_element(obj)
+                    self.write_element(obj)
             if not element.is_a("IfcTypeObject") and inverse.is_a(
                 "IfcRelDefinesByType"
             ):
@@ -72,7 +74,7 @@ class IfcPatch:
 def main():
     path = "IfcTestFiles/3196 Aalseth Lane_R21_bem.ifc"
     ifc_file = ifcopenshell.open(path)
-    IfcPatch(path, ifc_file, logger=None, space_id=5608).patch()
+    IfcPatch(path, ifc_file, logger=None, space_id=10042).patch()
 
 
 if __name__ == "__main__":
