@@ -681,8 +681,8 @@ def get_medial_axis(boundary1, boundary2, ei1, ei2) -> Optional[Part.Line]:
         line2 = utils.line_from_edge(utils.get_outer_wire(boundary2).Edges[ei2])
     except IndexError:
         logger.warning(
-            f"""Cannot find closest edge index <{ei2}> in boundary id <{boundary2.Id}>
-            to rejoin boundary <{boundary1.SourceBoundary.Id}>"""
+            f"""Cannot find closest edge index <{ei2}> in boundary <{boundary2.Label}>
+            to rejoin boundary <{boundary1.Label}>"""
         )
         return None
 
@@ -770,10 +770,6 @@ def rejoin_boundaries(space, sia_type):
         # Generate new shape
         try:
             outer_wire = utils.polygon_from_lines(lines, b1_plane)
-        except utils.NoIntersectionError:
-            # TODO: Investigate to see why this happens
-            logger.exception(f"Unable to rejoin boundary Id <{base_boundary.Id}>")
-            continue
         except Part.OCCError:
             logger.exception(
                 f"Invalid geometry while rejoining boundary Id <{base_boundary.Id}>"

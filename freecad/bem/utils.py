@@ -218,17 +218,12 @@ def line_from_edge(edge: Part.Edge) -> Part.Line:
 def polygon_from_lines(lines, base_plane):
     new_points = []
     for line1, line2 in zip(lines, lines[1:] + lines[:1]):
-        try:
-            # Need to ensure direction are not same to avoid crash
-            if abs(line1.Direction.dot(line2.Direction)) >= 1 - TOLERANCE:
-                continue
-            new_points.append(
-                base_plane.value(*line1.intersect2d(line2, base_plane)[0])
-            )
-        except IndexError:
-            raise NoIntersectionError
-    if len(new_points) < len(lines):
-        raise NoIntersectionError
+        # Need to ensure direction are not same to avoid crash
+        if abs(line1.Direction.dot(line2.Direction)) >= 1 - TOLERANCE:
+            continue
+        new_points.append(
+            base_plane.value(*line1.intersect2d(line2, base_plane)[0])
+        )
     new_points[0:0] = new_points[-1:]
     return Part.makePolygon(new_points)
 
@@ -273,10 +268,6 @@ def vectors_dir(pt1: FreeCAD.Vector, pt2: FreeCAD.Vector) -> FreeCAD.Vector:
 
 
 class IsTooSmall(BaseException):
-    pass
-
-
-class NoIntersectionError(IndexError):
     pass
 
 
