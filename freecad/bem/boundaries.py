@@ -126,6 +126,9 @@ def set_boundary_normal(space):
         face = min(
             faces, key=lambda x: x.Surface.projectPoint(center_of_mass, "LowerDistance")
         )
+        boundary.SpaceNearestVector = (
+            face.Surface.projectPoint(center_of_mass, "NearestPoint") - center_of_mass
+        )
         face_normal = face.normalAt(
             *face.Surface.projectPoint(center_of_mass, "LowerDistanceParameters")
         )
@@ -660,11 +663,9 @@ def is_low_angle(edge1, edge2):
 
 def create_sia_boundaries(doc=FreeCAD.ActiveDocument):
     """Create boundaries necessary for SIA calculations"""
-    project = next(utils.get_elements_by_ifctype("IfcProject", doc))
-    is_from_revit = project.ApplicationIdentifier == "Revit"
     for space in utils.get_elements_by_ifctype("IfcSpace", doc):
-        create_sia_ext_boundaries(space, is_from_revit)
-        create_sia_int_boundaries(space, is_from_revit)
+        create_sia_ext_boundaries(space)
+        create_sia_int_boundaries(space)
         rejoin_boundaries(space, "SIA_Exterior")
         rejoin_boundaries(space, "SIA_Interior")
 
@@ -797,7 +798,7 @@ def rejoin_boundaries(space, sia_type):
         boundary1.AreaWithHosted = area
 
 
-def create_sia_ext_boundaries(space, is_from_revit):
+def create_sia_ext_boundaries(space):
     """Create SIA boundaries from RelSpaceBoundaries and translate it if necessary"""
     sia_group_obj = space.Boundaries.newObject(
         "App::DocumentObjectGroup", "SIA_Exteriors"
@@ -816,25 +817,18 @@ def create_sia_ext_boundaries(space, is_from_revit):
         # EXTERNAL: there is multiple possible values for external so testing internal is better.
         if boundary1.InternalOrExternalBoundary != "INTERNAL":
             distance = thickness
-            if is_from_revit and leso_type == "Wall":
-                distance /= 2
-            bem_boundary.Placement.move(normal * distance)
-        # INTERNAL. TODO: Check during tests if NOTDEFINED case need to be handled ?
+        # INTERNAL
         else:
             if leso_type == "Flooring":
-                continue
-            if leso_type == "Ceiling":
-                if is_from_revit:
-                    continue
+                distance = 0
+            elif leso_type == "Ceiling":
                 distance = thickness
             else:  # Walls
-                if is_from_revit:
-                    continue
                 distance = thickness / 2
-            bem_boundary.Placement.move(normal * distance)
+        bem_boundary.Placement.move(normal * distance + boundary1.SpaceNearestVector)
 
 
-def create_sia_int_boundaries(space, is_from_revit):
+def create_sia_int_boundaries(space):
     """Create boundaries necessary for SIA calculations"""
     sia_group_obj = space.Boundaries.newObject(
         "App::DocumentObjectGroup", "SIA_Interiors"
@@ -843,29 +837,13 @@ def create_sia_int_boundaries(space, is_from_revit):
     for boundary in space.SecondLevel.Group:
         if boundary.IsHosted or boundary.PhysicalOrVirtualBoundary == "VIRTUAL":
             continue
-        normal = boundary.Normal
 
         bem_boundary = BEMBoundary.create(boundary, "SIA_Interior")
         sia_group_obj.addObject(bem_boundary)
-        if not boundary.RelatedBuildingElement:
-            continue
 
-        leso_type = boundary.LesoType
-        if is_from_revit:
-            if leso_type == "Flooring":
-                continue
-            thickness = boundary.RelatedBuildingElement.Thickness.Value
-            move_dir = -normal
-            if leso_type == "Wall":
-                distance = thickness / 2
-            if (
-                leso_type == "Ceiling"
-                and boundary.InternalOrExternalBoundary == "INTERNAL"
-            ):
-                distance = thickness
-            else:
-                continue
-            bem_boundary.Placement.move(move_dir * distance)
+        # Bad location in some software like Revit (last check : revit-ifc 21.1.0.0)
+        if not boundary.SpaceNearestVector.isEqual(FreeCAD.Vector(), TOLERANCE):
+            bem_boundary.Placement.move(boundary.SpaceNearestVector)
 
 
 class XmlResult(NamedTuple):
