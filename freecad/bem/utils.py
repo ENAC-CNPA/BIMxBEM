@@ -217,14 +217,16 @@ def line_from_edge(edge: Part.Edge) -> Part.Line:
 
 def polygon_from_lines(lines, base_plane):
     new_points = []
-    for line1, line2 in zip(lines, lines[1:] + lines[:1]):
-        # Need to ensure direction are not same to avoid crash
+    for li1, line1 in enumerate(lines):
+        li2 = li1 - 1
+        line2 = lines[li2]
+        # Need to ensure direction are not same to avoid crash in OCCT 7.4
         if abs(line1.Direction.dot(line2.Direction)) >= 1 - TOLERANCE:
             continue
         new_points.append(
             base_plane.value(*line1.intersect2d(line2, base_plane)[0])
         )
-    new_points[0:0] = new_points[-1:]
+    close_vectors(new_points)
     return Part.makePolygon(new_points)
 
 

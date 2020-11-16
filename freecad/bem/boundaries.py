@@ -117,6 +117,20 @@ def get_ground_bound_box(sites: Iterable["ContainerFeature"]) -> FreeCAD.BoundBo
     return boundbox if boundbox.isValid() else FreeCAD.BoundBox(0, 0, -30000, 0, 0, 0)
 
 
+def compute_face_distance(boundary, center_of_mass, face):
+    nearest_point = face.Surface.projectPoint(center_of_mass, "NearestPoint")
+    vec_from_space = center_of_mass - nearest_point
+    # Not automatically valid solution unless space face touch boundary (null vector)
+    if not vec_from_space.isEqual(FreeCAD.Vector(), TOLERANCE):
+        face_normal = face.normalAt(
+            *face.Surface.projectPoint(center_of_mass, "LowerDistanceParameters")
+        )
+        # Not valid face if its normal and vec_from_space do not point in same direction
+        if not vec_from_space.dot(face_normal) > 1 - TOLERANCE:
+            return 10000
+    return vec_from_space.Length
+
+
 def set_boundary_normal(space):
     faces = space.Shape.Faces
     for boundary in space.SecondLevel.Group:
@@ -124,7 +138,7 @@ def set_boundary_normal(space):
             continue
         center_of_mass = utils.get_outer_wire(boundary).CenterOfMass
         face = min(
-            faces, key=lambda x: x.Surface.projectPoint(center_of_mass, "LowerDistance")
+            faces, key=lambda x: compute_face_distance(boundary, center_of_mass, x)
         )
         boundary.SpaceNearestVector = (
             face.Surface.projectPoint(center_of_mass, "NearestPoint") - center_of_mass
