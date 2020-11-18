@@ -124,7 +124,9 @@ class FaceToBoundary:
         self.point_on_face = None
         self.point_on_boundary = None
         self.compute_shortest()
-        self.boundary_normal = utils.get_boundary_normal(boundary, self.point_on_boundary)
+        self.boundary_normal = utils.get_boundary_normal(
+            boundary, self.point_on_boundary
+        )
         self.face_normal = utils.get_face_normal(face, self.point_on_face)
         self.distance = self.vec_to_space.Length
 
@@ -154,6 +156,7 @@ class FaceToBoundary:
     @property
     def translation_to_face(self):
         return self.face_normal * self.face_normal.dot(self.vec_to_space)
+
 
 def set_face_to_boundary_info(space):
     faces = space.Shape.Faces
@@ -185,6 +188,11 @@ def handle_curtain_walls(space, doc) -> None:
     for boundary in space.SecondLevel.Group:
         if getattr(boundary.RelatedBuildingElement, "IfcType", "") != "IfcCurtainWall":
             continue
+        # Prevent Revit issue which produce curtain wall with an hole inside but no inner boundary
+        if not boundary.InnerBoundaries:
+            if len(boundary.Shape.SubShapes) > 2:
+                outer_wire = boundary.Shape.SubShapes[1]
+                utils.generate_boundary_compound(boundary, outer_wire, ())
         boundary.LesoType = "Wall"
         fake_window = doc.copyObject(boundary)
         fake_window.IsHosted = True
