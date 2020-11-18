@@ -49,7 +49,7 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
         ensure_hosted_element_are(space)
         ensure_hosted_are_coplanar(space)
         compute_space_area(space)
-        set_boundary_normal(space)
+        set_face_to_boundary_info(space)
         join_over_splitted_boundaries(space, doc)
         handle_curtain_walls(space, doc)
         find_closest_edges(space)
@@ -117,38 +117,53 @@ def get_ground_bound_box(sites: Iterable["ContainerFeature"]) -> FreeCAD.BoundBo
     return boundbox if boundbox.isValid() else FreeCAD.BoundBox(0, 0, -30000, 0, 0, 0)
 
 
-def compute_face_distance(boundary, center_of_mass, face):
-    nearest_point = face.Surface.projectPoint(center_of_mass, "NearestPoint")
-    vec_from_space = center_of_mass - nearest_point
-    # Not automatically valid solution unless space face touch boundary (null vector)
-    if not vec_from_space.isEqual(FreeCAD.Vector(), TOLERANCE):
-        face_normal = face.normalAt(
-            *face.Surface.projectPoint(center_of_mass, "LowerDistanceParameters")
+class FaceToBoundary:
+    def __init__(self, boundary, face):
+        self.boundary = boundary
+        self.face = face
+        self.point_on_face = None
+        self.point_on_boundary = None
+        self.compute_shortest()
+        self.boundary_normal = utils.get_boundary_normal(boundary, self.point_on_boundary)
+        self.face_normal = utils.get_face_normal(face, self.point_on_face)
+        self.distance = self.vec_to_space.Length
+
+    @property
+    def vec_to_space(self):
+        return self.point_on_face - self.point_on_boundary
+
+    def compute_shortest(self):
+        boundary_face = self.boundary.Shape.Faces[0]
+        min_dist = self.face.distToShape(boundary_face)
+        self.point_on_face = min_dist[1][0][0]
+        self.point_on_boundary = min_dist[1][0][1]
+
+    @property
+    def is_valid(self):
+        # Not valid face if its normal and boundary normal do not point in same direction
+        return abs(self.boundary_normal.dot(self.face_normal)) > 1 - TOLERANCE
+
+    @property
+    def fixed_normal(self):
+        return (
+            self.boundary_normal
+            if self.face_normal.dot(self.boundary_normal) > 0
+            else -self.boundary_normal
         )
-        # Not valid face if its normal and vec_from_space do not point in same direction
-        if not vec_from_space.dot(face_normal) > 1 - TOLERANCE:
-            return 10000
-    return vec_from_space.Length
 
+    @property
+    def translation_to_face(self):
+        return self.face_normal * self.face_normal.dot(self.vec_to_space)
 
-def set_boundary_normal(space):
+def set_face_to_boundary_info(space):
     faces = space.Shape.Faces
     for boundary in space.SecondLevel.Group:
         if boundary.IsHosted:
             continue
-        center_of_mass = utils.get_outer_wire(boundary).CenterOfMass
-        face = min(
-            faces, key=lambda x: compute_face_distance(boundary, center_of_mass, x)
-        )
-        boundary.SpaceNearestVector = (
-            face.Surface.projectPoint(center_of_mass, "NearestPoint") - center_of_mass
-        )
-        face_normal = face.normalAt(
-            *face.Surface.projectPoint(center_of_mass, "LowerDistanceParameters")
-        )
-        normal = utils.get_normal_at(boundary)
-        if normal.dot(face_normal) < 0:
-            normal = -normal
+        candidates = (FaceToBoundary(boundary, face) for face in faces)
+        result = min(candidates, key=lambda x: x.distance if x.is_valid else 10000)
+        boundary.TranslationToSpace = result.translation_to_face
+        normal = result.fixed_normal
         boundary.Normal = normal
         for hosted in boundary.InnerBoundaries:
             hosted.Normal = normal
@@ -835,7 +850,7 @@ def create_sia_ext_boundaries(space):
                 distance = thickness
             else:  # Walls
                 distance = thickness / 2
-        bem_boundary.Placement.move(normal * distance + boundary1.SpaceNearestVector)
+        bem_boundary.Placement.move(normal * distance + boundary1.TranslationToSpace)
 
 
 def create_sia_int_boundaries(space):
@@ -852,8 +867,8 @@ def create_sia_int_boundaries(space):
         sia_group_obj.addObject(bem_boundary)
 
         # Bad location in some software like Revit (last check : revit-ifc 21.1.0.0)
-        if not boundary.SpaceNearestVector.isEqual(FreeCAD.Vector(), TOLERANCE):
-            bem_boundary.Placement.move(boundary.SpaceNearestVector)
+        if not boundary.TranslationToSpace.isEqual(FreeCAD.Vector(), TOLERANCE):
+            bem_boundary.Placement.move(boundary.TranslationToSpace)
 
 
 class XmlResult(NamedTuple):

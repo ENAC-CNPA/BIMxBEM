@@ -43,7 +43,7 @@ def append_inner_wire(boundary: "RelSpaceBoundaryFeature", wire: Part.Wire) -> N
 def are_parallel_boundaries(
     boundary1: "RelSpaceBoundaryFeature", boundary2: "RelSpaceBoundaryFeature"
 ) -> bool:
-    return 1 - abs(get_normal_at(boundary1).dot(get_normal_at(boundary2))) < TOLERANCE
+    return 1 - abs(get_boundary_normal(boundary1).dot(get_boundary_normal(boundary2))) < TOLERANCE
 
 
 def clean_vectors(vectors: List[FreeCAD.Vector]) -> None:
@@ -142,6 +142,21 @@ def get_boundaries_by_element_id(element_id, doc):
     )
 
 
+def get_face_ref_point(face):
+    center_of_mass = face.CenterOfMass
+    if face.isInside(center_of_mass, TOLERANCE, True):
+        return center_of_mass
+    pt1 = face.distToShape(Part.Vertex(center_of_mass))[1][0][0]
+    line = Part.Line(center_of_mass, pt1)
+    plane = Part.Plane(center_of_mass, face.normalAt(0, 0))
+    intersections = [line.intersect2d(e.Curve, plane) for e in face.Edges]
+    intersections = [i[0] for i in intersections if i]
+    if not len(intersections) == 2:
+        intersections = sorted(intersections)[0:2]    
+    mid_param = tuple(sum(params) / len(params) for params in zip(*intersections))
+    return plane.value(*mid_param)
+
+
 def get_element_by_guid(guid, elements_group):
     for fc_element in getattr(elements_group, "Group", elements_group):
         if getattr(fc_element, "GlobalId", None) == guid:
@@ -169,13 +184,18 @@ def get_in_list_by_id(elements, element_id):
     raise LookupError(f"No element with Id <{element_id}> found")
 
 
-def get_normal_at(fc_boundary, at_uv=(0, 0)) -> FreeCAD.Vector:
-    return fc_boundary.Shape.Faces[0].normalAt(*at_uv)
+def get_face_normal(face, at_point=None) -> FreeCAD.Vector:
+    at_point = at_point or face.Vertexes[0].Point
+    params = face.Surface.projectPoint(at_point, "LowerDistanceParameters")
+    return face.normalAt(*params)
+
+def get_boundary_normal(fc_boundary, at_point=None) -> FreeCAD.Vector:
+    return get_face_normal(fc_boundary.Shape.Faces[0], at_point)
 
 
 def get_plane(fc_boundary) -> Part.Plane:
     """Intended for RelSpaceBoundary use only"""
-    return Part.Plane(fc_boundary.Shape.Vertexes[0].Point, get_normal_at(fc_boundary))
+    return Part.Plane(fc_boundary.Shape.Vertexes[0].Point, get_boundary_normal(fc_boundary))
 
 
 def get_vectors_from_shape(shape: Part.Shape):
