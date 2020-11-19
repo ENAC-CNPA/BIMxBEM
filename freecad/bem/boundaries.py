@@ -80,6 +80,8 @@ def ensure_external_earth_is_set(space: "SpaceFeature", doc=FreeCAD.ActiveDocume
             "EXTERNAL_FIRE",
         ):
             continue
+        if boundary.InnerBoundaries:
+            continue
         if not is_underground(boundary, ground_shape):
             continue
         boundary.InternalOrExternalBoundary = "EXTERNAL_EARTH"
