@@ -461,7 +461,7 @@ def associate_inner_boundaries(fc_boundaries, doc):
         if not fc_boundary.IsHosted:
             continue
         candidates = set(fc_boundaries).intersection(
-            fc_boundary.RelatedBuildingElement.HostElement.ProvidesBoundaries
+            getattr(fc_boundary.RelatedBuildingElement.HostElement, "ProvidesBoundaries", ())
         )
 
         # If there is more than 1 candidate it doesn't really matter
