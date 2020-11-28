@@ -408,8 +408,14 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
         # Update shape
         utils.clean_vectors(vectors1)
         utils.close_vectors(vectors1)
-        wire1 = Part.makePolygon(vectors1)
-        utils.generate_boundary_compound(boundary1, wire1, inner_wires)
+        new_wire = Part.makePolygon(vectors1)
+        if not abs(Part.Face(new_wire).Area - Part.Face(wire1).Area - Part.Face(wire2).Area) < TOLERANCE:
+            logger.error(f"""Join oversplitted {boundary1.Label} and {boundary2.Label}
+            Found a common segment but join seems incorrect :
+            combined areas is not equal to the sum of areas""")
+            return False
+
+        utils.generate_boundary_compound(boundary1, new_wire, inner_wires)
         RelSpaceBoundary.recompute_areas(boundary1)
 
         return True
