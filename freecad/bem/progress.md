@@ -3,7 +3,7 @@ IfcImport_OpenIfcFile :
 IfcImport_Elements :
     - fr : Import IFC - Éléments de construction
 IfcImport_StructureAndBoundaries :
-    - fr : Import IFC - Structure et des limites d’espaces
+    - fr : Import IFC - Structure et limites d’espaces
 IfcImport_EnrichingDatas :
     - fr : Import IFC - Enrichissement des données
 ProcessingSIABoundaries_Prepare :
