@@ -44,7 +44,7 @@ if typing.TYPE_CHECKING:
 
 def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
     """Create SIA specific boundaries cf. https://www.sia.ch/fr/services/sia-norm/"""
-    Progress.set(30, "ProcessingSIABoundaries_Prepare", "")
+    Progress.set(30, "ProcessingSIABoundaries_Prepare", Progress.new_space_count(), 40)
     for space in utils.get_elements_by_ifctype("IfcSpace", doc):
         ensure_hosted_element_are(space)
         ensure_hosted_are_coplanar(space)
@@ -55,7 +55,8 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
         find_closest_edges(space)
         set_leso_type(space)
         ensure_external_earth_is_set(space, doc)
-    Progress.set(70, "ProcessingSIABoundaries_Create", "")
+        Progress.set()
+    Progress.set(70, "ProcessingSIABoundaries_Create", Progress.new_space_count(), 20)
     create_sia_boundaries(doc)
     doc.recompute()
 
@@ -707,6 +708,7 @@ def create_sia_boundaries(doc=FreeCAD.ActiveDocument):
         create_sia_int_boundaries(space)
         rejoin_boundaries(space, "SIA_Exterior")
         rejoin_boundaries(space, "SIA_Interior")
+        Progress.set()
 
 
 def get_intersecting_line(boundary1, boundary2) -> Optional[Part.Line]:

@@ -179,7 +179,8 @@ class IfcImporter:
         associate_host_element(ifc_file, elements_group)
 
         # Associate hosted elements
-        for fc_space in get_elements_by_ifctype("IfcSpace", doc):
+        for i, fc_space in enumerate(get_elements_by_ifctype("IfcSpace", doc), 1):
+            Progress.set(15, "IfcImporter_EnrichingDatas", f"{i}")
             fc_boundaries = fc_space.SecondLevel.Group
             # Minimal number of boundary is 5: 3 vertical faces, 2 horizontal faces
             # If there is less than 5 boundaries there is an issue or a new case to analyse
@@ -190,6 +191,7 @@ class IfcImporter:
 
             # Associate hosted elements
             associate_inner_boundaries(fc_boundaries, doc)
+        Progress.len_spaces = i
 
     def guess_thickness(self, obj, ifc_entity):
         if obj.Material:
