@@ -50,7 +50,7 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
         ensure_hosted_are_coplanar(space)
         compute_space_area(space)
         set_face_to_boundary_info(space)
-        join_over_splitted_boundaries(space, doc)
+        merge_over_splitted_boundaries(space, doc)
         handle_curtain_walls(space, doc)
         find_closest_edges(space)
         set_leso_type(space)
@@ -290,7 +290,7 @@ def group_coplanar_boundaries(boundary_list) -> List[List["boundary"]]:
     return coplanar_boundaries
 
 
-def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
+def merge_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
     boundaries = space.SecondLevel.Group
     # Considered as the minimal size for an oversplit to occur (1 ceiling, 3 wall, 1 flooring)
     if len(boundaries) <= 5:
@@ -312,7 +312,7 @@ def join_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
                 continue
             # Case 2 : more than 1 boundary related to the same element might be grouped.
             try:
-                join_coplanar_boundaries(group, doc)
+                merge_coplanar_boundaries(group, doc)
             except Part.OCCError:
                 logger.warning(
                     f"Cannot join boundaries in space <{space.Id}> with key <{key}>"
@@ -325,8 +325,8 @@ class CommonSegment(NamedTuple):
     opposite_dir: FreeCAD.Vector
 
 
-def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
-    """Try to join coplanar boundaries"""
+def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
+    """Try to merge coplanar boundaries"""
     boundary1 = max(boundaries, key=lambda x: x.Area)
     boundaries.remove(boundary1)
     remove_from_doc = list()
@@ -379,7 +379,7 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
             return
         return CommonSegment(None, None, opposite_dir)
 
-    def join_boundaries(boundary1, boundary2):
+    def merge_boundaries(boundary1, boundary2):
         wire1 = utils.get_outer_wire(boundary1)
         vectors1 = utils.get_vectors_from_shape(wire1)
         wire2 = utils.get_outer_wire(boundary2)
@@ -409,10 +409,17 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
         utils.clean_vectors(vectors1)
         utils.close_vectors(vectors1)
         new_wire = Part.makePolygon(vectors1)
-        if not abs(Part.Face(new_wire).Area - Part.Face(wire1).Area - Part.Face(wire2).Area) < TOLERANCE:
-            logger.error(f"""Join oversplitted {boundary1.Label} and {boundary2.Label}
+        if (
+            not abs(
+                Part.Face(new_wire).Area - Part.Face(wire1).Area - Part.Face(wire2).Area
+            )
+            < TOLERANCE
+        ):
+            logger.error(
+                f"""Issue while merging oversplitted {boundary1.Label} and {boundary2.Label}
             Found a common segment but join seems incorrect :
-            combined areas is not equal to the sum of areas""")
+            combined areas is not equal to the sum of areas"""
+            )
             return False
 
         utils.generate_boundary_compound(boundary1, new_wire, inner_wires)
@@ -422,13 +429,13 @@ def join_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
 
     while True and boundaries:
         for boundary2 in boundaries:
-            if join_boundaries(boundary1, boundary2):
+            if merge_boundaries(boundary1, boundary2):
                 boundaries.remove(boundary2)
                 remove_from_doc.append(boundary2)
                 break
         else:
             logger.warning(
-                f"""Unable to join boundaries RelSpaceBoundary Id <{boundary1.Id}>
+                f"""Unable to merge boundaries RelSpaceBoundary Id <{boundary1.Id}>
                 with boundaries <{", ".join(str(b.Id) for b in boundaries)}>"""
             )
             break
