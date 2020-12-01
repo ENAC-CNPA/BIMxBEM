@@ -502,8 +502,14 @@ def clean_corresponding_candidates(fc_boundary, doc):
 
 def seems_too_smal(boundary) -> bool:
     """considered as too small if width or heigth < 100 mm"""
-    uv_nodes = boundary.Shape.Faces[0].getUVNodes()
-    return min(abs(n_2 - n_1) for n_1, n_2 in zip(uv_nodes[0], uv_nodes[2])) < 100
+    try:
+        uv_nodes = boundary.Shape.Faces[0].getUVNodes()
+        return min(abs(n_2 - n_1) for n_1, n_2 in zip(uv_nodes[0], uv_nodes[2])) < 100
+    except RuntimeError:  # TODO: further investigation to see why it happens
+        if boundary.Shape.Faces[0].Area < 10000:  # 0.01 m²
+            return True
+        else:
+            return False
 
 
 def associate_corresponding_boundary(boundary, doc):
