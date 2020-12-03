@@ -214,6 +214,7 @@ class RelSpaceBoundary(Root):
         except AttributeError:
             obj.IsHosted = False
         obj.LesoType = "Unknown"
+        obj.CorrespondingBoundary = getattr(ifc_entity, "CorrespondingBoundary", None)
 
         if FreeCAD.GuiUp:
             obj.ViewObject.Proxy = 0
