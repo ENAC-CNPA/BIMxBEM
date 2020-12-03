@@ -46,7 +46,7 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
     """Create SIA specific boundaries cf. https://www.sia.ch/fr/services/sia-norm/"""
     Progress.set(30, "ProcessingSIABoundaries_Prepare", Progress.new_space_count(), 40)
     for space in utils.get_elements_by_ifctype("IfcSpace", doc):
-        ensure_hosted_element_are(space)
+        ensure_hosted_element_are(space, doc)
         ensure_hosted_are_coplanar(space)
         compute_space_area(space)
         set_face_to_boundary_info(space)
@@ -480,7 +480,24 @@ def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
         doc.removeObject(fc_object.Name)
 
 
-def ensure_hosted_element_are(space):
+def create_fake_host(boundary, space, doc):
+    fake_host = doc.copyObject(boundary)
+    fake_host.IsHosted = False
+    fake_host.LesoType = "Wall"
+    fake_host.GlobalId = ifcopenshell.guid.new()
+    fake_host.Id = IfcId.new(doc)
+    RelSpaceBoundary.set_label(fake_host)
+    space.SecondLevel.addObject(fake_host)
+    inner_wire = utils.get_outer_wire(boundary).scale(1.001)
+    inner_wire = utils.project_wire_to_plane(inner_wire, utils.get_plane(boundary))
+    utils.append_inner_wire(boundary, inner_wire)
+    utils.append(boundary, "InnerBoundaries", fake_host)
+    if FreeCAD.GuiUp:
+        fake_host.ViewObject.ShapeColor = (0.7, 0.3, 0.0)
+    return fake_host
+
+
+def ensure_hosted_element_are(space, doc):
     for boundary in space.SecondLevel.Group:
         try:
             ifc_type = boundary.RelatedBuildingElement.IfcType
@@ -535,6 +552,7 @@ def ensure_hosted_element_are(space):
         try:
             host = find_host(boundary)
         except HostNotFound as err:
+            host = create_fake_host(boundary, space, doc)
             logger.exception(err)
         boundary.IsHosted = True
         boundary.ParentBoundary = host
