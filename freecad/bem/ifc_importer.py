@@ -532,13 +532,13 @@ def associate_corresponding_boundary(boundary, doc):
     else:
         center_of_mass = utils.get_outer_wire(boundary).CenterOfMass
         min_lenght = 10000  # No element has 10 m thickness
-        for boundary in other_boundaries:
+        for candidate in other_boundaries:
             distance = center_of_mass.distanceToPoint(
-                utils.get_outer_wire(boundary).CenterOfMass
+                utils.get_outer_wire(candidate).CenterOfMass
             )
             if distance < min_lenght:
                 min_lenght = distance
-                corresponding_boundary = boundary
+                corresponding_boundary = candidate
     if corresponding_boundary:
         boundary.CorrespondingBoundary = corresponding_boundary
         corresponding_boundary.CorrespondingBoundary = boundary
