@@ -20,7 +20,7 @@ class Progress:
         step_id: step name which can be interpretable as an id for translation
         message: is a free string message
         pourcent_range: used for substeps"""
-        if pourcentage:
+        if not pourcentage is None:
             cls.current_pourcentage = pourcentage
         else:
             pourcentage = cls.current_pourcentage + cls.space_pourcentage()
