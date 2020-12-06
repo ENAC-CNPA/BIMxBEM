@@ -27,6 +27,7 @@ from freecad.bem.progress import Progress
 from freecad.bem.entities import (
     RelSpaceBoundary,
     Element,
+    ElementType,
     Container,
     Space,
     Project,
@@ -122,6 +123,7 @@ class IfcImporter:
         self.ifc_file = self.open(ifc_path)
         self.ifc_scale = get_unit_conversion_factor(self.ifc_file, "LENGTHUNIT")
         self.fc_scale = FreeCAD.Units.Metre.Value
+        self.element_types = dict()
         self.material_creator = materials.MaterialCreator(self)
         self.xml: str = ""
         self.log: str = ""
@@ -162,6 +164,9 @@ class IfcImporter:
         )
         for ifc_entity in ifc_elements:
             elements_group.addObject(Element.create_from_ifc(ifc_entity, self))
+        element_types_group = get_or_create_group("ElementTypes", doc)
+        for element_type in utils.get_by_class(doc, ElementType):
+            element_types_group.addObject(element_type)
         materials_group = get_or_create_group("Materials", doc)
         for material in get_materials(doc):
             materials_group.addObject(material)
@@ -215,7 +220,7 @@ class IfcImporter:
                         if quantity.Name == "Width":
                             return quantity.LengthValue * self.fc_scale * self.ifc_scale
 
-        if not ifc_entity.Representation:
+        if not getattr(ifc_entity, "Representation", None):
             return 0
         if ifc_entity.IsDecomposedBy:
             thicknesses = []
@@ -432,6 +437,17 @@ class IfcImporter:
         utils.clean_vectors(fc_verts)
         utils.close_vectors(fc_verts)
         return Part.makePolygon(fc_verts)
+
+    def create_element_type(self, fc_element, ifc_entity_type):
+        if not ifc_entity_type:
+            return
+        try:
+            fc_element_type = self.element_types[ifc_entity_type.id()]
+        except KeyError:
+            fc_element_type = ElementType.create_from_ifc(ifc_entity_type, self)
+            self.element_types[fc_element_type.Id] = fc_element_type
+        fc_element.IsTypedBy = fc_element_type
+        utils.append(fc_element_type, "ApplicableOccurrence", fc_element)
 
 
 class CommonSegment(NamedTuple):

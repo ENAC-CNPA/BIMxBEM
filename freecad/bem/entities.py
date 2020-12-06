@@ -164,7 +164,9 @@ class RelSpaceBoundary(Root):
             "EXTERNAL_FIRE",
             "NOTDEFINED",
         ]
-        obj.addProperty("App::PropertyLinkHidden", "CorrespondingBoundary", ifc_attributes)
+        obj.addProperty(
+            "App::PropertyLinkHidden", "CorrespondingBoundary", ifc_attributes
+        )
         obj.addProperty("App::PropertyLinkHidden", "ParentBoundary", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "InnerBoundaries", ifc_attributes)
         obj.addProperty("App::PropertyVector", "Normal", bem_category)
@@ -262,7 +264,64 @@ class Element(Root):
 
     def __init__(self, obj: "ElementFeature") -> None:
         super().__init__(obj)
-        self.Type = "IfcRelSpaceBoundary"
+        self.Type = "IfcElement"
+        obj.Proxy = self
+
+    @classmethod
+    def create_from_ifc(
+        cls, ifc_entity, ifc_importer: "IfcImporter"
+    ) -> "ElementFeature":
+        """Stantard FreeCAD FeaturePython Object creation method"""
+        obj = super().create_from_ifc(ifc_entity, ifc_importer)
+        ifc_importer.create_element_type(
+            obj, ifcopenshell.util.element.get_type(ifc_entity)
+        )
+        ifc_importer.material_creator.create(obj, ifc_entity)
+        obj.Thickness = ifc_importer.guess_thickness(obj, ifc_entity)
+
+        if FreeCAD.GuiUp:
+            obj.ViewObject.Proxy = 0
+        return obj
+
+    @classmethod
+    def _init_properties(cls, obj: "ElementFeature") -> None:
+        super()._init_properties(obj)
+        ifc_attributes = "IFC Attributes"
+        bem_category = "BEM"
+        obj.addProperty("App::PropertyLink", "Material", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "FillsVoids", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "HasOpenings", ifc_attributes)
+        obj.addProperty(
+            "App::PropertyLinkListHidden", "ProvidesBoundaries", ifc_attributes
+        )
+        obj.addProperty("App::PropertyLinkHidden", "IsTypedBy", ifc_attributes)
+        obj.addProperty("App::PropertyFloat", "ThermalTransmittance", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "HostedElements", bem_category)
+        obj.addProperty("App::PropertyLinkHidden", "HostElement", bem_category)
+        obj.addProperty("App::PropertyLength", "Thickness", bem_category)
+
+    @classmethod
+    def read_from_ifc(cls, obj, ifc_entity):
+        super().read_from_ifc(obj, ifc_entity)
+        obj.Label = f"{obj.Id}_{obj.IfcType}"
+
+        super().read_pset_from_ifc(
+            obj,
+            ifc_entity,
+            [
+                "ThermalTransmittance",
+            ],
+        )
+
+
+class ElementType(Root):
+    """Wrapping various IFC entity :
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/schema/ifcproductextension/lexical/ifcelement.htm
+    """
+
+    def __init__(self, obj: "ElementFeature") -> None:
+        super().__init__(obj)
+        self.Type = "IfcElementType"
         obj.Proxy = self
 
     @classmethod
@@ -284,14 +343,8 @@ class Element(Root):
         ifc_attributes = "IFC Attributes"
         bem_category = "BEM"
         obj.addProperty("App::PropertyLink", "Material", ifc_attributes)
-        obj.addProperty("App::PropertyLinkList", "FillsVoids", ifc_attributes)
-        obj.addProperty("App::PropertyLinkList", "HasOpenings", ifc_attributes)
-        obj.addProperty(
-            "App::PropertyLinkListHidden", "ProvidesBoundaries", ifc_attributes
-        )
         obj.addProperty("App::PropertyFloat", "ThermalTransmittance", ifc_attributes)
-        obj.addProperty("App::PropertyLinkList", "HostedElements", bem_category)
-        obj.addProperty("App::PropertyLinkHidden", "HostElement", bem_category)
+        obj.addProperty("App::PropertyLinkList", "ApplicableOccurrence", ifc_attributes)
         obj.addProperty("App::PropertyLength", "Thickness", bem_category)
 
     @classmethod

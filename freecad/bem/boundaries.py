@@ -32,6 +32,7 @@ from freecad.bem.entities import (
     RelSpaceBoundary,
     BEMBoundary,
     Element,
+    ElementType,
 )
 from freecad.bem.ifc_importer import IfcImporter, TOLERANCE
 
@@ -237,6 +238,8 @@ def write_xml(doc=FreeCAD.ActiveDocument) -> BEMxml:
         bem_xml.write_space(space)
         for boundary in space.SecondLevel.Group:
             bem_xml.write_boundary(boundary)
+    for building_element_type in utils.get_by_class(doc, ElementType):
+        bem_xml.write_building_element_types(building_element_type)
     for building_element in utils.get_by_class(doc, Element):
         bem_xml.write_building_elements(building_element)
     for material in utils.get_by_class(

@@ -29,6 +29,7 @@ class BEMxml:
         self.projects = ET.SubElement(self.root, "Projects")
         self.spaces = ET.SubElement(self.root, "Spaces")
         self.boundaries = ET.SubElement(self.root, "Boundaries")
+        self.building_element_types = ET.SubElement(self.root, "BuildingElementTypes")
         self.building_elements = ET.SubElement(self.root, "BuildingElements")
         self.materials = ET.SubElement(self.root, "Materials")
         self.sites = None
@@ -151,9 +152,31 @@ class BEMxml:
                 fc_geo = getattr(fc_object, geo_type)
                 self.write_shape(geo, fc_geo)
 
+    def write_building_element_types(self, fc_object):
+        building_element_types = ET.SubElement(
+            self.building_element_types, "BuildingElementType"
+        )
+        self.write_root_attrib(building_element_types, fc_object)
+        ET.SubElement(building_element_types, "Thickness").text = str(
+            fc_object.Thickness.Value / SCALE
+        )
+        ET.SubElement(building_element_types, "ThermalTransmittance").text = str(
+            fc_object.ThermalTransmittance or ""
+        )
+        occurences = ET.SubElement(building_element_types, "ApplicableOccurrence")
+        for element in fc_object.ApplicableOccurrence:
+            ET.SubElement(occurences, "Id").text = str(element.Id)
+        if fc_object.Material:
+            ET.SubElement(building_element_types, "Material").text = str(
+                fc_object.Material.Id or ""
+            )
+
     def write_building_elements(self, fc_object):
         building_element = ET.SubElement(self.building_elements, "BuildingElement")
         self.write_root_attrib(building_element, fc_object)
+        ET.SubElement(building_element, "IsTypedBy").text = str(
+            getattr(fc_object.IsTypedBy, "Id", "")
+        )
         ET.SubElement(building_element, "Thickness").text = str(
             fc_object.Thickness.Value / SCALE
         )
