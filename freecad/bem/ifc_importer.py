@@ -335,8 +335,10 @@ class IfcImporter:
         location = FreeCAD.Vector(position.Location.Coordinates)
         location.scale(*list(3 * [total_scale]))
 
-        v_1 = FreeCAD.Vector(position.RefDirection.DirectionRatios)
-        v_3 = FreeCAD.Vector(position.Axis.DirectionRatios)
+        v_1 = FreeCAD.Vector(
+            getattr(position.RefDirection, "DirectionRatios", (1, 0, 0))
+        )
+        v_3 = FreeCAD.Vector(getattr(position.Axis, "DirectionRatios", (0, 0, 1)))
         v_2 = v_3.cross(v_1)
 
         # fmt: off
@@ -349,6 +351,19 @@ class IfcImporter:
         # fmt: on
 
         return matrix
+
+    def get_global_placement(self, obj_placement) -> FreeCAD.Matrix:
+        if not obj_placement:
+            return FreeCAD.Matrix()
+        if not obj_placement.PlacementRelTo:
+            parent = FreeCAD.Matrix()
+        else:
+            parent = self.get_global_placement(obj_placement.PlacementRelTo)
+        return parent.multiply(self.get_matrix(obj_placement.RelativePlacement))
+
+    def get_global_y_axis(self, ifc_entity):
+        global_placement = self.get_global_placement(ifc_entity)
+        return FreeCAD.Vector(global_placement.A[1:12:4])
 
     def create_fc_shape(self, ifc_boundary):
         """ Create Part shape from ifc geometry"""
