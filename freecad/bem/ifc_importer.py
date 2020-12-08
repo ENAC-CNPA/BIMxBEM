@@ -184,6 +184,7 @@ class IfcImporter:
         associate_host_element(ifc_file, elements_group)
 
         # Associate hosted elements
+        i = 0
         for i, fc_space in enumerate(get_elements_by_ifctype("IfcSpace", doc), 1):
             Progress.set(15, "IfcImporter_EnrichingDatas", f"{i}")
             fc_boundaries = fc_space.SecondLevel.Group
