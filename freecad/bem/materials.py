@@ -27,6 +27,7 @@ class MaterialCreator:
         self.materials = {}
         self.material_layer_sets = {}
         self.material_constituent_sets = {}
+        self.material_profile_sets = {}
         self.ifc_scale = 1
         self.fc_scale = 1
         if ifc_importer:
@@ -98,6 +99,8 @@ class MaterialCreator:
             utils.append(self.obj.Material, "AssociatedTo", self.obj)
         elif material_select.is_a("IfcMaterialConstituentSet"):
             self.obj.Material = self.create_constituent_set(material_select)
+        elif material_select.is_a("IfcMaterialProfileSet"):
+            self.obj.Material = self.create_profile_set(material_select)
         else:
             raise NotImplementedError(f"{material_select.is_a()} not handled yet")
 
@@ -160,6 +163,20 @@ class MaterialCreator:
             material_constituents.append(self.create_single(material))
         constituent_set.MaterialConstituents = material_constituents
         self.obj.Material = constituent_set
+
+    def create_profile_set(self, profile_set):
+        if profile_set.Name not in self.material_profile_sets:
+            fc_profile_set = ProfileSet.create(profile_set)
+            profiles = []
+            profiles_categories = []
+            for profile in profile_set.MaterialProfiles:
+                profiles.append(self.create_single(profile.Material))
+                profiles_categories.append(profile.Category or "")
+            fc_profile_set.MaterialProfiles = profiles
+            fc_profile_set.Categories = profiles_categories
+            self.material_profile_sets[fc_profile_set.IfcName] = fc_profile_set
+            return fc_profile_set
+        return self.material_profile_sets[profile_set.Name]
 
     def get_type_name(self, ifc_element):
         if ifc_element.is_a("IfcTypeObject"):
@@ -348,6 +365,49 @@ class Material:
                 for prop in pset.Properties:
                     if prop.Name in self.psets_dict[pset.Name]:
                         setattr(obj, prop.Name, prop.NominalValue.wrappedValue)
+
+
+class ProfileSet:
+    attributes = ()
+    psets_dict = {}
+    parts_name = "Layers"
+    part_name = "Layer"
+    part_props = "MaterialProfiles"
+    part_attribs = ("Id", "Category")
+
+    def __init__(self, obj, ifc_entity):
+        self.ifc_entity = ifc_entity
+        self._init_properties(obj, ifc_entity)
+        self.Type = "ProfileSet"  # pylint: disable=invalid-name
+        obj.Proxy = self
+
+    @classmethod
+    def create(cls, ifc_entity=None) -> "ProfileSetFeature":
+        """Stantard FreeCAD FeaturePython Object creation method
+        ifc_entity : Optionnally provide a base entity.
+        """
+        obj = FreeCAD.ActiveDocument.addObject(
+            "Part::FeaturePython", "MaterialProfileSet"
+        )
+        ProfileSet(obj, ifc_entity)
+        return obj
+
+    def _init_properties(self, obj: "ProfileSetFeature", ifc_entity) -> None:
+        obj.addProperty("App::PropertyString", "IfcType", "IFC")
+        obj.addProperty("App::PropertyStringList", "Categories", "BEM")
+        ifc_attributes = "IFC Attributes"
+        obj.addProperty("App::PropertyInteger", "Id", ifc_attributes)
+        obj.addProperty("App::PropertyString", "IfcName", ifc_attributes)
+        obj.addProperty("App::PropertyString", "Description", ifc_attributes)
+        obj.addProperty("App::PropertyLinkList", "MaterialProfiles", ifc_attributes)
+
+        if not ifc_entity:
+            return
+        obj.Id = ifc_entity.id()
+        obj.IfcName = ifc_entity.Name or ""
+        obj.Description = ifc_entity.Description or ""
+        obj.Label = f"{obj.Id}_{obj.IfcName}"
+        obj.IfcType = ifc_entity.is_a()
 
 
 def get_type(ifc_entity):
