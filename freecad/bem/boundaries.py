@@ -834,12 +834,18 @@ def rejoin_boundaries(space, sia_type):
     """
     base_boundaries = space.SecondLevel.Group
     for base_boundary in base_boundaries:
+        boundary1 = getattr(base_boundary, sia_type)
+        if not boundary1:
+            continue
         lines = []
         fallback_lines = [
-            utils.line_from_edge(edge)
-            for edge in utils.get_outer_wire(base_boundary).Edges
+            utils.line_from_edge(edge) for edge in utils.get_outer_wire(boundary1).Edges
         ]
-        boundary1 = getattr(base_boundary, sia_type)
+
+        # bound_box used to make sure line solution is in a reallistic scope (distance <= 1 m)
+        bound_box = boundary1.Shape.BoundBox
+        bound_box.enlarge(1000)
+
         if (
             base_boundary.IsHosted
             or base_boundary.PhysicalOrVirtualBoundary == "VIRTUAL"
@@ -857,14 +863,14 @@ def rejoin_boundaries(space, sia_type):
             boundary2 = getattr(base_boundary2, sia_type, None)
             if not boundary2:
                 logger.warning(f"Cannot find corresponding boundary with id <{b2_id}>")
-                lines.append(
-                    utils.line_from_edge(utils.get_outer_wire(base_boundary).Edges[ei1])
-                )
+                lines.append(fallback_line)
                 continue
             # Case 1 : boundaries are not parallel
             line = get_intersecting_line(boundary1, boundary2)
             if line:
                 if not is_valid_join(line, fallback_line):
+                    line = fallback_line
+                if not bound_box.intersect(line.Location, line.Direction):
                     line = fallback_line
                 lines.append(line)
                 continue
