@@ -11,6 +11,7 @@ Author : Cyril Waechter
 import typing
 import ifcopenshell
 import FreeCAD
+from freecad.bem import utils
 
 if typing.TYPE_CHECKING:
     from freecad.bem.typing import (  # pylint: disable=no-name-in-module, import-error
@@ -86,12 +87,15 @@ class MaterialCreator:
 
     def create_layer_set_usage(self, usage):
         self.assign_material(usage.ForLayerSet)
+        self.obj.Material.LayerSetDirection = usage.LayerSetDirection
+        self.obj.Material.DirectionSense = usage.DirectionSense
 
     def assign_material(self, material_select):
         if material_select.is_a("IfcMaterial"):
             self.obj.Material = self.create_single(material_select)
         elif material_select.is_a("IfcMaterialLayerSet"):
             self.obj.Material = self.create_layer_set(material_select)
+            utils.append(self.obj.Material, "AssociatedTo", self.obj)
         elif material_select.is_a("IfcMaterialConstituentSet"):
             self.obj.Material = self.create_constituent_set(material_select)
         else:
@@ -244,6 +248,13 @@ class LayerSet:
         obj.addProperty("App::PropertyString", "IfcName", ifc_attributes)
         obj.addProperty("App::PropertyString", "Description", ifc_attributes)
         obj.addProperty("App::PropertyLength", "TotalThickness", ifc_attributes)
+        obj.addProperty(
+            "App::PropertyEnumeration", "LayerSetDirection", ifc_attributes
+        ).LayerSetDirection = ["AXIS1", "AXIS2", "AXIS3"]
+        obj.addProperty(
+            "App::PropertyEnumeration", "DirectionSense", ifc_attributes
+        ).DirectionSense = ["POSITIVE", "NEGATIVE"]
+        obj.addProperty("App::PropertyLinkListHidden", "AssociatedTo", ifc_attributes)
 
         if not ifc_entity:
             return
@@ -256,6 +267,11 @@ class LayerSet:
             pass
         obj.Label = f"{obj.Id}_{obj.IfcName}"
         obj.IfcType = ifc_entity.is_a()
+        if ifc_entity.is_a("IfcWall"):
+            obj.LayerSetDirection = "AXIS2"
+        elif ifc_entity.is_a("IfcSlab") or ifc_entity.is_a("IfcRoof"):
+            obj.LayerSetDirection = "AXIS3"
+        obj.DirectionSense = "POSITIVE"
 
 
 class Material:

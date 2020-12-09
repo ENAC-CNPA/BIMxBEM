@@ -278,7 +278,7 @@ class Element(Root):
         )
         ifc_importer.material_creator.create(obj, ifc_entity)
         obj.Thickness = ifc_importer.guess_thickness(obj, ifc_entity)
-        obj.Y_Axis = ifc_importer.get_global_y_axis(ifc_entity.ObjectPlacement)
+        obj.Placement = ifc_importer.get_global_placement(ifc_entity.ObjectPlacement)
 
         if FreeCAD.GuiUp:
             obj.ViewObject.Proxy = 0
@@ -300,7 +300,6 @@ class Element(Root):
         obj.addProperty("App::PropertyLinkList", "HostedElements", bem_category)
         obj.addProperty("App::PropertyLinkHidden", "HostElement", bem_category)
         obj.addProperty("App::PropertyLength", "Thickness", bem_category)
-        obj.addProperty("App::PropertyVector", "Y_Axis", bem_category)
 
     @classmethod
     def read_from_ifc(cls, obj, ifc_entity):

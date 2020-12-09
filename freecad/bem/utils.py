@@ -43,7 +43,10 @@ def append_inner_wire(boundary: "RelSpaceBoundaryFeature", wire: Part.Wire) -> N
 def are_parallel_boundaries(
     boundary1: "RelSpaceBoundaryFeature", boundary2: "RelSpaceBoundaryFeature"
 ) -> bool:
-    return 1 - abs(get_boundary_normal(boundary1).dot(get_boundary_normal(boundary2))) < TOLERANCE
+    return (
+        1 - abs(get_boundary_normal(boundary1).dot(get_boundary_normal(boundary2)))
+        < TOLERANCE
+    )
 
 
 def clean_vectors(vectors: List[FreeCAD.Vector]) -> None:
@@ -93,6 +96,11 @@ def generate_boundary_compound(
             )
         face = new_face
     boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
+
+
+def get_axis_by_name(placement, name):
+    axis_dict = {"AXIS1": 0, "AXIS2": 1, "AXIS3": 2}
+    return FreeCAD.Vector(placement.Matrix.A[axis_dict[name] : 12 : 4])
 
 
 def get_by_id(ifc_id: int, elements: Iterable[Part.Feature]) -> Part.Feature:
@@ -152,7 +160,7 @@ def get_face_ref_point(face):
     intersections = [line.intersect2d(e.Curve, plane) for e in face.Edges]
     intersections = [i[0] for i in intersections if i]
     if not len(intersections) == 2:
-        intersections = sorted(intersections)[0:2]    
+        intersections = sorted(intersections)[0:2]
     mid_param = tuple(sum(params) / len(params) for params in zip(*intersections))
     return plane.value(*mid_param)
 
@@ -189,13 +197,16 @@ def get_face_normal(face, at_point=None) -> FreeCAD.Vector:
     params = face.Surface.projectPoint(at_point, "LowerDistanceParameters")
     return face.normalAt(*params)
 
+
 def get_boundary_normal(fc_boundary, at_point=None) -> FreeCAD.Vector:
     return get_face_normal(fc_boundary.Shape.Faces[0], at_point)
 
 
 def get_plane(fc_boundary) -> Part.Plane:
     """Intended for RelSpaceBoundary use only"""
-    return Part.Plane(fc_boundary.Shape.Vertexes[0].Point, get_boundary_normal(fc_boundary))
+    return Part.Plane(
+        fc_boundary.Shape.Vertexes[0].Point, get_boundary_normal(fc_boundary)
+    )
 
 
 def get_vectors_from_shape(shape: Part.Shape):
@@ -243,9 +254,7 @@ def polygon_from_lines(lines, base_plane):
         # Need to ensure direction are not same to avoid crash in OCCT 7.4
         if abs(line1.Direction.dot(line2.Direction)) >= 1 - TOLERANCE:
             continue
-        new_points.append(
-            base_plane.value(*line1.intersect2d(line2, base_plane)[0])
-        )
+        new_points.append(base_plane.value(*line1.intersect2d(line2, base_plane)[0]))
     close_vectors(new_points)
     return Part.makePolygon(new_points)
 

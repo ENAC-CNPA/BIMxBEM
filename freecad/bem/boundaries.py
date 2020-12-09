@@ -58,8 +58,42 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
         ensure_external_earth_is_set(space, doc)
         Progress.set()
     Progress.set(70, "ProcessingSIABoundaries_Create", Progress.new_space_count(), 20)
+    ensure_materials_layers_order(doc)
     create_sia_boundaries(doc)
     doc.recompute()
+
+
+def ensure_materials_layers_order(doc):
+    """
+    There is no convention for material order in IFC but energy simulation software expect one.
+    From interior to exterior for external shell.
+    From top to bottom for internal slabs (flooring)
+    """
+    for material in utils.get_by_class(doc, materials.LayerSet):
+        boundaries = []
+        for element in material.AssociatedTo:
+            try:
+                boundaries.extend(element.ProvidesBoundaries)
+            # Happen when element is an element type
+            except AttributeError:
+                for occurence in element.ApplicableOccurrence:
+                    if not element.Material:
+                        boundaries.extend(occurence.ProvidesBoundaries)
+        boundary = max(boundaries, key=lambda x: x.Area)
+        if (
+            boundary.InternalOrExternalBoundary == "INTERNAL"
+            and not boundary.LesoType == "Flooring"
+        ):
+            continue
+        element = boundary.RelatedBuildingElement
+        axis = utils.get_axis_by_name(element.Placement, material.LayerSetDirection)
+        if material.DirectionSense == "NEGATIVE":
+            axis = -axis
+        if boundary.LesoType == "Flooring":
+            if axis.z > 0:
+                material.MaterialLayers = material.MaterialLayers[::-1]
+        elif axis.dot(boundary.Normal) < 0:
+            material.MaterialLayers = material.MaterialLayers[::-1]
 
 
 def ensure_external_earth_is_set(space: "SpaceFeature", doc=FreeCAD.ActiveDocument):
