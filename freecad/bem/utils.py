@@ -255,6 +255,8 @@ def polygon_from_lines(lines, base_plane):
         if abs(line1.Direction.dot(line2.Direction)) >= 1 - TOLERANCE:
             continue
         new_points.append(base_plane.value(*line1.intersect2d(line2, base_plane)[0]))
+    if len(new_points) < 3:
+        raise ShapeCreationError
     close_vectors(new_points)
     return Part.makePolygon(new_points)
 

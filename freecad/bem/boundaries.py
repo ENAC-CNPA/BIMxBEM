@@ -333,12 +333,23 @@ def merge_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
     if len(boundaries) <= 5:
         return
     elements_dict = group_by_shared_element(boundaries)
+
+    # Merge hosted elements first
+    for key, boundary_list in elements_dict.items():
+        if boundary_list[0].IsHosted and len(boundary_list) != 1:
+            coplanar_groups = group_coplanar_boundaries(boundary_list)
+            for group in coplanar_groups:
+                merge_coplanar_boundaries(group, doc)
+
     for key, boundary_list in elements_dict.items():
         # None coplanar boundaries should not be connected.
         # eg. round wall splitted with multiple orientations.
 
         # Case1: No oversplitted boundaries
-        if len(boundary_list) == 1:
+        try:
+            if boundary_list[0].IsHosted or len(boundary_list) == 1:
+                continue
+        except ReferenceError:
             continue
 
         coplanar_groups = group_coplanar_boundaries(boundary_list)
@@ -364,6 +375,8 @@ class CommonSegment(NamedTuple):
 
 def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     """Try to merge coplanar boundaries"""
+    if len(boundaries) == 1:
+        return
     boundary1 = max(boundaries, key=lambda x: x.Area)
     boundaries.remove(boundary1)
     remove_from_doc = list()
@@ -435,13 +448,6 @@ def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
         # Efficient way to insert elements at index : https://stackoverflow.com/questions/14895599/insert-an-element-at-specific-index-in-a-list-and-return-updated-list/48139870#48139870 pylint: disable=line-too-long
         vectors1[ei1 + 1 : ei1 + 1] = new_points
 
-        inner_wires = utils.get_inner_wires(boundary1)[:]
-        inner_wires.extend(utils.get_inner_wires(boundary2))
-        if not boundary1.IsHosted:
-            for inner_boundary in boundary2.InnerBoundaries:
-                utils.append(boundary1, "InnerBoundaries", inner_boundary)
-                inner_boundary.ParentBoundary = boundary1
-
         # Update shape
         utils.clean_vectors(vectors1)
         utils.close_vectors(vectors1)
@@ -458,6 +464,26 @@ def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
             combined areas is not equal to the sum of areas"""
             )
             return False
+        
+        def remove_from_parent_inner_wires(boundary, wire):
+            area = Part.Face(wire).Area
+            parent = boundary.ParentBoundary
+            for inner_wire in utils.get_inner_wires(parent):
+                if abs(Part.Face(inner_wire).Area - area) < TOLERANCE:
+                    parent.Shape = parent.Shape.removeShape([inner_wire])
+                    return
+
+        if boundary1.IsHosted:
+            remove_from_parent_inner_wires(boundary1, wire1)
+            remove_from_parent_inner_wires(boundary2, wire2)
+            utils.append_inner_wire(boundary1.ParentBoundary, new_wire)
+        else:
+            for inner_boundary in boundary2.InnerBoundaries:
+                utils.append(boundary1, "InnerBoundaries", inner_boundary)
+                inner_boundary.ParentBoundary = boundary1
+        inner_wires = utils.get_inner_wires(boundary1)[:]
+        inner_wires.extend(utils.get_inner_wires(boundary2))
+
 
         utils.generate_boundary_compound(boundary1, new_wire, inner_wires)
         RelSpaceBoundary.recompute_areas(boundary1)
@@ -842,9 +868,9 @@ def rejoin_boundaries(space, sia_type):
             utils.line_from_edge(edge) for edge in utils.get_outer_wire(boundary1).Edges
         ]
 
-        # bound_box used to make sure line solution is in a reallistic scope (distance <= 1 m)
+        # bound_box used to make sure line solution is in a reallistic scope (distance <= 5 m)
         bound_box = boundary1.Shape.BoundBox
-        bound_box.enlarge(1000)
+        bound_box.enlarge(5000)
 
         if (
             base_boundary.IsHosted
@@ -885,7 +911,7 @@ def rejoin_boundaries(space, sia_type):
         # Generate new shape
         try:
             outer_wire = utils.polygon_from_lines(lines, b1_plane)
-        except Part.OCCError:
+        except (Part.OCCError, utils.ShapeCreationError):
             logger.exception(
                 f"Invalid geometry while rejoining boundary Id <{base_boundary.Id}>"
             )
