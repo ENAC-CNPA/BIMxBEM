@@ -208,6 +208,15 @@ def get_plane(fc_boundary) -> Part.Plane:
         fc_boundary.Shape.Vertexes[0].Point, get_boundary_normal(fc_boundary)
     )
 
+def get_area_from_points(points: List[FreeCAD.Vector]) -> float:
+    """Return area considering points are consecutive points of a polygon
+    Return 0 for invalid polygons"""
+    clean_vectors(points)
+    close_vectors(points)
+    try:
+        return Part.Face(Part.makePolygon(points)).Area
+    except Part.OCCError:
+        return 0
 
 def get_vectors_from_shape(shape: Part.Shape):
     return [vx.Point for vx in shape.Vertexes]

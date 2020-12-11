@@ -277,7 +277,13 @@ def write_xml(doc=FreeCAD.ActiveDocument) -> BEMxml:
     for building_element in utils.get_by_class(doc, Element):
         bem_xml.write_building_elements(building_element)
     for material in utils.get_by_class(
-        doc, (materials.Material, materials.ConstituentSet, materials.LayerSet)
+        doc,
+        (
+            materials.Material,
+            materials.ConstituentSet,
+            materials.LayerSet,
+            materials.ProfileSet,
+        ),
     ):
         bem_xml.write_material(material)
     return bem_xml
@@ -464,7 +470,7 @@ def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
             combined areas is not equal to the sum of areas"""
             )
             return False
-        
+
         def remove_from_parent_inner_wires(boundary, wire):
             area = Part.Face(wire).Area
             parent = boundary.ParentBoundary
@@ -483,7 +489,6 @@ def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
                 inner_boundary.ParentBoundary = boundary1
         inner_wires = utils.get_inner_wires(boundary1)[:]
         inner_wires.extend(utils.get_inner_wires(boundary2))
-
 
         utils.generate_boundary_compound(boundary1, new_wire, inner_wires)
         RelSpaceBoundary.recompute_areas(boundary1)
@@ -516,10 +521,8 @@ def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
         # join vectors1 and vectors2 at indexes
         vectors_split1 = vectors1[: ei1 + 1] + vectors1[ei2 + 1 :]
         vectors_split2 = vectors1[ei1 + 1 : ei2 + 1]
-        utils.clean_vectors(vectors_split1)
-        utils.clean_vectors(vectors_split2)
-        area1 = Part.Face(Part.makePolygon(vectors_split1 + [vectors_split1[0]])).Area
-        area2 = Part.Face(Part.makePolygon(vectors_split2 + [vectors_split2[0]])).Area
+        area1 = utils.get_area_from_points(vectors_split1)
+        area2 = utils.get_area_from_points(vectors_split2)
         if area1 > area2:
             vectors1 = vectors_split1
             inner_vectors = vectors_split2
@@ -534,7 +537,11 @@ def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
 
         # Update shape
         utils.close_vectors(vectors1)
-        wire1 = Part.makePolygon(vectors1)
+        try:
+            wire1 = Part.makePolygon(vectors1)
+        except Part.OCCError:
+            logger.exception(f"Failed to merge boundaries {boundary1.Label} and {boundary2.Label}")
+            break
         utils.generate_boundary_compound(boundary1, wire1, inner_wires)
         RelSpaceBoundary.recompute_areas(boundary1)
 

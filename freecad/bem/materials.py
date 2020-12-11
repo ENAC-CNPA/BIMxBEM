@@ -372,8 +372,11 @@ class ProfileSet:
     psets_dict = {}
     parts_name = "Layers"
     part_name = "Layer"
-    part_props = "MaterialProfiles"
-    part_attribs = ("Id", "Category")
+    part_props = ("MaterialProfiles",)
+    part_attribs = (
+        "Id",
+        "Category",
+    )
 
     def __init__(self, obj, ifc_entity):
         self.ifc_entity = ifc_entity
