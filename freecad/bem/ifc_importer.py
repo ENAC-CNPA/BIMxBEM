@@ -466,12 +466,6 @@ class IfcImporter:
         utils.append(fc_element_type, "ApplicableOccurrence", fc_element)
 
 
-class CommonSegment(NamedTuple):
-    index1: int
-    index2: int
-    opposite_dir: FreeCAD.Vector
-
-
 def associate_host_element(ifc_file, elements_group):
     # Associate Host / Hosted elements
     ifc_elements = (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries)

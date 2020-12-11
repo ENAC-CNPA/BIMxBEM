@@ -208,6 +208,7 @@ def get_plane(fc_boundary) -> Part.Plane:
         fc_boundary.Shape.Vertexes[0].Point, get_boundary_normal(fc_boundary)
     )
 
+
 def get_area_from_points(points: List[FreeCAD.Vector]) -> float:
     """Return area considering points are consecutive points of a polygon
     Return 0 for invalid polygons"""
@@ -217,6 +218,7 @@ def get_area_from_points(points: List[FreeCAD.Vector]) -> float:
         return Part.Face(Part.makePolygon(points)).Area
     except Part.OCCError:
         return 0
+
 
 def get_vectors_from_shape(shape: Part.Shape):
     return [vx.Point for vx in shape.Vertexes]
@@ -292,6 +294,18 @@ def project_boundary_onto_plane(boundary, plane: Part.Plane):
         pass
 
     boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
+
+
+def remove_inner_wire(boundary, wire) -> None:
+    if wire in boundary.Shape.Wires:
+        boundary.Shape = boundary.Shape.removeShape([wire])
+        return
+
+    area = Part.Face(wire).Area
+    for inner_wire in get_inner_wires(boundary):
+        if abs(Part.Face(inner_wire).Area - area) < TOLERANCE:
+            boundary.Shape = boundary.Shape.removeShape([inner_wire])
+            return
 
 
 def are_3points_collinear(

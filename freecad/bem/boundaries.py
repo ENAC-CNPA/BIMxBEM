@@ -334,6 +334,10 @@ def group_coplanar_boundaries(boundary_list) -> List[List["boundary"]]:
 
 
 def merge_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
+    """Try to merge oversplitted boundaries to reduce the number of boundaries and make sure that
+    windows are not splitted as it is often with some authoring softwares like Revit.
+    Why ? Less boundaries is more manageable, closer to what user expect and require
+    less computational power"""
     boundaries = space.SecondLevel.Group
     # Considered as the minimal size for an oversplit to occur (1 ceiling, 3 wall, 1 flooring)
     if len(boundaries) <= 5:
@@ -373,10 +377,47 @@ def merge_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
                 )
 
 
-class CommonSegment(NamedTuple):
-    index1: int
-    index2: int
-    opposite_dir: FreeCAD.Vector
+def merged_wires(wire1: Part.Wire, wire2: Part.Wire) -> (Part.Wire, List[Part.Wire]):
+    """Try to merge 2 wires meant using face merging algorithm.
+    1. Transform wires into faces
+    2. Merge them
+    3. Return face outer wire and eventual inner wires"""
+    face1 = Part.Face(wire1)
+    face2 = Part.Face(wire2)
+    unifier = Part.ShapeUpgrade.UnifySameDomain(face1.fuse(face2))
+    unifier.build()
+    if len(unifier.shape().Faces) == 1:
+        result = unifier.shape().Faces[0]
+        return (result.Wires[0], result.Wires[1:])
+    return (None, [])
+
+
+def merge_boundaries(boundary1, boundary2) -> bool:
+    """Try to merge 2 boundaries. Retrun True if successfully merged"""
+    wire1 = utils.get_outer_wire(boundary1)
+    wire2 = utils.get_outer_wire(boundary2)
+
+    new_wire, extra_inner_wires = merged_wires(wire1, wire2)
+    if not new_wire:
+        return False
+
+    # Update shape
+    if boundary1.IsHosted:
+        utils.remove_inner_wire(boundary1.ParentBoundary, wire1)
+        utils.remove_inner_wire(boundary2.ParentBoundary, wire2)
+        utils.append_inner_wire(boundary1.ParentBoundary, new_wire)
+    else:
+        for inner_boundary in boundary2.InnerBoundaries:
+            utils.append(boundary1, "InnerBoundaries", inner_boundary)
+            inner_boundary.ParentBoundary = boundary1
+    inner_wires = utils.get_inner_wires(boundary1)[:]
+    inner_wires.extend(utils.get_inner_wires(boundary2))
+    inner_wires.extend(extra_inner_wires)
+
+    utils.generate_boundary_compound(boundary1, new_wire, inner_wires)
+    RelSpaceBoundary.recompute_areas(boundary1)
+
+    return True
 
 
 def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
@@ -386,114 +427,6 @@ def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     boundary1 = max(boundaries, key=lambda x: x.Area)
     boundaries.remove(boundary1)
     remove_from_doc = list()
-
-    def find_common_segment(wire1, wire2):
-        """Find if wires have common segments and between which edges
-        return named tuple with edge index from each wire and if they have opposite direction"""
-        for (ei1, edge1), (ei2, edge2) in itertools.product(
-            enumerate(wire1.Edges), enumerate(wire2.Edges)
-        ):
-            if wire1 == wire2 and ei1 == ei2:
-                continue
-
-            common_segment = edges_have_common_segment(edge1, edge2)
-            if common_segment:
-                return CommonSegment(ei1, ei2, common_segment.opposite_dir)
-
-    def edges_have_common_segment(edge1, edge2):
-        """Check if edges have common segments and tell if these segments have same direction"""
-        p0_1, p0_2 = utils.get_vectors_from_shape(edge1)
-        p1_1, p1_2 = utils.get_vectors_from_shape(edge2)
-
-        v0_12 = p0_2 - p0_1
-        v1_12 = p1_2 - p1_1
-
-        dir0 = (v0_12).normalize()
-        dir1 = (v1_12).normalize()
-
-        # if edge1 and edge2 are not collinear no junction is possible.
-        if not (
-            (dir0.isEqual(dir1, TOLERANCE) or dir0.isEqual(-dir1, TOLERANCE))
-            and v0_12.cross(p1_1 - p0_1).Length < TOLERANCE
-        ):
-            return
-
-        # Check in which order vectors1 and vectors2 should be connected
-        if dir0.isEqual(dir1, TOLERANCE):
-            p0_1_next_point, other_point = p1_1, p1_2
-            opposite_dir = False
-        else:
-            p0_1_next_point, other_point = p1_2, p1_1
-            opposite_dir = True
-
-        # Check if edge1 and edge2 have a common segment
-        if not (
-            dir0.dot(p0_1_next_point - p0_1) < dir0.dot(p0_2 - p0_1)
-            and dir0.negative().dot(other_point - p0_2)
-            < dir0.negative().dot(p0_1 - p0_2)
-        ):
-            return
-        return CommonSegment(None, None, opposite_dir)
-
-    def merge_boundaries(boundary1, boundary2):
-        wire1 = utils.get_outer_wire(boundary1)
-        vectors1 = utils.get_vectors_from_shape(wire1)
-        wire2 = utils.get_outer_wire(boundary2)
-        vectors2 = utils.get_vectors_from_shape(wire2)
-
-        common_segment = find_common_segment(wire1, wire2)
-        if not common_segment:
-            return False
-        ei1, ei2, opposite_dir = common_segment
-
-        # join vectors1 and vectors2 at indexes
-        new_points = vectors2[ei2 + 1 :] + vectors2[: ei2 + 1]
-        if not opposite_dir:
-            new_points.reverse()
-
-        # Efficient way to insert elements at index : https://stackoverflow.com/questions/14895599/insert-an-element-at-specific-index-in-a-list-and-return-updated-list/48139870#48139870 pylint: disable=line-too-long
-        vectors1[ei1 + 1 : ei1 + 1] = new_points
-
-        # Update shape
-        utils.clean_vectors(vectors1)
-        utils.close_vectors(vectors1)
-        new_wire = Part.makePolygon(vectors1)
-        if (
-            not abs(
-                Part.Face(new_wire).Area - Part.Face(wire1).Area - Part.Face(wire2).Area
-            )
-            < TOLERANCE
-        ):
-            logger.error(
-                f"""Issue while merging oversplitted {boundary1.Label} and {boundary2.Label}
-            Found a common segment but join seems incorrect :
-            combined areas is not equal to the sum of areas"""
-            )
-            return False
-
-        def remove_from_parent_inner_wires(boundary, wire):
-            area = Part.Face(wire).Area
-            parent = boundary.ParentBoundary
-            for inner_wire in utils.get_inner_wires(parent):
-                if abs(Part.Face(inner_wire).Area - area) < TOLERANCE:
-                    parent.Shape = parent.Shape.removeShape([inner_wire])
-                    return
-
-        if boundary1.IsHosted:
-            remove_from_parent_inner_wires(boundary1, wire1)
-            remove_from_parent_inner_wires(boundary2, wire2)
-            utils.append_inner_wire(boundary1.ParentBoundary, new_wire)
-        else:
-            for inner_boundary in boundary2.InnerBoundaries:
-                utils.append(boundary1, "InnerBoundaries", inner_boundary)
-                inner_boundary.ParentBoundary = boundary1
-        inner_wires = utils.get_inner_wires(boundary1)[:]
-        inner_wires.extend(utils.get_inner_wires(boundary2))
-
-        utils.generate_boundary_compound(boundary1, new_wire, inner_wires)
-        RelSpaceBoundary.recompute_areas(boundary1)
-
-        return True
 
     while True and boundaries:
         for boundary2 in boundaries:
@@ -507,43 +440,6 @@ def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
                 with boundaries <{", ".join(str(b.Id) for b in boundaries)}>"""
             )
             break
-
-    wire1 = utils.get_outer_wire(boundary1)
-    vectors1 = utils.get_vectors_from_shape(wire1)
-    inner_wires = utils.get_inner_wires(boundary1)[:]
-    while True:
-        common_segment = find_common_segment(wire1, wire1)
-        if not common_segment:
-            break
-
-        ei1, ei2 = common_segment[0:2]
-
-        # join vectors1 and vectors2 at indexes
-        vectors_split1 = vectors1[: ei1 + 1] + vectors1[ei2 + 1 :]
-        vectors_split2 = vectors1[ei1 + 1 : ei2 + 1]
-        area1 = utils.get_area_from_points(vectors_split1)
-        area2 = utils.get_area_from_points(vectors_split2)
-        if area1 > area2:
-            vectors1 = vectors_split1
-            inner_vectors = vectors_split2
-        else:
-            vectors1 = vectors_split2
-            inner_vectors = vectors_split1
-
-        utils.close_vectors(inner_vectors)
-        inner_polygon = Part.makePolygon(inner_vectors)
-        if Part.Face(inner_polygon).Area > TOLERANCE:
-            inner_wires.extend([inner_polygon])
-
-        # Update shape
-        utils.close_vectors(vectors1)
-        try:
-            wire1 = Part.makePolygon(vectors1)
-        except Part.OCCError:
-            logger.exception(f"Failed to merge boundaries {boundary1.Label} and {boundary2.Label}")
-            break
-        utils.generate_boundary_compound(boundary1, wire1, inner_wires)
-        RelSpaceBoundary.recompute_areas(boundary1)
 
     # Clean FreeCAD document if join operation was a success
     for fc_object in remove_from_doc:
@@ -1028,3 +924,7 @@ def process_test_file(ifc_path, doc):
     with open("./boundaries.log", "w", encoding="utf-8") as log_file:
         log_file.write(ifc_importer.log)
     return ifc_importer
+
+
+class InvalidMergeError(RuntimeError):
+    pass
