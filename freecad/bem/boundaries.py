@@ -384,11 +384,13 @@ def merged_wires(wire1: Part.Wire, wire2: Part.Wire) -> (Part.Wire, List[Part.Wi
     3. Return face outer wire and eventual inner wires"""
     face1 = Part.Face(wire1)
     face2 = Part.Face(wire2)
-    unifier = Part.ShapeUpgrade.UnifySameDomain(face1.fuse(face2))
+    fusion = face1.fuse(face2)
+    fusion.sewShape()
+    unifier = Part.ShapeUpgrade.UnifySameDomain(fusion)
     unifier.build()
-    if len(unifier.shape().Faces) == 1:
-        result = unifier.shape().Faces[0]
-        return (result.Wires[0], result.Wires[1:])
+    if len(unifier.shape().SubShapes) == 1:
+        new_face = unifier.shape().SubShapes[0]
+        return (new_face.OuterWire, new_face.Wires[1:])
     return (None, [])
 
 
@@ -399,7 +401,14 @@ def merge_boundaries(boundary1, boundary2) -> bool:
 
     new_wire, extra_inner_wires = merged_wires(wire1, wire2)
     if not new_wire:
-        return False
+        plane = utils.get_plane(boundary1)
+        utils.project_boundary_onto_plane(boundary1, plane)
+        utils.project_boundary_onto_plane(boundary2, plane)
+        wire1 = utils.get_outer_wire(boundary1)
+        wire2 = utils.get_outer_wire(boundary2)
+        new_wire, extra_inner_wires = merged_wires(wire1, wire2)
+        if not new_wire:
+            return False
 
     # Update shape
     if boundary1.IsHosted:
