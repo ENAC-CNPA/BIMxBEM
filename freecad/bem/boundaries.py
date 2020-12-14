@@ -390,7 +390,10 @@ def merged_wires(wire1: Part.Wire, wire2: Part.Wire) -> (Part.Wire, List[Part.Wi
     unifier.build()
     if len(unifier.shape().SubShapes) == 1:
         new_face = unifier.shape().SubShapes[0]
-        return (new_face.OuterWire, new_face.Wires[1:])
+        try:
+            return (new_face.OuterWire, new_face.Wires[1:])
+        except AttributeError:  # Rarely returned shape is a Wire. OCCT bug ?
+            pass
     return (None, [])
 
 
