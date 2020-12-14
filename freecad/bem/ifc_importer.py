@@ -381,7 +381,7 @@ class IfcImporter:
                 return self.part_by_wires(
                     ifc_boundary.ConnectionGeometry.SurfaceOnRelatingElement
                 )
-            except RuntimeError:
+            except (RuntimeError, utils.ShapeCreationError):
                 print(f"Failed to generate mesh from {ifc_boundary}")
                 try:
                     return self._part_by_mesh(
@@ -451,6 +451,8 @@ class IfcImporter:
             for i in range(0, len(ifc_verts), 3)
         ]
         utils.clean_vectors(fc_verts)
+        if len(fc_verts) < 3:
+            raise utils.ShapeCreationError
         utils.close_vectors(fc_verts)
         return Part.makePolygon(fc_verts)
 

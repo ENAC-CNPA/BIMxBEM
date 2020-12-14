@@ -54,7 +54,7 @@ def clean_vectors(vectors: List[FreeCAD.Vector]) -> None:
     Keep only 1 point if 2 consecutive points are equal.
     Remove point if it makes border go back and forth"""
     i = 0
-    while i < len(vectors) and len(vectors) > 3:
+    while i < len(vectors):
         pt1 = vectors[i - 1]
         pt2 = vectors[i]
         pt3 = vectors[(i + 1) % len(vectors)]
@@ -266,6 +266,7 @@ def polygon_from_lines(lines, base_plane):
         if abs(line1.Direction.dot(line2.Direction)) >= 1 - TOLERANCE:
             continue
         new_points.append(base_plane.value(*line1.intersect2d(line2, base_plane)[0]))
+    clean_vectors(new_points)
     if len(new_points) < 3:
         raise ShapeCreationError
     close_vectors(new_points)
