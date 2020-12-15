@@ -404,14 +404,7 @@ def merge_boundaries(boundary1, boundary2) -> bool:
 
     new_wire, extra_inner_wires = merged_wires(wire1, wire2)
     if not new_wire:
-        plane = utils.get_plane(boundary1)
-        utils.project_boundary_onto_plane(boundary1, plane)
-        utils.project_boundary_onto_plane(boundary2, plane)
-        wire1 = utils.get_outer_wire(boundary1)
-        wire2 = utils.get_outer_wire(boundary2)
-        new_wire, extra_inner_wires = merged_wires(wire1, wire2)
-        if not new_wire:
-            return False
+        return False
 
     # Update shape
     if boundary1.IsHosted:
@@ -441,9 +434,14 @@ def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     if len(boundaries) == 1:
         return
     boundary1 = max(boundaries, key=lambda x: x.Area)
+    # Ensure all boundaries are coplanar
+    plane = utils.get_plane(boundary1)
+    for boundary in boundaries:
+        utils.project_boundary_onto_plane(boundary, plane)
     boundaries.remove(boundary1)
     remove_from_doc = list()
 
+    # Attempt to merge boundaries
     while True and boundaries:
         for boundary2 in boundaries:
             if merge_boundaries(boundary1, boundary2):
