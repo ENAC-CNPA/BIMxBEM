@@ -191,8 +191,8 @@ class MaterialCreator:
 class ConstituentSet:
     attributes = ()
     psets_dict = {}
-    parts_name = "Layers"
-    part_name = "Layer"
+    parts_name = "Constituents"
+    part_name = "Constituent"
     part_props = ("MaterialConstituents", "Fractions", "Categories")
     part_attribs = ("Id", "Fraction", "Category")
 
@@ -370,8 +370,8 @@ class Material:
 class ProfileSet:
     attributes = ()
     psets_dict = {}
-    parts_name = "Layers"
-    part_name = "Layer"
+    parts_name = "Profiles"
+    part_name = "Profile"
     part_props = ("MaterialProfiles",)
     part_attribs = (
         "Id",
