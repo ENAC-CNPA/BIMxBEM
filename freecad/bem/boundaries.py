@@ -426,7 +426,11 @@ def merge_boundaries(boundary1, boundary2) -> bool:
     inner_wires.extend(utils.get_inner_wires(boundary2))
     inner_wires.extend(extra_inner_wires)
 
-    utils.generate_boundary_compound(boundary1, new_wire, inner_wires)
+    try:
+        utils.generate_boundary_compound(boundary1, new_wire, inner_wires)
+    except RuntimeError as e:
+        logger.exception(e)
+        return False
     RelSpaceBoundary.recompute_areas(boundary1)
 
     return True
