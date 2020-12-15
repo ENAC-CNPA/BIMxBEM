@@ -703,11 +703,14 @@ def edge_distance_to_line(edge, line):
 
 
 def is_low_angle(edge1, edge2):
-    dir1 = (edge1.Vertexes[1].Point - edge1.Vertexes[0].Point).normalize()
-    dir2 = (edge2.Vertexes[1].Point - edge2.Vertexes[0].Point).normalize()
-    return (
-        abs(dir1.dot(dir2)) > 0.866
-    )  # Low angle considered as < 30°. cos(pi/6)=0.866.
+    try:
+        dir1 = (edge1.Vertexes[1].Point - edge1.Vertexes[0].Point).normalize()
+        dir2 = (edge2.Vertexes[1].Point - edge2.Vertexes[0].Point).normalize()
+        return (
+            abs(dir1.dot(dir2)) > 0.866
+        )  # Low angle considered as < 30°. cos(pi/6)=0.866.
+    except IndexError:
+        return False
 
 
 def create_sia_boundaries(doc=FreeCAD.ActiveDocument):
