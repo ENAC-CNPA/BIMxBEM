@@ -63,6 +63,38 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
     doc.recompute()
 
 
+def set_internal_to_external(element, material):
+    axis = utils.get_axis_by_name(element.Placement, material.LayerSetDirection)
+    if material.DirectionSense == "NEGATIVE":
+        axis = -axis
+    for boundary in element.ProvidesBoundaries:
+        # Check if already set
+        if boundary.InternalToExternal:
+            continue
+        # Flooring always from top to bottom (agreement not in IFC standards)
+        if boundary.LesoType == "Flooring":
+            if axis.z > 0:
+                material.MaterialLayers = material.MaterialLayers[::-1]
+            boundary.InternalToExternal = 1
+            if boundary.CorrespondingBoundary:
+                boundary.CorrespondingBoundary.InternalToExternal = -1
+        # External always from interior to exterior (agreement not in IFC standards)
+        elif boundary.InternalOrExternalBoundary != "INTERNAL":
+            if axis.dot(boundary.Normal) < 0:
+                material.MaterialLayers = material.MaterialLayers[::-1]
+            boundary.InternalToExternal = 1
+        # Other internal boundaries
+        else:
+            if axis.dot(boundary.Normal) < 0:
+                boundary.InternalToExternal = -1
+            else:
+                boundary.InternalToExternal = 1
+            if boundary.CorrespondingBoundary:
+                boundary.CorrespondingBoundary.InternalToExternal = (
+                    -boundary.InternalToExternal
+                )
+
+
 def ensure_materials_layers_order(doc):
     """
     There is no convention for material order in IFC but energy simulation software expect one.
@@ -73,27 +105,12 @@ def ensure_materials_layers_order(doc):
         boundaries = []
         for element in material.AssociatedTo:
             try:
-                boundaries.extend(element.ProvidesBoundaries)
+                set_internal_to_external(element, material)
             # Happen when element is an element type
             except AttributeError:
                 for occurence in element.ApplicableOccurrence:
                     if not element.Material:
-                        boundaries.extend(occurence.ProvidesBoundaries)
-        boundary = max(boundaries, key=lambda x: x.Area)
-        if (
-            boundary.InternalOrExternalBoundary == "INTERNAL"
-            and not boundary.LesoType == "Flooring"
-        ):
-            continue
-        element = boundary.RelatedBuildingElement
-        axis = utils.get_axis_by_name(element.Placement, material.LayerSetDirection)
-        if material.DirectionSense == "NEGATIVE":
-            axis = -axis
-        if boundary.LesoType == "Flooring":
-            if axis.z > 0:
-                material.MaterialLayers = material.MaterialLayers[::-1]
-        elif axis.dot(boundary.Normal) < 0:
-            material.MaterialLayers = material.MaterialLayers[::-1]
+                        set_internal_to_external(occurence, material)
 
 
 def ensure_external_earth_is_set(space: "SpaceFeature", doc=FreeCAD.ActiveDocument):

@@ -146,6 +146,15 @@ class BEMxml:
         is_hosted = fc_object.IsHosted
         ET.SubElement(boundary, "IsHosted").text = "true" if is_hosted else "false"
 
+        value = fc_object.InternalToExternal
+        param = ET.SubElement(boundary, "InternalToExternal")
+        if value == 1:
+            param.text = "true"
+        elif value == -1:
+            param.text = "false"
+        else:
+            param.text = "null"
+
         if not is_hosted and fc_object.PhysicalOrVirtualBoundary != "VIRTUAL":
             for geo_type in ("SIA_Interior", "SIA_Exterior"):
                 geo = ET.SubElement(boundary, geo_type)

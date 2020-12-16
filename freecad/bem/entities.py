@@ -176,6 +176,15 @@ class RelSpaceBoundary(Root):
         obj.addProperty("App::PropertyIntegerList", "ClosestEdges", bem_category)
         obj.addProperty("App::PropertyIntegerList", "ClosestDistance", bem_category)
         obj.addProperty("App::PropertyBool", "IsHosted", bem_category)
+        obj.addProperty(
+            "App::PropertyInteger",
+            "InternalToExternal",
+            bem_category,
+            """Define if material layers direction.
+            1 mean from inside of the space toward outside of the space.
+            -1 is the opposite.
+            0 is undefined (bool not used as 3 state bool do no exist in FreeCAD yet).""",
+        )
         obj.addProperty("App::PropertyArea", "Area", bem_category)
         obj.addProperty("App::PropertyArea", "AreaWithHosted", bem_category)
         obj.addProperty("App::PropertyLink", "SIA_Interior", bem_category)
