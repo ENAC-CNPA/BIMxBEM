@@ -438,12 +438,23 @@ def merge_boundaries(boundary1, boundary2) -> bool:
 
     try:
         utils.generate_boundary_compound(boundary1, new_wire, inner_wires)
-    except RuntimeError as e:
-        logger.exception(e)
+    except RuntimeError as error:
+        logger.exception(error)
         return False
     RelSpaceBoundary.recompute_areas(boundary1)
 
     return True
+
+
+def merge_corresponding_boundaries(boundary1, boundary2):
+    if boundary2.CorrespondingBoundary:
+        corresponding_boundary = max(
+            boundary1.CorrespondingBoundary,
+            boundary2.CorrespondingBoundary,
+            key=lambda x: x.Area,
+        )
+        boundary1.CorrespondingBoundary = corresponding_boundary
+        corresponding_boundary.CorrespondingBoundary = boundary1
 
 
 def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
@@ -462,6 +473,7 @@ def merge_coplanar_boundaries(boundaries: list, doc=FreeCAD.ActiveDocument):
     while True and boundaries:
         for boundary2 in boundaries:
             if merge_boundaries(boundary1, boundary2):
+                merge_corresponding_boundaries(boundary1, boundary2)
                 boundaries.remove(boundary2)
                 remove_from_doc.append(boundary2)
                 break
