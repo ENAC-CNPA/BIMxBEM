@@ -54,6 +54,12 @@ class MaterialCreator:
             ifc_entity = ifc_entity.IsDecomposedBy[0].RelatedObjects[0]
             self.parse_associations(ifc_entity)
 
+        # Set placement except for object type
+        if hasattr(ifc_entity, "ObjectPlacement"):
+            self.obj.Placement = self.ifc_importer.get_global_placement(
+                ifc_entity.ObjectPlacement
+            )
+
     def parse_associations(self, ifc_entity):
         for association in ifc_entity.HasAssociations:
             if association.is_a("IfcRelAssociatesMaterial"):

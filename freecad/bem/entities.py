@@ -287,7 +287,6 @@ class Element(Root):
         )
         ifc_importer.material_creator.create(obj, ifc_entity)
         obj.Thickness = ifc_importer.guess_thickness(obj, ifc_entity)
-        obj.Placement = ifc_importer.get_global_placement(ifc_entity.ObjectPlacement)
 
         if FreeCAD.GuiUp:
             obj.ViewObject.Proxy = 0
