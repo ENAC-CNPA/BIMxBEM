@@ -298,15 +298,13 @@ class Element(Root):
         ifc_attributes = "IFC Attributes"
         bem_category = "BEM"
         obj.addProperty("App::PropertyLink", "Material", ifc_attributes)
-        obj.addProperty("App::PropertyLinkList", "FillsVoids", ifc_attributes)
-        obj.addProperty("App::PropertyLinkList", "HasOpenings", ifc_attributes)
         obj.addProperty(
             "App::PropertyLinkListHidden", "ProvidesBoundaries", ifc_attributes
         )
         obj.addProperty("App::PropertyLinkHidden", "IsTypedBy", ifc_attributes)
         obj.addProperty("App::PropertyFloat", "ThermalTransmittance", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "HostedElements", bem_category)
-        obj.addProperty("App::PropertyLinkHidden", "HostElement", bem_category)
+        obj.addProperty("App::PropertyLinkListHidden", "HostElements", bem_category)
         obj.addProperty("App::PropertyLength", "Thickness", bem_category)
 
     @classmethod

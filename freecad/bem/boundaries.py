@@ -518,26 +518,23 @@ def ensure_hosted_element_are(space, doc):
         if boundary.IsHosted and boundary.ParentBoundary:
             continue
 
-        def are_too_far(boundary1, boundary2):
-            max_distance = getattr(
-                getattr(boundary2.RelatedBuildingElement, "Thickness", 0), "Value", 0
-            )
-            return (
-                boundary1.Shape.distToShape(boundary2.Shape)[0] - max_distance
-                > TOLERANCE
-            )
-
-        def find_host(boundary):
-            fallback_solution = None
+        def valid_hosts(boundary):
+            """Guess valid hosts"""
             for boundary2 in space.SecondLevel.Group:
-                if boundary is boundary2:
+                if boundary is boundary2 or is_typically_hosted(boundary2.IfcType):
                     continue
 
                 if not utils.are_parallel_boundaries(boundary, boundary2):
                     continue
 
-                if are_too_far(boundary, boundary2):
+                if utils.are_too_far(boundary, boundary2):
                     continue
+
+                yield boundary2
+
+        def find_host(boundary):
+            fallback_solution = None
+            for boundary2 in valid_hosts(boundary):
 
                 fallback_solution = boundary2
                 for inner_wire in utils.get_inner_wires(boundary2):

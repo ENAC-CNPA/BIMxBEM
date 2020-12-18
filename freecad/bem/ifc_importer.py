@@ -159,9 +159,7 @@ class IfcImporter:
         # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
         Progress.set(1, "IfcImport_Elements", "")
         elements_group = get_or_create_group("Elements", doc)
-        ifc_elements = (
-            e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries
-        )
+        ifc_elements = ifc_file.by_type("IfcElement")
         for ifc_entity in ifc_elements:
             elements_group.addObject(Element.create_from_ifc(ifc_entity, self))
         element_types_group = get_or_create_group("ElementTypes", doc)
@@ -482,32 +480,76 @@ def associate_host_element(ifc_file, elements_group):
                 continue
             hosted = utils.get_element_by_guid(ifc_entity.GlobalId, elements_group)
             utils.append(host, "HostedElements", hosted)
-            hosted.HostElement = host
+            utils.append(hosted, "HostElements", host)
+
+
+def get_host(boundary, hosts):
+    if not hosts:
+        # Common issue with both ArchiCAD and Revit
+        logger.debug(f"Boundary <{boundary.Label}> is hosted but host not found.")
+        return None
+    if len(hosts) == 1:
+        host = hosts.pop()
+        if utils.are_parallel_boundaries(boundary, host):
+            return host
+    else:
+        for host in hosts:
+            if not utils.are_parallel_boundaries(boundary, host):
+                continue
+            if utils.are_too_far(boundary, host):
+                continue
+            return host
+    raise InvalidBoundary(
+        f""" boundary {boundary.Label} is hosted and his related building element fills
+    an element void. Boundary is invalid.
+    This occur with Revit models. Invalid boundary is created when a window is
+    touching another wall which is not his host """
+    )
+
+
+def remove_invalid_inner_wire(boundary, boundaries):
+    """Find and remove inner wire produce by invalid hosted boundary"""
+    area = boundary.Area.Value
+    for host in boundaries:
+        if not utils.are_parallel_boundaries(boundary, host):
+            continue
+        if utils.are_too_far(boundary, host):
+            continue
+        inner_wires = utils.get_inner_wires(host)
+        for wire in inner_wires:
+            if abs(Part.Face(wire).Area - area) < TOLERANCE:
+                utils.remove_inner_wire(host, wire)
+                utils.update_boundary_shape(host)
+                return
 
 
 def associate_inner_boundaries(fc_boundaries, doc):
-    """Associate hosted elements like a window or a door in a wall"""
+    """Associate parent boundary and inner boundaries"""
+    to_delete = []
     for fc_boundary in fc_boundaries:
         if not fc_boundary.IsHosted:
             continue
-        candidates = set(fc_boundaries).intersection(
-            getattr(
-                fc_boundary.RelatedBuildingElement.HostElement, "ProvidesBoundaries", ()
-            )
-        )
+        host_boundaries = []
+        for host_element in fc_boundary.RelatedBuildingElement.HostElements:
+            host_boundaries.extend(host_element.ProvidesBoundaries)
 
-        # If there is more than 1 candidate it doesn't really matter
-        # as they share the same host element and space
+        candidates = set(fc_boundaries).intersection(host_boundaries)
+
         try:
-            host_element = candidates.pop()
-        except KeyError:
-            # Common issue with both ArchiCAD and Revit
-            logger.info(
-                f"RelSpaceBoundary Id<{fc_boundary.Id}> is hosted but host not found."
-            )
-            continue
-        fc_boundary.ParentBoundary = host_element
-        utils.append(host_element, "InnerBoundaries", fc_boundary)
+            host = get_host(fc_boundary, candidates)
+        except InvalidBoundary as err:
+            logger.exception(err)
+            to_delete.append(fc_boundary)
+
+        fc_boundary.ParentBoundary = host
+        utils.append(host, "InnerBoundaries", fc_boundary)
+
+    # Remove invalid boundary and corresponding inner wire
+    updated_boundaries = fc_boundaries[:]
+    for boundary in to_delete:
+        remove_invalid_inner_wire(boundary, updated_boundaries)
+        updated_boundaries.remove(boundary)
+        doc.removeObject(boundary.Name)
 
 
 def associate_corresponding_boundaries(doc=FreeCAD.ActiveDocument):
@@ -593,6 +635,10 @@ def get_or_create_group(name, doc=FreeCAD.ActiveDocument):
     if group:
         return group[0]
     return doc.addObject("App::DocumentObjectGroup", name)
+
+
+class InvalidBoundary(LookupError):
+    pass
 
 
 if __name__ == "__main__":

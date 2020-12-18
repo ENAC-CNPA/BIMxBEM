@@ -49,6 +49,13 @@ def are_parallel_boundaries(
     )
 
 
+def are_too_far(boundary1, boundary2):
+    max_distance = getattr(
+        getattr(boundary2.RelatedBuildingElement, "Thickness", 0), "Value", 0
+    )
+    return boundary1.Shape.distToShape(boundary2.Shape)[0] - max_distance > TOLERANCE
+
+
 def clean_vectors(vectors: List[FreeCAD.Vector]) -> None:
     """Clean vectors for polygons creation
     Keep only 1 point if 2 consecutive points are equal.
@@ -250,11 +257,11 @@ def are_edges_parallel(edge1: Part.Edge, edge2: Part.Edge) -> bool:
     return abs(dir1.dot(dir2)) > 1 - TOLERANCE
 
 
-def is_coplanar(shape_1, shape_2):
+def is_coplanar(boundary1, boundary2):
     """Intended for RelSpaceBoundary use only
     For some reason native Part.Shape.isCoplanar(Part.Shape) do not always work"""
-    plane1 = get_plane(shape_1)
-    plane2 = get_plane(shape_2)
+    plane1 = get_plane(boundary1)
+    plane2 = get_plane(boundary2)
     same_dir = plane1.Axis.dot(plane2.Axis) > 1 - TOLERANCE
     p2_on_plane = (
         plane2.Position.distanceToPlane(plane1.Position, plane1.Axis) < TOLERANCE
@@ -317,6 +324,15 @@ def remove_inner_wire(boundary, wire) -> None:
         if abs(Part.Face(inner_wire).Area - area) < TOLERANCE:
             boundary.Shape = boundary.Shape.removeShape([inner_wire])
             return
+
+
+def update_boundary_shape(boundary) -> None:
+    outer_wire = get_outer_wire(boundary)
+    inner_wires = get_inner_wires(boundary)
+    new_face = Part.Face(outer_wire)
+    for wire in inner_wires:
+        new_face = new_face.cut(Part.Face(wire))
+    boundary.Shape = Part.Compound([new_face, outer_wire, *inner_wires])
 
 
 def are_3points_collinear(
