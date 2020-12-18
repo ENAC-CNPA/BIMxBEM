@@ -341,7 +341,6 @@ def group_coplanar_boundaries(boundary_list) -> List[List["boundary"]]:
             coplanar_boundaries.append([boundary])
             continue
         for coplanar_list in coplanar_boundaries:
-            # TODO: Test if comparison is not too strict considering precision
             if utils.is_coplanar(boundary, coplanar_list[0]):
                 coplanar_list.append(boundary)
                 break
@@ -633,9 +632,9 @@ def find_closest_by_distance(boundary1, boundary2):
             continue
 
         compare_closest_edges(boundary1, ei1, edge1, boundary2, ei2, edge2)
-        compare_closest_edges(
+        compare_closest_edges(  # pylint: disable=arguments-out-of-order
             boundary2, ei2, edge2, boundary1, ei1, edge1
-        )  # pylint: disable=arguments-out-of-order
+        )
 
 
 def find_closest_by_intersection(boundary1, boundary2):

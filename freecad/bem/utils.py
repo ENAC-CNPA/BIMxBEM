@@ -204,9 +204,13 @@ def get_boundary_normal(fc_boundary, at_point=None) -> FreeCAD.Vector:
 
 def get_plane(fc_boundary) -> Part.Plane:
     """Intended for RelSpaceBoundary use only"""
-    return Part.Plane(
-        fc_boundary.Shape.Vertexes[0].Point, get_boundary_normal(fc_boundary)
-    )
+    vertexes = get_outer_wire(fc_boundary).Vertexes
+    vec1, vec2 = [v.Point for v in vertexes[0:2]]
+    for vtx in vertexes[2:]:
+        try:
+            return Part.Plane(vec1, vec2, vtx.Point)
+        except Part.OCCError:
+            continue
 
 
 def get_area_from_points(points: List[FreeCAD.Vector]) -> float:
@@ -249,7 +253,13 @@ def are_edges_parallel(edge1: Part.Edge, edge2: Part.Edge) -> bool:
 def is_coplanar(shape_1, shape_2):
     """Intended for RelSpaceBoundary use only
     For some reason native Part.Shape.isCoplanar(Part.Shape) do not always work"""
-    return get_plane(shape_1).toShape().isCoplanar(get_plane(shape_2).toShape())
+    plane1 = get_plane(shape_1)
+    plane2 = get_plane(shape_2)
+    same_dir = plane1.Axis.dot(plane2.Axis) > 1 - TOLERANCE
+    p2_on_plane = (
+        plane2.Position.distanceToPlane(plane1.Position, plane1.Axis) < TOLERANCE
+    )
+    return same_dir and p2_on_plane
 
 
 def line_from_edge(edge: Part.Edge) -> Part.Line:
