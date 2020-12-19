@@ -23,35 +23,17 @@ if __name__ == "__main__":
         1: "Triangle_2x3_R19.ifc",
         2: "2Storey_2x3_A22.ifc",
         3: "2Storey_2x3_R19.ifc",
-        4: "0014_Vernier112D_ENE_ModèleÉnergétique_R20.ifc",
-        5: "3196 Aalseth Lane_R21_bem_space8385.ifc",
-        7: "OverSplitted_R20_2x3.ifc",
-        8: "3196 Aalseth Lane_R21_bem.ifc",
-        9: "ExternalEarth_R20_IFC4.ifc",
+        4: "OverSplitted_R20_2x3.ifc",
+        5: "ExternalEarth_R20_IFC4.ifc",
+        6: "3196 Aalseth Lane_R21_bem.ifc",
+        7: "3196 Aalseth Lane - AC - IFC4 BIM-BEM - Entier.ifc",
+        8: "0014_Vernier112D_ENE_ModèleÉnergétique_R21_1LocalParEtage.ifc",
+        9: "0014_Vernier112D_ENE_ModèleÉnergétique_R21_1LocalParEtage_space[460].ifc",
         10: "Ersatzneubau Alphütte_1-1210_31_23.ifc",
-        11: "GRAPHISOFT_ARCHICAD_Sample_Project_Hillside_House_v1.ifczip",
-        12: "GRAPHISOFT_ARCHICAD_Sample_Project_S_Office_v1.ifczip",
-        13: "Cas1_EXPORT_REVIT_IFC2x3 (EDITED)_Space_Boundaries.ifc",
-        14: "Cas1_EXPORT_REVIT_IFC4DTV (EDITED)_Space_Boundaries.ifc",
-        15: "Cas1_EXPORT_REVIT_IFC4RV (EDITED)_Space_Boundaries.ifc",
-        16: "Cas1_EXPORT_REVIT_IFC4RV (EDITED)_Space_Boundaries_RECREATED.ifc",
-        17: "Cas2_EXPORT_REVIT_IFC4RV (EDITED)_Space_Boudaries.ifc",
-        18: "Cas2_EXPORT_REVIT_IFC4DTV (EDITED)_Space_Boundaries_RECREATED.ifc",
-        19: "Cas2_EXPORT_REVIT_IFC4DTV (EDITED)_Space_Boundaries.ifc",
-        20: "Cas2_EXPORT_REVIT_IFC2x3 (EDITED)_Space_Boundaries.ifc",
-        21: "Temoin.ifc",
-        22: "1708 maquette test 01.ifc",
-        23: "test 02-03 mur int baseslab dalle de sol.ifc",
-        24: "test 02-06 murs composites.ifc",
-        25: "test 02-07 dalle étage et locaux mansardés.ifc",
-        26: "test 02-08 raccords nettoyés étage.ifc",
-        27: "test 02-09 sous-sol.ifc",
-        28: "test 02-02 mur matériau simple.ifc",
-        29: "3196 Aalseth Lane_R19_bem.ifc",
-        30: "Maison Privée.ifc",
     }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[5])
+    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[3])
     DOC = FreeCAD.ActiveDocument
+    WITH_GUI = True
 
     if DOC:  # Remote debugging
         import ptvsd
@@ -64,10 +46,11 @@ if __name__ == "__main__":
 
         boundaries.process_test_file(IFC_PATH, DOC)
     else:
-        FreeCADGui.showMainWindow()
-        DOC = FreeCAD.newDocument()
+        if WITH_GUI:
+            FreeCADGui.showMainWindow()
+            DOC = FreeCAD.newDocument()
 
-        boundaries.process_test_file(IFC_PATH, DOC)
-        # xml_str = generate_bem_xml_from_file(IFC_PATH)
-
-        FreeCADGui.exec_loop()
+            boundaries.process_test_file(IFC_PATH, DOC)
+            FreeCADGui.exec_loop()
+        else:
+            xml_str = boundaries.generate_bem_xml_from_file(IFC_PATH)
