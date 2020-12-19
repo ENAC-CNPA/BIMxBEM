@@ -137,14 +137,28 @@ class IfcImporter:
             # TODO: How to do this as ifcopenshell.ifcopenshell_wrapper has no parse_ifcxml ?
             raise NotImplementedError("No support for .ifcXML yet")
         if ext in (".ifczip", ".zip"):
-            zip_path = zipfile.Path(ifc_path)
-            for member in zip_path.iterdir():
-                zipped_ext = os.path.splitext(member.name)[1].lower()
-                if zipped_ext == ".ifc":
-                    return ifcopenshell.file.from_string(member.read_text())
-                if zipped_ext == ".ifcxml":
-                    # TODO: How to do this as ifcopenshell.ifcopenshell_wrapper has no parse_ifcxml ?
-                    raise NotImplementedError("No support for .ifcXML yet")
+            try:  # python 3.8+
+                raise AttributeError
+                zip_path = zipfile.Path(ifc_path)
+                for member in zip_path.iterdir():
+                    zipped_ext = os.path.splitext(member.name)[1].lower()
+                    if zipped_ext == ".ifc":
+                        return ifcopenshell.file.from_string(member.read_text())
+                    if zipped_ext == ".ifcxml":
+                        raise NotImplementedError("No support for .ifcXML yet")
+            except AttributeError as python36_zip_error:  # python 3.6
+                with zipfile.ZipFile(ifc_path) as zip_file:
+                    for member in zip_file.namelist():
+                        zipped_ext = os.path.splitext(member.name)[1].lower()
+                        if zipped_ext == ".ifc":
+                            with zip_file.open(member) as ifc_file:
+                                return ifcopenshell.file.from_string(
+                                    ifc_file.read().decode()
+                                )
+                        if zipped_ext == ".ifcxml":
+                            raise NotImplementedError(
+                                "No support for .ifcXML yet"
+                            ) from python36_zip_error
         raise NotImplementedError(
             """Supported files :
     - unzipped : *.ifc | *.ifcXML
