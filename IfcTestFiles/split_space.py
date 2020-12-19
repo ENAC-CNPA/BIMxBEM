@@ -7,11 +7,11 @@ import ifcopenshell
 
 
 class IfcPatch:
-    def __init__(self, src, file, logger, space_id: int, **kwargs):
+    def __init__(self, src, file, logger, space_ids: List[int], **kwargs):
         self.src = src
         self.file = file
         self.logger = logger
-        self.space_id = space_id
+        self.space_ids = space_ids
         self.kwargs = kwargs
         self.new_file = None
         self.elements: List[Any] = []
@@ -50,7 +50,14 @@ class IfcPatch:
         ifc_file = self.file
         new_file = ifcopenshell.file(schema=ifc_file.schema)
         self.new_file = new_file
-        space = ifc_file.by_id(self.space_id)
+        for space_id in self.space_ids:
+            self.write_space(space_id)
+        new_file.write(self.output_path())
+
+    def write_space(self, space_id):
+        new_file = self.new_file
+        ifc_file = self.file
+        space = ifc_file.by_id(space_id)
         storey = space.Decomposes[0].RelatingObject
         self.add_container(storey, ifc_file, new_file)
         new_file.add(space)
@@ -59,22 +66,35 @@ class IfcPatch:
         for boundary in space.BoundedBy:
             new_file.add(boundary)
             self.write_element(boundary.RelatedBuildingElement)
-        new_file.write(self.output_path())
+        for rel in self.file.by_type("IfcRelVoidsElement"):
+            try:
+                if new_file.by_guid(rel.RelatingBuildingElement.GlobalId):
+                    new_file.add(rel.RelatedOpeningElement)
+                    new_file.add(rel)
+            except RuntimeError:
+                pass
+        for rel in self.file.by_type("IfcRelFillsElement"):
+            try:
+                if new_file.by_guid(rel.RelatedBuildingElement.GlobalId):
+                    new_file.add(rel.RelatingOpeningElement)
+                    new_file.add(rel)
+            except RuntimeError:
+                pass
 
     def output_path(self) -> str:
         path = self.kwargs.get("output", None)
         if not path:
             path = pathlib.Path(self.src)
             path = str(
-                path.parent.joinpath(f"{path.stem}_space{self.space_id}{path.suffix}")
+                path.parent.joinpath(f"{path.stem}_space{self.space_ids}{path.suffix}")
             )
         return path
 
 
 def main():
-    path = "IfcTestFiles/3196 Aalseth Lane_R21_bem.ifc"
+    path = "IfcTestFiles/0014_Vernier112D_ENE_ModèleÉnergétique_R21_1LocalParEtage.ifc"
     ifc_file = ifcopenshell.open(path)
-    IfcPatch(path, ifc_file, logger=None, space_id=10042).patch()
+    IfcPatch(path, ifc_file, logger=None, space_ids=[10928,10219]).patch()
 
 
 if __name__ == "__main__":
