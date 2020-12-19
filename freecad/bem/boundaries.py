@@ -72,6 +72,8 @@ def set_internal_to_external(element, material):
         if boundary.InternalToExternal:
             continue
         # Flooring always from top to bottom (agreement not in IFC standards)
+        if boundary.CorrespondingBoundary and boundary.LesoType == "Ceiling":
+            continue
         if boundary.LesoType == "Flooring":
             if axis.z > 0:
                 material.MaterialLayers = material.MaterialLayers[::-1]
