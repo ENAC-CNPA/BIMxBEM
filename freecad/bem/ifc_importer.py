@@ -558,16 +558,37 @@ def associate_corresponding_boundaries(doc=FreeCAD.ActiveDocument):
         associate_corresponding_boundary(fc_boundary, doc)
 
 
-def clean_corresponding_candidates(fc_boundary, doc):
-    other_boundaries = utils.get_boundaries_by_element(
-        fc_boundary.RelatedBuildingElement, doc
-    )
-    other_boundaries.remove(fc_boundary)
-    return [
-        b
-        for b in other_boundaries
-        if not b.CorrespondingBoundary or b.RelatingSpace != fc_boundary.RelatingSpace
-    ]
+def cleaned_corresponding_candidates(boundary1):
+    candidates = []
+    for boundary2 in getattr(
+        boundary1.RelatedBuildingElement, "ProvidesBoundaries", ()
+    ):
+        if boundary2.CorrespondingBoundary:
+            continue
+        if boundary2.InternalOrExternalBoundary != "INTERNAL":
+            continue
+        if boundary1.RelatingSpace is boundary2.RelatingSpace:
+            continue
+        if not abs(boundary1.Area.Value - boundary2.Area.Value) < TOLERANCE:
+            continue
+        candidates.append(boundary2)
+    return candidates
+
+
+def get_best_corresponding_candidate(boundary, candidates):
+    if len(candidates) == 1:
+        return candidates[0]
+    corresponding_boundary = None
+    center_of_mass = utils.get_outer_wire(boundary).CenterOfMass
+    min_lenght = 10000  # No element has 10 m thickness
+    for candidate in candidates:
+        distance = center_of_mass.distanceToPoint(
+            utils.get_outer_wire(candidate).CenterOfMass
+        )
+        if distance < min_lenght:
+            min_lenght = distance
+            corresponding_boundary = candidate
+    return corresponding_boundary
 
 
 def seems_too_smal(boundary) -> bool:
@@ -595,20 +616,8 @@ def associate_corresponding_boundary(boundary, doc):
     ):
         return
 
-    corresponding_boundary = None
-    other_boundaries = clean_corresponding_candidates(boundary, doc)
-    if len(other_boundaries) == 1:
-        corresponding_boundary = other_boundaries[0]
-    else:
-        center_of_mass = utils.get_outer_wire(boundary).CenterOfMass
-        min_lenght = 10000  # No element has 10 m thickness
-        for candidate in other_boundaries:
-            distance = center_of_mass.distanceToPoint(
-                utils.get_outer_wire(candidate).CenterOfMass
-            )
-            if distance < min_lenght:
-                min_lenght = distance
-                corresponding_boundary = candidate
+    candidates = cleaned_corresponding_candidates(boundary)
+    corresponding_boundary = get_best_corresponding_candidate(boundary, candidates)
     if corresponding_boundary:
         boundary.CorrespondingBoundary = corresponding_boundary
         corresponding_boundary.CorrespondingBoundary = boundary
