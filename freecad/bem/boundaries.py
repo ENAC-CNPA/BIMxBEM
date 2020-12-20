@@ -579,6 +579,7 @@ def ensure_hosted_element_are(space, doc):
 def ensure_hosted_are_coplanar(space):
     for boundary in space.SecondLevel.Group:
         inner_wires = utils.get_inner_wires(boundary)
+        missing_inner_wires = False
         if len(inner_wires) < len(boundary.InnerBoundaries):
             missing_inner_wires = True
         for inner_boundary in boundary.InnerBoundaries:
