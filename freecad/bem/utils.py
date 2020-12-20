@@ -263,8 +263,8 @@ def is_coplanar(boundary1, boundary2):
     plane1 = get_plane(boundary1)
     plane2 = get_plane(boundary2)
     same_dir = plane1.Axis.dot(plane2.Axis) > 1 - TOLERANCE
-    p2_on_plane = (
-        plane2.Position.distanceToPlane(plane1.Position, plane1.Axis) < TOLERANCE
+    p2_on_plane = (  # Strangely distanceToPlane can be negative
+        abs(plane2.Position.distanceToPlane(plane1.Position, plane1.Axis)) < TOLERANCE
     )
     return same_dir and p2_on_plane
 
