@@ -498,10 +498,17 @@ def create_fake_host(boundary, space, doc):
     fake_host.Id = IfcId.new(doc)
     RelSpaceBoundary.set_label(fake_host)
     space.SecondLevel.addObject(fake_host)
-    inner_wire = utils.get_outer_wire(boundary).scale(1.001)
-    inner_wire = utils.project_wire_to_plane(inner_wire, utils.get_plane(boundary))
-    utils.append_inner_wire(boundary, inner_wire)
-    utils.append(boundary, "InnerBoundaries", fake_host)
+    inner_wire = utils.get_outer_wire(boundary)
+    outer_wire = inner_wire.scaled(1.001, inner_wire.CenterOfMass)
+    plane = utils.get_plane(boundary)
+    outer_wire = utils.project_wire_to_plane(outer_wire, plane)
+    inner_wire = utils.project_wire_to_plane(inner_wire, plane)
+    utils.generate_boundary_compound(fake_host, outer_wire, [inner_wire])
+    boundary.ParentBoundary = fake_host
+    fake_building_element = doc.copyObject(boundary.RelatedBuildingElement)
+    fake_building_element.Id = IfcId.new(doc)
+    fake_host.RelatedBuildingElement = fake_building_element
+    utils.append(fake_host, "InnerBoundaries", boundary)
     if FreeCAD.GuiUp:
         fake_host.ViewObject.ShapeColor = (0.7, 0.3, 0.0)
     return fake_host
@@ -524,6 +531,9 @@ def ensure_hosted_element_are(space, doc):
             """Guess valid hosts"""
             for boundary2 in space.SecondLevel.Group:
                 if boundary is boundary2 or is_typically_hosted(boundary2.IfcType):
+                    continue
+
+                if not boundary2.Area.Value - boundary.Area.Value >= 0:
                     continue
 
                 if not utils.are_parallel_boundaries(boundary, boundary2):
