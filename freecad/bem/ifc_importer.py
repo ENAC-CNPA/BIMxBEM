@@ -138,7 +138,6 @@ class IfcImporter:
             raise NotImplementedError("No support for .ifcXML yet")
         if ext in (".ifczip", ".zip"):
             try:  # python 3.8+
-                raise AttributeError
                 zip_path = zipfile.Path(ifc_path)
                 for member in zip_path.iterdir():
                     zipped_ext = os.path.splitext(member.name)[1].lower()
@@ -149,7 +148,7 @@ class IfcImporter:
             except AttributeError as python36_zip_error:  # python 3.6
                 with zipfile.ZipFile(ifc_path) as zip_file:
                     for member in zip_file.namelist():
-                        zipped_ext = os.path.splitext(member.name)[1].lower()
+                        zipped_ext = os.path.splitext(member)[1].lower()
                         if zipped_ext == ".ifc":
                             with zip_file.open(member) as ifc_file:
                                 return ifcopenshell.file.from_string(
