@@ -63,6 +63,11 @@ def processing_sia_boundaries(doc=FreeCAD.ActiveDocument) -> None:
     doc.recompute()
 
 
+def reverse_layers(material):
+    material.MaterialLayers = material.MaterialLayers[::-1]
+    material.Thicknesses = material.Thicknesses[::-1]
+
+
 def set_internal_to_external(element, material):
     axis = utils.get_axis_by_name(element.Placement, material.LayerSetDirection)
     if material.DirectionSense == "NEGATIVE":
@@ -76,14 +81,14 @@ def set_internal_to_external(element, material):
             continue
         if boundary.LesoType == "Flooring":
             if axis.z > 0:
-                material.MaterialLayers = material.MaterialLayers[::-1]
+                reverse_layers(material)
             boundary.InternalToExternal = 1
             if boundary.CorrespondingBoundary:
                 boundary.CorrespondingBoundary.InternalToExternal = -1
         # External always from interior to exterior (agreement not in IFC standards)
         elif boundary.InternalOrExternalBoundary != "INTERNAL":
             if axis.dot(boundary.Normal) < 0:
-                material.MaterialLayers = material.MaterialLayers[::-1]
+                reverse_layers(material)
             boundary.InternalToExternal = 1
         # Other internal boundaries
         else:
