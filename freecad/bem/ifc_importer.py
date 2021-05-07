@@ -576,13 +576,15 @@ def cleaned_corresponding_candidates(boundary1):
     for boundary2 in getattr(
         boundary1.RelatedBuildingElement, "ProvidesBoundaries", ()
     ):
+        if boundary2 is boundary1:
+            continue
         if boundary2.CorrespondingBoundary:
             continue
         if boundary2.InternalOrExternalBoundary != "INTERNAL":
             continue
         if boundary1.RelatingSpace is boundary2.RelatingSpace:
             continue
-        if not abs(boundary1.Area.Value - boundary2.Area.Value) < TOLERANCE:
+        if not abs(1 - boundary1.Area.Value/boundary2.Area.Value) < TOLERANCE:
             continue
         candidates.append(boundary2)
     return candidates
