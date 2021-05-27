@@ -24,6 +24,7 @@ if typing.TYPE_CHECKING:
 class MaterialCreator:
     def __init__(self, ifc_importer=None):
         self.obj = None
+        self.ifc_entity = None
         self.materials = {}
         self.material_layer_sets = {}
         self.material_constituent_sets = {}
@@ -37,6 +38,7 @@ class MaterialCreator:
 
     def create(self, obj, ifc_entity):
         self.obj = obj
+        self.ifc_entity = ifc_entity
         self.parse_material(ifc_entity)
 
     def parse_material(self, ifc_entity):
@@ -122,7 +124,7 @@ class MaterialCreator:
 
     def create_layer_set(self, layer_set):
         if layer_set.LayerSetName not in self.material_layer_sets:
-            fc_layer_set = LayerSet.create(layer_set)
+            fc_layer_set = LayerSet.create(layer_set, building_element=self.ifc_entity)
             layers = []
             layers_thickness = []
             for layer in layer_set.MaterialLayers:
@@ -137,23 +139,53 @@ class MaterialCreator:
         return self.material_layer_sets[layer_set.LayerSetName]
 
     def create_constituent_set(self, constituent_set):
-        if constituent_set.Name not in self.material_constituent_sets:
-            fc_constituent_set = ConstituentSet.create(constituent_set)
-            constituents = []
-            constituents_fraction = []
-            constituents_categories = []
-            for constituent in constituent_set.MaterialConstituents:
-                constituents.append(self.create_single(constituent.Material))
-                constituents_fraction.append(constituent.Fraction or 0)
-                constituents_categories.append(constituent.Category or "")
-            fc_constituent_set.MaterialConstituents = constituents
-            fc_constituent_set.Fractions = constituents_fraction
-            fc_constituent_set.Categories = constituents_categories
-            self.material_constituent_sets[
-                fc_constituent_set.IfcName
-            ] = fc_constituent_set
-            return fc_constituent_set
-        return self.material_constituent_sets[constituent_set.Name]
+        if constituent_set.Name in self.material_constituent_sets:
+            return self.material_constituent_sets[constituent_set.Name]
+        # In MVD IFC4RV IfcMaterialLayerSet do not exist. Layer thicknesses are stored in a
+        # quantity set. See: https://standards.buildingsmart.org/MVD/RELEASE/IFC4/ADD2_TC1/RV1_2/HTML/link/ifcmaterialconstituent.htm
+        # Also see bsi forum: https://forums.buildingsmart.org/t/why-are-material-layer-sets-excluded-from-ifc4-reference-view-mvd/3638
+        layers = {}
+        for rel_definition in getattr(self.ifc_entity, "IsDefinedBy", ()):
+            definition = rel_definition.RelatingPropertyDefinition
+            if not definition.is_a("IfcElementQuantity"):
+                continue
+            # ArchiCAD stores it in standard Qto eg. Qto_WallBaseQuantities
+            if definition.Name.endswith("BaseQuantities"):
+                for quantity in definition.Quantities:
+                    if not quantity.is_a("IfcPhysicalComplexQuantity"):
+                        continue
+                    layers[quantity.Name] = (
+                        quantity.HasQuantities[0].LengthValue * self.ifc_scale
+                    )
+        if layers:
+            fc_layer_set = LayerSet.create(
+                constituent_set, building_element=self.ifc_entity
+            )
+            thicknesses = []
+            materiallayers = []
+            for layer in constituent_set.MaterialConstituents:
+                thicknesses.append(layers[layer.Name])
+                materiallayers.append(self.create_single(layer.Material))
+            fc_layer_set.Thicknesses = thicknesses
+            fc_layer_set.TotalThickness = sum(thicknesses) * self.fc_scale
+            fc_layer_set.MaterialLayers = materiallayers
+            self.material_constituent_sets[fc_layer_set.IfcName] = fc_layer_set
+            return fc_layer_set
+
+        # Constituent set which cannot be converted to layer sets eg. windows, complex walls
+        fc_constituent_set = ConstituentSet.create(constituent_set)
+        constituents = []
+        constituents_fraction = []
+        constituents_categories = []
+        for constituent in constituent_set.MaterialConstituents:
+            constituents.append(self.create_single(constituent.Material))
+            constituents_fraction.append(constituent.Fraction or 0)
+            constituents_categories.append(constituent.Category or "")
+        fc_constituent_set.MaterialConstituents = constituents
+        fc_constituent_set.Fractions = constituents_fraction
+        fc_constituent_set.Categories = constituents_categories
+        self.material_constituent_sets[fc_constituent_set.IfcName] = fc_constituent_set
+        return fc_constituent_set
 
     def create_constituent_set_from_material_list(self, material_list, ifc_element):
         constituent_set = ConstituentSet.create()
@@ -246,20 +278,21 @@ class LayerSet:
     part_props = ("MaterialLayers", "Thicknesses")
     part_attribs = ("Id", "Thickness")
 
-    def __init__(self, obj: "LayerSetFeature", ifc_entity) -> None:
+    def __init__(self, obj: "LayerSetFeature", ifc_entity, building_element) -> None:
         self.ifc_entity = ifc_entity
+        self.building_element = building_element
         self._init_properties(obj, ifc_entity)
         self.materials = {}
         self.Type = "MaterialLayerSet"  # pylint: disable=invalid-name
         obj.Proxy = self
 
     @classmethod
-    def create(cls, ifc_entity=None) -> "ConstituentSetFeature":
+    def create(cls, ifc_entity=None, building_element=None) -> "ConstituentSetFeature":
         """Stantard FreeCAD FeaturePython Object creation method
         ifc_entity : Optionnally provide a base entity.
         """
         obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "Material")
-        LayerSet(obj, ifc_entity)
+        LayerSet(obj, ifc_entity, building_element)
         return obj
 
     def _init_properties(self, obj: "LayerSetFeature", ifc_entity) -> None:
@@ -282,18 +315,22 @@ class LayerSet:
         if not ifc_entity:
             return
         obj.Id = ifc_entity.id()
-        obj.IfcName = ifc_entity.LayerSetName or ""
-        # Description is new to IFC4 so IFC2x3 raise attribute error
-        try:
-            obj.Description = ifc_entity.Description or ""
-        except AttributeError:
-            pass
+        if ifc_entity.is_a("IfcMaterialLayerSet"):
+            obj.IfcName = ifc_entity.LayerSetName or ""
+        elif ifc_entity.is_a("IfcMaterialConstituentSet"):  # for MVD IFC4RV
+            obj.IfcName = ifc_entity.Name
+        # Description is new to IFC4 so IFC2x3
+        obj.Description = getattr(ifc_entity, "Description", None) or ""
         obj.Label = f"{obj.Id}_{obj.IfcName}"
         obj.IfcType = ifc_entity.is_a()
-        if ifc_entity.is_a("IfcWall"):
+        building_element = self.building_element
+        if building_element.is_a("IfcWall") or building_element.is_a("IfcWallType"):
             obj.LayerSetDirection = "AXIS2"
-        elif ifc_entity.is_a("IfcSlab") or ifc_entity.is_a("IfcRoof"):
-            obj.LayerSetDirection = "AXIS3"
+        else:
+            for ifc_class in ["IfcSlab", "IfcSlabType", "IfcRoof", "IfcRoofType"]:
+                if building_element.is_a(ifc_class):
+                    obj.LayerSetDirection = "AXIS3"
+                    break
         obj.DirectionSense = "POSITIVE"
 
 

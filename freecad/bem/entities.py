@@ -75,6 +75,7 @@ class Root:
     def __init__(self, obj: "RootFeature") -> None:
         self.Type = self.__class__.__name__  # pylint: disable=invalid-name
         obj.Proxy = self  # pylint: disable=invalid-name
+        # TODO: remove 2nd argument for FreeCAD ⩾0.19.1. See https://forum.freecadweb.org/viewtopic.php?t=57479
         obj.addExtension("App::GroupExtensionPython", self)
 
     @classmethod
