@@ -253,7 +253,10 @@ class IfcImporter:
                     return representation.Items[0].ZDim * self.fc_scale * self.ifc_scale
                 else:
                     return 0
-        bbox = self.element_local_shape_by_brep(ifc_entity).BoundBox
+        try:
+            bbox = self.element_local_shape_by_brep(ifc_entity).BoundBox
+        except RuntimeError:
+            return 0
         # Returning bbox thickness for windows or doors is not insteresting
         # as it does not return frame thickness.
         if self.is_wall_like(obj.IfcType):
@@ -553,6 +556,7 @@ def associate_inner_boundaries(fc_boundaries, doc):
         except InvalidBoundary as err:
             logger.exception(err)
             to_delete.append(fc_boundary)
+            continue
 
         fc_boundary.ParentBoundary = host
         utils.append(host, "InnerBoundaries", fc_boundary)
