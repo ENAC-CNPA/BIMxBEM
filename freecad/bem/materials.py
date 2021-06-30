@@ -190,7 +190,7 @@ class MaterialCreator:
     def create_constituent_set_from_material_list(self, material_list, ifc_element):
         constituent_set = ConstituentSet.create()
         constituent_set.IfcType = material_list.is_a()
-        constituent_set.IfcName = self.get_type_name(ifc_element)
+        constituent_set.IfcName = self.get_type_name(ifc_element) or "NoTypeName"
         constituent_set.Id = material_list.id()
         constituent_set.Label = f"{constituent_set.Id}_{constituent_set.IfcName}"
         materials = material_list.Materials
