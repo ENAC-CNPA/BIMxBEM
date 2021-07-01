@@ -304,14 +304,7 @@ def project_boundary_onto_plane(boundary, plane: Part.Plane):
     outer_wire = project_wire_to_plane(outer_wire, plane)
     inner_wires = [project_wire_to_plane(wire, plane) for wire in inner_wires]
 
-    face = Part.Face(outer_wire)
-    try:
-        for inner_wire in inner_wires:
-            face = face.cut(Part.Face(inner_wire))
-    except RuntimeError:
-        pass
-
-    boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
+    generate_boundary_compound(boundary, outer_wire, inner_wires)
 
 
 def remove_inner_wire(boundary, wire) -> None:
@@ -329,10 +322,7 @@ def remove_inner_wire(boundary, wire) -> None:
 def update_boundary_shape(boundary) -> None:
     outer_wire = get_outer_wire(boundary)
     inner_wires = get_inner_wires(boundary)
-    new_face = Part.Face(outer_wire)
-    for wire in inner_wires:
-        new_face = new_face.cut(Part.Face(wire))
-    boundary.Shape = Part.Compound([new_face, outer_wire, *inner_wires])
+    generate_boundary_compound(boundary, outer_wire, inner_wires)
 
 
 def are_3points_collinear(

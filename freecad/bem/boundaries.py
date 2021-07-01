@@ -587,21 +587,17 @@ def ensure_hosted_are_coplanar(space):
         missing_inner_wires = False
         if len(inner_wires) < len(boundary.InnerBoundaries):
             missing_inner_wires = True
+        outer_wire = utils.get_outer_wire(boundary)
         for inner_boundary in boundary.InnerBoundaries:
             if utils.is_coplanar(inner_boundary, boundary) and not missing_inner_wires:
                 continue
             utils.project_boundary_onto_plane(inner_boundary, utils.get_plane(boundary))
-            outer_wire = utils.get_outer_wire(boundary)
             inner_wire = utils.get_outer_wire(inner_boundary)
             inner_wires.append(inner_wire)
-
-            try:
-                face = boundary.Shape.Faces[0]
-                face = face.cut(Part.Face(inner_wire))
-            except RuntimeError:
-                pass
-
-            boundary.Shape = Part.Compound([face, outer_wire, *inner_wires])
+        try:
+            utils.generate_boundary_compound(boundary, outer_wire, inner_wires)
+        except RuntimeError:
+            continue
 
 
 def is_typically_hosted(ifc_type: str):
