@@ -566,7 +566,7 @@ def associate_inner_boundaries(fc_boundaries, doc):
 
         fc_boundary.ParentBoundary = host
         if host:
-        utils.append(host, "InnerBoundaries", fc_boundary)
+            utils.append(host, "InnerBoundaries", fc_boundary)
 
     # Remove invalid boundary and corresponding inner wire
     updated_boundaries = fc_boundaries[:]
