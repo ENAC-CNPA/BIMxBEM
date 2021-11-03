@@ -260,7 +260,8 @@ class IfcImporter:
                 else:
                     return 0
         try:
-            bbox = self.element_local_shape_by_brep(ifc_entity).BoundBox
+            fc_shape = self.element_local_shape_by_brep(ifc_entity)
+            bbox = fc_shape.BoundBox
         except RuntimeError:
             return 0
         # Returning bbox thickness for windows or doors is not insteresting
@@ -269,6 +270,10 @@ class IfcImporter:
             return min(bbox.YLength, bbox.XLength)
         elif self.is_slab_like(obj.IfcType):
             return bbox.ZLength
+        # Here we consider that thickness is distance between the 2 faces with higher area
+        elif ifc_entity.is_a("IfcRoof"):
+            faces = sorted(fc_shape.Faces, key=lambda x: x.Area)
+            return faces[-1].distToShape(faces[-2])[0]
         return 0
 
     @staticmethod
@@ -277,7 +282,7 @@ class IfcImporter:
 
     @staticmethod
     def is_slab_like(ifc_type):
-        return ifc_type in ("IfcSlab", "IfcSlabStandardCase", "IfcRoof")
+        return ifc_type in ("IfcSlab", "IfcSlabStandardCase")
 
     def generate_containers(self, ifc_parent, fc_parent):
         for rel_aggregates in ifc_parent.IsDecomposedBy:
