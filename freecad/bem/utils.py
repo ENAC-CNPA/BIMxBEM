@@ -119,6 +119,16 @@ def get_by_id(ifc_id: int, elements: Iterable[Part.Feature]) -> Part.Feature:
             continue
 
 
+def get_object(ifc_entity, doc) -> Part.Feature:
+    entity_id = ifc_entity.id()
+    for element in doc.Objects:
+        try:
+            if element.Id == entity_id:
+                return element
+        except AttributeError:
+            continue
+
+
 def get_by_class(doc=FreeCAD.ActiveDocument, by_class=object):
     """Generator throught FreeCAD document element of specific python proxy class"""
     for element in doc.Objects:

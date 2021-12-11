@@ -193,6 +193,9 @@ class IfcImporter:
             project = Project.create_from_ifc(ifc_project, self)
             self.generate_containers(ifc_project, project)
 
+        # Associate existing ParentBoundary and CorrespondingBoundary
+        associate_parent_and_corresponding(ifc_file, doc)
+
         Progress.set(15, "IfcImporter_EnrichingDatas", "")
         # Associate CorrespondingBoundary
         associate_corresponding_boundaries(doc)
@@ -554,7 +557,7 @@ def associate_inner_boundaries(fc_boundaries, doc):
     """Associate parent boundary and inner boundaries"""
     to_delete = []
     for fc_boundary in fc_boundaries:
-        if not fc_boundary.IsHosted:
+        if not fc_boundary.IsHosted or fc_boundary.ParentBoundary:
             continue
         host_boundaries = []
         for host_element in fc_boundary.RelatedBuildingElement.HostElements:
@@ -579,6 +582,26 @@ def associate_inner_boundaries(fc_boundaries, doc):
         remove_invalid_inner_wire(boundary, updated_boundaries)
         updated_boundaries.remove(boundary)
         doc.removeObject(boundary.Name)
+
+
+def associate_parent_and_corresponding(ifc_file, doc):
+    try:
+        for boundary in ifc_file.by_type("IfcRelSpaceBoundary2ndLevel"):
+            if boundary.ParentBoundary:
+                fc_boundary = utils.get_object(boundary, doc)
+                fc_parent = utils.get_object(boundary.ParentBoundary, doc)
+                fc_boundary.ParentBoundary = fc_parent
+                utils.append(fc_parent, "InnerBoundaries", fc_boundary)
+            if boundary.CorrespondingBoundary:
+                fc_boundary = utils.get_object(boundary, doc)
+                if fc_boundary.CorrespondingBoundary:
+                    continue
+                fc_corresponding_boundary = utils.get_object(boundary.CorrespondingBoundary, doc)
+                fc_boundary.CorrespondingBoundary = fc_corresponding_boundary
+                fc_corresponding_boundary.CorrespondingBoundary = fc_boundary
+    except RuntimeError:
+        # When entity do not exist in the schema
+        pass
 
 
 def associate_corresponding_boundaries(doc=FreeCAD.ActiveDocument):
