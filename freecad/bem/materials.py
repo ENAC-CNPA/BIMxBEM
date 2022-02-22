@@ -8,6 +8,7 @@ See the LICENSE.TXT file for more details.
 
 Author : Cyril Waechter
 """
+import re
 import typing
 import ifcopenshell
 import FreeCAD
@@ -349,6 +350,7 @@ class Material:
             "SpecificHeatCapacity",
             "ThermalConductivity",
         ),
+        "materialsdb.org_layer": ("MaterialsDBLayerId",),
     }
     parts_name = ""
     part_name = ""
@@ -393,6 +395,9 @@ class Material:
         obj.addProperty("App::PropertyFloat", "SpecificHeatCapacity", pset_name)
         obj.addProperty("App::PropertyFloat", "ThermalConductivity", pset_name)
 
+        pset_name = "materialsdb.org_layer"
+        obj.addProperty("App::PropertyString", "MaterialsDBLayerId", pset_name)
+
         ifc_entity = self.ifc_entity
 
         if not ifc_entity:
@@ -408,6 +413,10 @@ class Material:
                 for prop in pset.Properties:
                     if prop.Name in self.psets_dict[pset.Name]:
                         setattr(obj, prop.Name, prop.NominalValue.wrappedValue)
+        # Read materialdb.org layer id from entity name when authoring software is not able to export it
+        m = re.search("id\((\S+)\)", ifc_entity.Name)
+        if m:
+            setattr(obj, "MaterialsDBLayerId", m.group(1))
 
 
 class ProfileSet:
