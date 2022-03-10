@@ -330,6 +330,11 @@ class IfcImporter:
         # All boundaries have their placement relative to space placement
         space_placement = self.get_placement(ifc_space)
         for ifc_boundary in (b for b in ifc_space.BoundedBy if is_second_level(b)):
+            if not ifc_boundary.ConnectionGeometry:
+                logger.warning(
+                    f"Boundary <{ifc_boundary.id()}> has no ConnectionGeometry and has therefore been ignored"
+                )
+                continue
             try:
                 fc_boundary = RelSpaceBoundary.create_from_ifc(
                     ifc_entity=ifc_boundary, ifc_importer=self
@@ -596,7 +601,9 @@ def associate_parent_and_corresponding(ifc_file, doc):
                 fc_boundary = utils.get_object(boundary, doc)
                 if fc_boundary.CorrespondingBoundary:
                     continue
-                fc_corresponding_boundary = utils.get_object(boundary.CorrespondingBoundary, doc)
+                fc_corresponding_boundary = utils.get_object(
+                    boundary.CorrespondingBoundary, doc
+                )
                 fc_boundary.CorrespondingBoundary = fc_corresponding_boundary
                 fc_corresponding_boundary.CorrespondingBoundary = fc_boundary
     except RuntimeError:
