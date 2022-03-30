@@ -276,6 +276,11 @@ class IfcImporter:
         # Here we consider that thickness is distance between the 2 faces with higher area
         elif ifc_entity.is_a("IfcRoof"):
             faces = sorted(fc_shape.Faces, key=lambda x: x.Area)
+            if len(faces) < 2:
+                logger.warning(
+                    f"""{ifc_entity.is_a()}<{ifc_entity.id()}> has an invalid geometry (empty or less than 2 faces)"""
+                )
+                return 0
             return faces[-1].distToShape(faces[-2])[0]
         return 0
 
