@@ -292,6 +292,8 @@ def write_xml(doc=FreeCAD.ActiveDocument) -> BEMxml:
     bem_xml = BEMxml()
     for project in utils.get_elements_by_ifctype("IfcProject", doc):
         bem_xml.write_project(project)
+    for zone in utils.get_elements_by_ifctype("IfcZone", doc):
+        bem_xml.write_zone(zone)
     for space in utils.get_elements_by_ifctype("IfcSpace", doc):
         bem_xml.write_space(space)
         for boundary in space.SecondLevel.Group:

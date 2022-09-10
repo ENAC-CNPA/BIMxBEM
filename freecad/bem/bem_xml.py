@@ -27,6 +27,7 @@ class BEMxml:
         self.root = ET.Element("bimbem")
         self.tree = ET.ElementTree(self.root)
         self.projects = ET.SubElement(self.root, "Projects")
+        self.zones = ET.SubElement(self.root, "Zones")
         self.spaces = ET.SubElement(self.root, "Spaces")
         self.boundaries = ET.SubElement(self.root, "Boundaries")
         self.building_element_types = ET.SubElement(self.root, "BuildingElementTypes")
@@ -77,6 +78,14 @@ class BEMxml:
         self.sites = ET.SubElement(project, "Sites")
         for site in fc_object.Group:
             self.write_site(site)
+
+    def write_zone(self, fc_object: "ProjectFeature") -> None:
+        zone = ET.SubElement(self.zones, "Zone")
+        self.write_root_attrib(zone, fc_object)
+        ET.SubElement(zone, "LongName").text = fc_object.LongName
+        spaces = ET.SubElement(zone, "Spaces")
+        for space in fc_object.RelatedObjects:
+            ET.SubElement(spaces, "Space").text = str(space.Id)
 
     def write_site(self, fc_object: "ContainerFeature") -> None:
         site = ET.SubElement(self.sites, "Site")
