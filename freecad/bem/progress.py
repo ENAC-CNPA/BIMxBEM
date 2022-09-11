@@ -6,6 +6,9 @@ class Progress:
     pourcent_range = 1
     len_spaces = 1
     current_space = 0
+    nb_space = 0
+    nb_rel_space = 0
+    nb_built_element = 0
 
     @classmethod
     def set(
@@ -53,3 +56,11 @@ class Progress:
     def new_space_count(cls):
         cls.current_space = 0
         return f"{cls.current_space}/{cls.len_spaces}"
+
+    @classmethod
+    def count_elements(cls, ifc_file):
+        cls.nb_space = len(ifc_file.by_type("IfcSpace"))
+        cls.nb_rel_space = len(ifc_file.by_type("IfcRelSpaceBoundary"))
+        cls.nb_built_element = len(ifc_file.by_type("IfcBuildingElement")) or len(
+            ifc_file.by_type("IfcBuiltElement")
+        )

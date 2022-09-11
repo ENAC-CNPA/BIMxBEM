@@ -176,6 +176,7 @@ class IfcImporter:
         ifc_file = self.ifc_file
         doc = self.doc
 
+        Progress.count_elements(ifc_file)
         # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
         Progress.set(1, "IfcImport_Elements", "")
         elements_group = get_or_create_group("Elements", doc)
