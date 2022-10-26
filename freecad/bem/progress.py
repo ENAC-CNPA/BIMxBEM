@@ -61,6 +61,8 @@ class Progress:
     def count_elements(cls, ifc_file):
         cls.nb_space = len(ifc_file.by_type("IfcSpace"))
         cls.nb_rel_space = len(ifc_file.by_type("IfcRelSpaceBoundary"))
-        cls.nb_built_element = len(ifc_file.by_type("IfcBuildingElement")) or len(
-            ifc_file.by_type("IfcBuiltElement")
-        )
+        for ifc_class in ("IfcBuildingElement", "IfcBuiltElement"):
+            try:
+                cls.nb_built_element = len(ifc_file.by_type(ifc_class))
+            except RuntimeError:
+                continue

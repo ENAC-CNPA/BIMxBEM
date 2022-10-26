@@ -541,7 +541,7 @@ class Zone(Root):
     @classmethod
     def read_from_ifc(cls, obj: "ZoneFeature", ifc_entity) -> None:
         super().read_from_ifc(obj, ifc_entity)
-        obj.LongName = ifc_entity.LongName or ""
+        obj.LongName = getattr(ifc_entity,"LongName", "") or ""
 
     @classmethod
     def set_label(cls, obj):
