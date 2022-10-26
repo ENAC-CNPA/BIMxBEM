@@ -202,6 +202,7 @@ class IfcImporter:
                 utils.get_by_id(space.id(), spaces)
                 for space in ifc_zone.IsGroupedBy[0].RelatedObjects
             ]
+            related_objects = [x for x in related_objects if x]
             zone.RelatedObjects = related_objects
 
         # Associate existing ParentBoundary and CorrespondingBoundary
