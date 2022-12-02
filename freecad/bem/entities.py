@@ -468,10 +468,11 @@ class Project(Root):
             ].WorldCoordinateSystem.Location.Coordinates
         )
 
-        owning_application = ifc_entity.OwnerHistory.OwningApplication
-        obj.ApplicationIdentifier = owning_application.ApplicationIdentifier
-        obj.ApplicationVersion = owning_application.Version
-        obj.ApplicationFullName = owning_application.ApplicationFullName
+        if ifc_entity.OwnerHistory:
+            owning_application = ifc_entity.OwnerHistory.OwningApplication
+            obj.ApplicationIdentifier = owning_application.ApplicationIdentifier
+            obj.ApplicationVersion = owning_application.Version
+            obj.ApplicationFullName = owning_application.ApplicationFullName
 
     @classmethod
     def set_label(cls, obj):
