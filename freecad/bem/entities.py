@@ -408,8 +408,8 @@ class BEMBoundary:
 
 
 class Container(Root):
-    """Representation of an IfcProject:
-    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
+    """Representation of an IfcSpatialStructureElement like an IfcSite, IfcBuildingStorey etc… :
+    https://ifc43-docs.standards.buildingsmart.org/IFC/RELEASE/IFC4x3/HTML/lexical/IfcSpatialStructureElement.htm"""
 
     def __init__(self, obj):
         super().__init__(obj)
