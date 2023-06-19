@@ -140,7 +140,8 @@ class ViewProviderRoot:
 
 class RelSpaceBoundary(Root):
     """Wrapping IFC entity :
-    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcrelspaceboundary2ndlevel.htm"""
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcrelspaceboundary2ndlevel.htm
+    """
 
     def __init__(self, obj: "RelSpaceBoundaryFeature") -> None:
         super().__init__(obj)
@@ -227,7 +228,9 @@ class RelSpaceBoundary(Root):
         except AttributeError:
             obj.IsHosted = False
         obj.LesoType = "Unknown"
-        obj.CorrespondingBoundary = getattr(ifc_entity, "CorrespondingBoundary", None)
+        obj.CorrespondingBoundary = cls.get_corresponding_boundary_id(
+            ifc_entity, ifc_importer.doc
+        )
 
         if FreeCAD.GuiUp:
             obj.ViewObject.Proxy = 0
@@ -266,6 +269,12 @@ class RelSpaceBoundary(Root):
     @staticmethod
     def get_wires(obj):
         return utils.get_wires(obj)
+
+    @staticmethod
+    def get_corresponding_boundary_id(ifc_entity, doc):
+        corresponding_boundary = getattr(ifc_entity, "CorrespondingBoundary", None)
+        if corresponding_boundary:
+            return utils.get_object(corresponding_boundary, doc)
 
 
 class Element(Root):
@@ -409,7 +418,8 @@ class BEMBoundary:
 
 class Container(Root):
     """Representation of an IfcSpatialStructureElement like an IfcSite, IfcBuildingStorey etc… :
-    https://ifc43-docs.standards.buildingsmart.org/IFC/RELEASE/IFC4x3/HTML/lexical/IfcSpatialStructureElement.htm"""
+    https://ifc43-docs.standards.buildingsmart.org/IFC/RELEASE/IFC4x3/HTML/lexical/IfcSpatialStructureElement.htm
+    """
 
     def __init__(self, obj):
         super().__init__(obj)
@@ -426,7 +436,8 @@ class Container(Root):
 
 class Project(Root):
     """Representation of an IfcProject:
-    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm
+    """
 
     @classmethod
     def create(cls) -> "ProjectFeature":
@@ -481,7 +492,8 @@ class Project(Root):
 
 class Space(Root):
     """Representation of an IfcProject:
-    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm"""
+    https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcproject.htm
+    """
 
     @classmethod
     def create(cls) -> "SpaceFeature":
@@ -523,7 +535,8 @@ class Space(Root):
 
 class Zone(Root):
     """Representation of an IfcZone:
-    http://ifc43-docs.standards.buildingsmart.org/IFC/RELEASE/IFC4x3/HTML/lexical/IfcZone.htm"""
+    http://ifc43-docs.standards.buildingsmart.org/IFC/RELEASE/IFC4x3/HTML/lexical/IfcZone.htm
+    """
 
     @classmethod
     def create(cls) -> "ZoneFeature":
@@ -542,7 +555,7 @@ class Zone(Root):
     @classmethod
     def read_from_ifc(cls, obj: "ZoneFeature", ifc_entity) -> None:
         super().read_from_ifc(obj, ifc_entity)
-        obj.LongName = getattr(ifc_entity,"LongName", "") or ""
+        obj.LongName = getattr(ifc_entity, "LongName", "") or ""
 
     @classmethod
     def set_label(cls, obj):
