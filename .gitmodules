@@ -1,0 +1,3 @@
+[submodule "TestFiles"]
+	path = TestFiles
+	url = git@github.com:CyrilWaechter/IfcRelSpaceBoundary_TestFiles.git
