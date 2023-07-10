@@ -117,8 +117,9 @@ def get_unit_conversion_factor(ifc_file, unit_type, default=None):
 
 
 def is_second_level(boundary):
-    return boundary.Name.lower() == "2ndlevel" or boundary.is_a(
-        "IfcRelSpaceBoundary2ndLevel"
+    return (
+        boundary.is_a("IfcRelSpaceBoundary2ndLevel")
+        or (boundary.Name or "").lower() == "2ndlevel"
     )
 
 
@@ -310,6 +311,7 @@ class IfcImporter:
                 if element.is_a("IfcSpace"):
                     if element.BoundedBy:
                         self.generate_space(element, fc_parent)
+                        self.generate_containers(element, fc_parent)
                 else:
                     if element.is_a("IfcSite"):
                         self.workaround_site_coordinates(element)
