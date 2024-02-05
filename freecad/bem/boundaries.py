@@ -593,7 +593,11 @@ def ensure_hosted_are_coplanar(space):
         for inner_boundary in boundary.InnerBoundaries:
             if utils.is_coplanar(inner_boundary, boundary) and not missing_inner_wires:
                 continue
-            utils.project_boundary_onto_plane(inner_boundary, utils.get_plane(boundary))
+            try:
+                utils.project_boundary_onto_plane(inner_boundary, utils.get_plane(boundary))
+            except Part.OCCError as err:
+                logger.exception(err)
+                logger.warning(f"Faile to project inner boundary {inner_boundary.Id} onto boundary {boundary.Id} plane")
             inner_wire = utils.get_outer_wire(inner_boundary)
             inner_wires.append(inner_wire)
         try:
