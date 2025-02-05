@@ -286,7 +286,7 @@ class IfcId:
         return cls.current_id
 
 
-def write_xml(doc=FreeCAD.ActiveDocument) -> BEMxml:
+def write_xml(doc=FreeCAD.ActiveDocument, model=None) -> BEMxml:
     """Read BEM infos for FreeCAD file and write it to an xml.
     xml is stored in an object to allow different outputs"""
     bem_xml = BEMxml()

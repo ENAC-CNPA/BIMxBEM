@@ -23,7 +23,7 @@ SCALE = 1000
 class BEMxml:
     """Contains methods to write each kind of object to BEMxml"""
 
-    def __init__(self):
+    def __init__(self, model=None):
         self.root = ET.Element("bimbem")
         self.tree = ET.ElementTree(self.root)
         self.projects = ET.SubElement(self.root, "Projects")
@@ -36,25 +36,35 @@ class BEMxml:
         self.sites = None
         self.buildings = None
         self.storeys = None
+        self.model = model
 
     @staticmethod
-    def write_id(xml_element, fc_object):
-        ET.SubElement(xml_element, "Id").text = str(fc_object.Id)
+    def write_id(xml_element, model_element):
+        try:
+            ET.SubElement(xml_element, "Id").text = str(model_element.Id)
+        except AttributeError:
+            ET.SubElement(xml_element, "Id").text = str(model_element.id())
 
     @staticmethod
-    def write_name(xml_element, fc_object):
-        ET.SubElement(xml_element, "Name").text = fc_object.IfcName
+    def write_name(xml_element, model_element):
+        try:
+            ET.SubElement(xml_element, "Name").text = model_element.IfcName
+        except AttributeError:
+            ET.SubElement(xml_element, "Name").text = model_element.Name
 
     @staticmethod
-    def write_description(xml_element, fc_object):
-        ET.SubElement(xml_element, "Description").text = fc_object.Description
+    def write_description(xml_element, model_element):
+        ET.SubElement(xml_element, "Description").text = model_element.Description
 
-    def write_root_attrib(self, xml_element, fc_object):
-        self.write_id(xml_element, fc_object)
-        ET.SubElement(xml_element, "GlobalId").text = fc_object.GlobalId
-        self.write_name(xml_element, fc_object)
-        self.write_description(xml_element, fc_object)
-        ET.SubElement(xml_element, "IfcType").text = fc_object.IfcType
+    def write_root_attrib(self, xml_element, model_element):
+        self.write_id(xml_element, model_element)
+        ET.SubElement(xml_element, "GlobalId").text = model_element.GlobalId
+        self.write_name(xml_element, model_element)
+        self.write_description(xml_element, model_element)
+        try:
+            ET.SubElement(xml_element, "IfcType").text = model_element.IfcType
+        except AttributeError:
+            ET.SubElement(xml_element, "IfcType").text = model_element.is_a()
 
     @staticmethod
     def write_attributes(parent, fc_object, attributes):
