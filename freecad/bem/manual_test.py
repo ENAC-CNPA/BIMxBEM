@@ -9,15 +9,14 @@ See the LICENSE.TXT file for more details.
 Author : Cyril Waechter
 """
 import os
+from pathlib import Path
 import FreeCAD
 import FreeCADGui
 from freecad.bem import boundaries
 
 if __name__ == "__main__":
-    if os.name == "nt":
-        TEST_FOLDER = r"C:\git\BIMxBEM\IfcTestFiles"
-    else:
-        TEST_FOLDER = "/home/cyril/git/BIMxBEM/IfcTestFiles/"
+    FOLDERS = (Path(r"TestFiles\IfcRelSpaceBoundary2ndLevel"), 
+               Path(r"TestFiles\Private"))
     TEST_FILES = {
         0: "Triangle_A24_IFC4.ifc",
         1: "Triangle_2x3_R19.ifc",
@@ -27,11 +26,10 @@ if __name__ == "__main__":
         5: "ExternalEarth_R20_IFC4.ifc",
         6: "3196 Aalseth Lane_R21_bem.ifc",
         7: "3196 Aalseth Lane - AC - IFC4 BIM-BEM - Entier.ifc",
-        8: "0014_Vernier112D_ENE_ModèleÉnergétique_R21_1LocalParEtage.ifc",
-        9: "0014_Vernier112D_ENE_ModèleÉnergétique_R21_1LocalParEtage_space[460].ifc",
-        10: "Ersatzneubau Alphütte_1-1210_31_23.ifc",
-    }
-    IFC_PATH = os.path.join(TEST_FOLDER, TEST_FILES[3])
+    for folder in FOLDERS:
+        ifc_path = folder / TEST_FILES[8]
+        if ifc_path.exists():
+            break
     DOC = FreeCAD.ActiveDocument
     WITH_GUI = True
 
@@ -44,13 +42,14 @@ if __name__ == "__main__":
         ptvsd.wait_for_attach()
         # breakpoint()
 
-        boundaries.process_test_file(IFC_PATH, DOC)
+        boundaries.process_test_file(ifc_path, DOC)
     else:
         if WITH_GUI:
             FreeCADGui.showMainWindow()
             DOC = FreeCAD.newDocument()
 
-            boundaries.process_test_file(IFC_PATH, DOC)
+            boundaries.process_test_file(ifc_path, DOC)
             FreeCADGui.exec_loop()
         else:
-            xml_str = boundaries.generate_bem_xml_from_file(IFC_PATH)
+            DOC = FreeCAD.newDocument()
+            boundaries.process_test_file(ifc_path, DOC)
