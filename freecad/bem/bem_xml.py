@@ -89,13 +89,13 @@ class BEMxml:
         for site in fc_object.Group:
             self.write_site(site)
 
-    def write_zone(self, fc_object: "ProjectFeature") -> None:
+    def write_zone(self, ifc_zone) -> None:
         zone = ET.SubElement(self.zones, "Zone")
-        self.write_root_attrib(zone, fc_object)
-        ET.SubElement(zone, "LongName").text = fc_object.LongName
+        self.write_root_attrib(zone, ifc_zone)
+        ET.SubElement(zone, "LongName").text = ifc_zone.LongName
         spaces = ET.SubElement(zone, "Spaces")
-        for space in fc_object.RelatedObjects:
-            ET.SubElement(spaces, "Space").text = str(space.Id)
+        for space in (s for s in ifc_zone.IsGroupedBy[0].RelatedObjects if s.BoundedBy):
+            ET.SubElement(spaces, "Space").text = str(space.id())
 
     def write_site(self, fc_object: "ContainerFeature") -> None:
         site = ET.SubElement(self.sites, "Site")

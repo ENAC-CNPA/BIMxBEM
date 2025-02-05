@@ -8,6 +8,7 @@ See the LICENSE.TXT file for more details.
 
 Author : Cyril Waechter
 """
+
 import typing
 from typing import Iterable
 
@@ -28,7 +29,6 @@ if typing.TYPE_CHECKING:  # https://www.python.org/dev/peps/pep-0484/#id36
         ContainerFeature,
         SpaceFeature,
         ProjectFeature,
-        ZoneFeature,
         ElementFeature,
     )
 
@@ -530,33 +530,4 @@ class Space(Root):
 
     @classmethod
     def set_label(cls, obj: "SpaceFeature") -> None:
-        obj.Label = f"{obj.IfcName}_{obj.LongName}"
-
-
-class Zone(Root):
-    """Representation of an IfcZone:
-    http://ifc43-docs.standards.buildingsmart.org/IFC/RELEASE/IFC4x3/HTML/lexical/IfcZone.htm
-    """
-
-    @classmethod
-    def create(cls) -> "ZoneFeature":
-        obj = super().create()
-        if FreeCAD.GuiUp:
-            obj.ViewObject.DisplayMode = "Wireframe"
-        return obj
-
-    @classmethod
-    def _init_properties(cls, obj: "ZoneFeature") -> None:
-        super()._init_properties(obj)
-        ifc_attributes = "IFC Attributes"
-        obj.addProperty("App::PropertyString", "LongName", ifc_attributes)
-        obj.addProperty("App::PropertyLinkList", "RelatedObjects", ifc_attributes)
-
-    @classmethod
-    def read_from_ifc(cls, obj: "ZoneFeature", ifc_entity) -> None:
-        super().read_from_ifc(obj, ifc_entity)
-        obj.LongName = getattr(ifc_entity, "LongName", "") or ""
-
-    @classmethod
-    def set_label(cls, obj):
         obj.Label = f"{obj.IfcName}_{obj.LongName}"

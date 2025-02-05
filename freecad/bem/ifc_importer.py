@@ -31,7 +31,6 @@ from freecad.bem.entities import (
     Container,
     Space,
     Project,
-    Zone,
 )
 
 
@@ -158,16 +157,6 @@ class IfcImporter:
         for ifc_project in ifc_file.by_type("IfcProject"):
             project = Project.create_from_ifc(ifc_project, self)
             self.generate_containers(ifc_project, project)
-        # Generate zones (IfcZone)
-        for ifc_zone in ifc_file.by_type("IfcZone"):
-            zone = Zone.create_from_ifc(ifc_zone, self)
-            spaces = utils.get_elements_by_ifctype("IfcSpace", doc)
-            related_objects = [
-                utils.get_by_id(space.id(), spaces)
-                for space in ifc_zone.IsGroupedBy[0].RelatedObjects
-            ]
-            related_objects = [x for x in related_objects if x]
-            zone.RelatedObjects = related_objects
 
         # Associate existing ParentBoundary and CorrespondingBoundary
         associate_parent_and_corresponding(ifc_file, doc)
