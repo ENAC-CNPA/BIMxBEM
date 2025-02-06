@@ -77,7 +77,7 @@ class Root:
         self.Type = self.__class__.__name__  # pylint: disable=invalid-name
         obj.Proxy = self  # pylint: disable=invalid-name
         # TODO: remove 2nd argument for FreeCAD ⩾0.19.1. See https://forum.freecadweb.org/viewtopic.php?t=57479
-        obj.addExtension("App::GroupExtensionPython", self)
+        obj.addExtension("App::GroupExtensionPython")
 
     @classmethod
     def _init_properties(cls, obj: "RootFeature") -> None:
@@ -135,7 +135,7 @@ class Root:
 class ViewProviderRoot:
     def __init__(self, vobj):
         vobj.Proxy = self
-        vobj.addExtension("Gui::ViewProviderGroupExtensionPython", self)
+        vobj.addExtension("Gui::ViewProviderGroupExtensionPython")
 
 
 class RelSpaceBoundary(Root):
@@ -236,9 +236,7 @@ class RelSpaceBoundary(Root):
             obj.ViewObject.Proxy = 0
             obj.ViewObject.ShapeColor = get_color(ifc_entity)
 
-    def onChanged(
-        self, obj: "RelSpaceBoundaryFeature", prop
-    ):  # pylint: disable=invalid-name
+    def onChanged(self, obj: "RelSpaceBoundaryFeature", prop):  # pylint: disable=invalid-name
         if prop == "InnerBoundaries":
             self.recompute_area_with_hosted(obj)
 
