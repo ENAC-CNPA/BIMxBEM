@@ -8,6 +8,7 @@ See the LICENSE.TXT file for more details.
 
 Author : Cyril Waechter
 """
+
 import itertools
 import os
 from collections import namedtuple
@@ -97,9 +98,7 @@ def set_internal_to_external(element, material):
             else:
                 boundary.InternalToExternal = 1
             if boundary.CorrespondingBoundary:
-                boundary.CorrespondingBoundary.InternalToExternal = (
-                    -boundary.InternalToExternal
-                )
+                boundary.CorrespondingBoundary.InternalToExternal = -boundary.InternalToExternal
 
 
 def ensure_materials_layers_order(doc):
@@ -121,9 +120,7 @@ def ensure_materials_layers_order(doc):
 
 
 def ensure_external_earth_is_set(space: "SpaceFeature", doc=FreeCAD.ActiveDocument):
-    sites: List["ContainerFeature"] = list(
-        utils.get_elements_by_ifctype("IfcSite", doc)
-    )
+    sites: List["ContainerFeature"] = list(utils.get_elements_by_ifctype("IfcSite", doc))
     ground_bound_box = get_ground_bound_box(sites)
     if space.Shape.BoundBox.ZMin - ground_bound_box.ZMax > 1000:
         return
@@ -186,9 +183,7 @@ class FaceToBoundary:
         self.point_on_face = None
         self.point_on_boundary = None
         self.compute_shortest()
-        self.boundary_normal = utils.get_boundary_normal(
-            boundary, self.point_on_boundary
-        )
+        self.boundary_normal = utils.get_boundary_normal(boundary, self.point_on_boundary)
         self.face_normal = utils.get_face_normal(face, self.point_on_face)
         self.distance = self.vec_to_space.Length
 
@@ -209,11 +204,7 @@ class FaceToBoundary:
 
     @property
     def fixed_normal(self):
-        return (
-            self.boundary_normal
-            if self.face_normal.dot(self.boundary_normal) > 0
-            else -self.boundary_normal
-        )
+        return self.boundary_normal if self.face_normal.dot(self.boundary_normal) > 0 else -self.boundary_normal
 
     @property
     def translation_to_face(self):
@@ -317,9 +308,7 @@ def write_xml(doc=FreeCAD.ActiveDocument, model=None) -> BEMxml:
 
 def output_xml_to_path(bem_xml, xml_path=None):
     if not xml_path:
-        xml_path = (
-            "./output.xml" if os.name == "nt" else "/home/cyril/git/BIMxBEM/output.xml"
-        )
+        xml_path = "./output.xml" if os.name == "nt" else "/home/cyril/git/BIMxBEM/output.xml"
     bem_xml.write_to_file(xml_path)
 
 
@@ -333,9 +322,7 @@ def group_by_shared_element(boundaries) -> Dict[str, List["boundary"]]:
                 logger.info("IfcElement %s is VIRTUAL. Modeling error ?")
                 key = "VIRTUAL"
             else:
-                logger.warning(
-                    "IfcElement %s has no RelatedBuildingElement", rel_boundary.Id
-                )
+                logger.warning("IfcElement %s has no RelatedBuildingElement", rel_boundary.Id)
         corresponding_boundary = rel_boundary.CorrespondingBoundary
         if corresponding_boundary:
             key += str(corresponding_boundary.Id)
@@ -397,9 +384,7 @@ def merge_over_splitted_boundaries(space, doc=FreeCAD.ActiveDocument):
             try:
                 merge_coplanar_boundaries(group, doc)
             except Part.OCCError:
-                logger.warning(
-                    f"Cannot join boundaries in space <{space.Id}> with key <{key}>"
-                )
+                logger.warning(f"Cannot join boundaries in space <{space.Id}> with key <{key}>")
 
 
 def merged_wires(wire1: Part.Wire, wire2: Part.Wire) -> (Part.Wire, List[Part.Wire]):
@@ -554,23 +539,15 @@ def ensure_hosted_element_are(space, doc):
         def find_host(boundary):
             fallback_solution = None
             for boundary2 in valid_hosts(boundary):
-
                 fallback_solution = boundary2
                 for inner_wire in utils.get_inner_wires(boundary2):
-                    if (
-                        not abs(Part.Face(inner_wire).Area - boundary.Area.Value)
-                        < TOLERANCE
-                    ):
+                    if not abs(Part.Face(inner_wire).Area - boundary.Area.Value) < TOLERANCE:
                         continue
 
                     return boundary2
             if not fallback_solution:
-                raise HostNotFound(
-                    f"No host found for RelSpaceBoundary Id<{boundary.Id}>"
-                )
-            logger.warning(
-                f"Using fallback solution to resolve host of RelSpaceBoundary Id<{boundary.Id}>"
-            )
+                raise HostNotFound(f"No host found for RelSpaceBoundary Id<{boundary.Id}>")
+            logger.warning(f"Using fallback solution to resolve host of RelSpaceBoundary Id<{boundary.Id}>")
             return fallback_solution
 
         try:
@@ -625,9 +602,7 @@ Closest = namedtuple("Closest", ["boundary", "edge", "distance"])
 def init_closest_default_values(boundaries):
     for boundary in boundaries:
         n_edges = len(utils.get_outer_wire(boundary).Edges)
-        boundary.Proxy.closest = [
-            Closest(boundary=None, edge=-1, distance=100000)
-        ] * n_edges
+        boundary.Proxy.closest = [Closest(boundary=None, edge=-1, distance=100000)] * n_edges
 
 
 def compare_closest_edges(boundary1, ei1, edge1, boundary2, ei2, edge2):
@@ -644,9 +619,7 @@ def compare_closest_edges(boundary1, ei1, edge1, boundary2, ei2, edge2):
 def find_closest_by_distance(boundary1, boundary2):
     edges1 = utils.get_outer_wire(boundary1).Edges
     edges2 = utils.get_outer_wire(boundary2).Edges
-    for (ei1, edge1), (ei2, edge2) in itertools.product(
-        enumerate(edges1), enumerate(edges2)
-    ):
+    for (ei1, edge1), (ei2, edge2) in itertools.product(enumerate(edges1), enumerate(edges2)):
         if not is_low_angle(edge1, edge2):
             continue
 
@@ -657,15 +630,11 @@ def find_closest_by_distance(boundary1, boundary2):
 
 
 def find_closest_by_intersection(boundary1, boundary2):
-    intersect_line = utils.get_plane(boundary1).intersectSS(utils.get_plane(boundary2))[
-        0
-    ]
+    intersect_line = utils.get_plane(boundary1).intersectSS(utils.get_plane(boundary2))[0]
     boundaries_distance = boundary1.Shape.distToShape(boundary2.Shape)[0]
     edges1 = utils.get_outer_wire(boundary1).Edges
     edges2 = utils.get_outer_wire(boundary2).Edges
-    for (ei1, edge1), (ei2, edge2) in itertools.product(
-        enumerate(edges1), enumerate(edges2)
-    ):
+    for (ei1, edge1), (ei2, edge2) in itertools.product(enumerate(edges1), enumerate(edges2)):
         distance1 = edge_distance_to_line(edge1, intersect_line) + boundaries_distance
         distance2 = edge_distance_to_line(edge2, intersect_line) + boundaries_distance
 
@@ -700,9 +669,7 @@ def find_closest_edges(space: "SpaceFeature") -> None:
 
     # Store found values in standard FreeCAD properties
     for boundary in boundaries:
-        closest_boundaries, boundary.ClosestEdges, closest_distances = (
-            list(i) for i in zip(*boundary.Proxy.closest)
-        )
+        closest_boundaries, boundary.ClosestEdges, closest_distances = (list(i) for i in zip(*boundary.Proxy.closest))
         boundary.ClosestBoundaries = [b.Id if b else -1 for b in closest_boundaries]
         boundary.ClosestDistance = [int(d) for d in closest_distances]
 
@@ -755,9 +722,7 @@ def is_low_angle(edge1, edge2):
     try:
         dir1 = (edge1.Vertexes[1].Point - edge1.Vertexes[0].Point).normalize()
         dir2 = (edge2.Vertexes[1].Point - edge2.Vertexes[0].Point).normalize()
-        return (
-            abs(dir1.dot(dir2)) > 0.866
-        )  # Low angle considered as < 30°. cos(pi/6)=0.866.
+        return abs(dir1.dot(dir2)) > 0.866  # Low angle considered as < 30°. cos(pi/6)=0.866.
     except IndexError:
         return False
 
@@ -806,9 +771,7 @@ def get_medial_axis(boundary1, boundary2, ei1, ei2) -> Optional[Part.Line]:
     try:
         return Part.Line(point1, point2)
     except Part.OCCError:
-        logger.exception(
-            f"Failure in boundary id <{boundary1.SourceBoundary.Id}> {point1} and {point2} are equal"
-        )
+        logger.exception(f"Failure in boundary id <{boundary1.SourceBoundary.Id}> {point1} and {point2} are equal")
         return None
 
 
@@ -831,9 +794,7 @@ def rejoin_boundaries(space, sia_type):
         if not boundary1:
             continue
         lines = []
-        fallback_lines = [
-            utils.line_from_edge(edge) for edge in utils.get_outer_wire(boundary1).Edges
-        ]
+        fallback_lines = [utils.line_from_edge(edge) for edge in utils.get_outer_wire(boundary1).Edges]
 
         # bound_box used to make sure line solution is in a reallistic scope (distance <= 5 m)
         bound_box = boundary1.Shape.BoundBox
@@ -879,9 +840,7 @@ def rejoin_boundaries(space, sia_type):
         try:
             outer_wire = utils.polygon_from_lines(lines, b1_plane)
         except (Part.OCCError, utils.ShapeCreationError):
-            logger.exception(
-                f"Invalid geometry while rejoining boundary Id <{base_boundary.Id}>"
-            )
+            logger.exception(f"Invalid geometry while rejoining boundary Id <{base_boundary.Id}>")
             continue
         try:
             Part.Face(outer_wire)
@@ -904,9 +863,7 @@ def rejoin_boundaries(space, sia_type):
 
 def create_sia_ext_boundaries(space):
     """Create SIA boundaries from RelSpaceBoundaries and translate it if necessary"""
-    sia_group_obj = space.Boundaries.newObject(
-        "App::DocumentObjectGroup", "SIA_Exteriors"
-    )
+    sia_group_obj = space.Boundaries.newObject("App::DocumentObjectGroup", "SIA_Exteriors")
     space.SIA_Exteriors = sia_group_obj
     for boundary1 in space.SecondLevel.Group:
         if boundary1.IsHosted or boundary1.PhysicalOrVirtualBoundary == "VIRTUAL":
@@ -934,9 +891,7 @@ def create_sia_ext_boundaries(space):
 
 def create_sia_int_boundaries(space):
     """Create boundaries necessary for SIA calculations"""
-    sia_group_obj = space.Boundaries.newObject(
-        "App::DocumentObjectGroup", "SIA_Interiors"
-    )
+    sia_group_obj = space.Boundaries.newObject("App::DocumentObjectGroup", "SIA_Interiors")
     space.SIA_Interiors = sia_group_obj
     for boundary in space.SecondLevel.Group:
         if boundary.IsHosted or boundary.PhysicalOrVirtualBoundary == "VIRTUAL":

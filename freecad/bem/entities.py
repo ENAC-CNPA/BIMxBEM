@@ -122,9 +122,7 @@ class Root:
         obj.Label = f"{obj.Id}_{obj.IfcName or obj.IfcType}"
 
     @staticmethod
-    def read_pset_from_ifc(
-        obj: "RootFeature", ifc_entity, properties: Iterable[str]
-    ) -> None:
+    def read_pset_from_ifc(obj: "RootFeature", ifc_entity, properties: Iterable[str]) -> None:
         psets = ifcopenshell.util.element.get_psets(ifc_entity)
         for pset in psets.values():
             for prop_name, prop in pset.items():
@@ -167,9 +165,7 @@ class RelSpaceBoundary(Root):
             "EXTERNAL_FIRE",
             "NOTDEFINED",
         ]
-        obj.addProperty(
-            "App::PropertyLinkHidden", "CorrespondingBoundary", ifc_attributes
-        )
+        obj.addProperty("App::PropertyLinkHidden", "CorrespondingBoundary", ifc_attributes)
         obj.addProperty("App::PropertyLinkHidden", "ParentBoundary", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "InnerBoundaries", ifc_attributes)
         obj.addProperty("App::PropertyVector", "Normal", bem_category)
@@ -192,9 +188,7 @@ class RelSpaceBoundary(Root):
         obj.addProperty("App::PropertyArea", "AreaWithHosted", bem_category)
         obj.addProperty("App::PropertyLink", "SIA_Interior", bem_category)
         obj.addProperty("App::PropertyLink", "SIA_Exterior", bem_category)
-        obj.addProperty(
-            "App::PropertyEnumeration", "LesoType", bem_category
-        ).LesoType = [
+        obj.addProperty("App::PropertyEnumeration", "LesoType", bem_category).LesoType = [
             "Ceiling",
             "Wall",
             "Flooring",
@@ -228,9 +222,7 @@ class RelSpaceBoundary(Root):
         except AttributeError:
             obj.IsHosted = False
         obj.LesoType = "Unknown"
-        obj.CorrespondingBoundary = cls.get_corresponding_boundary_id(
-            ifc_entity, ifc_importer.doc
-        )
+        obj.CorrespondingBoundary = cls.get_corresponding_boundary_id(ifc_entity, ifc_importer.doc)
 
         if FreeCAD.GuiUp:
             obj.ViewObject.Proxy = 0
@@ -260,9 +252,7 @@ class RelSpaceBoundary(Root):
         except AttributeError:
             obj.Label = f"{obj.Id} VIRTUAL"
             if obj.PhysicalOrVirtualBoundary != "VIRTUAL":
-                logger.warning(
-                    f"{obj.Id} is not VIRTUAL and has no RelatedBuildingElement"
-                )
+                logger.warning(f"{obj.Id} is not VIRTUAL and has no RelatedBuildingElement")
 
     @staticmethod
     def get_wires(obj):
@@ -286,14 +276,10 @@ class Element(Root):
         obj.Proxy = self
 
     @classmethod
-    def create_from_ifc(
-        cls, ifc_entity, ifc_importer: "IfcImporter"
-    ) -> "ElementFeature":
+    def create_from_ifc(cls, ifc_entity, ifc_importer: "IfcImporter") -> "ElementFeature":
         """Stantard FreeCAD FeaturePython Object creation method"""
         obj = super().create_from_ifc(ifc_entity, ifc_importer)
-        ifc_importer.create_element_type(
-            obj, ifcopenshell.util.element.get_type(ifc_entity)
-        )
+        ifc_importer.create_element_type(obj, ifcopenshell.util.element.get_type(ifc_entity))
         ifc_importer.material_creator.create(obj, ifc_entity)
         obj.Thickness = ifc_importer.guess_thickness(obj, ifc_entity)
 
@@ -307,9 +293,7 @@ class Element(Root):
         ifc_attributes = "IFC Attributes"
         bem_category = "BEM"
         obj.addProperty("App::PropertyLink", "Material", ifc_attributes)
-        obj.addProperty(
-            "App::PropertyLinkListHidden", "ProvidesBoundaries", ifc_attributes
-        )
+        obj.addProperty("App::PropertyLinkListHidden", "ProvidesBoundaries", ifc_attributes)
         obj.addProperty("App::PropertyLinkHidden", "IsTypedBy", ifc_attributes)
         obj.addProperty("App::PropertyFloat", "ThermalTransmittance", ifc_attributes)
         obj.addProperty("App::PropertyLinkList", "HostedElements", bem_category)
@@ -341,9 +325,7 @@ class ElementType(Root):
         obj.Proxy = self
 
     @classmethod
-    def create_from_ifc(
-        cls, ifc_entity, ifc_importer: "IfcImporter"
-    ) -> "ElementFeature":
+    def create_from_ifc(cls, ifc_entity, ifc_importer: "IfcImporter") -> "ElementFeature":
         """Stantard FreeCAD FeaturePython Object creation method"""
         obj = super().create_from_ifc(ifc_entity, ifc_importer)
         ifc_importer.material_creator.create(obj, ifc_entity)
@@ -378,9 +360,7 @@ class ElementType(Root):
 
 
 class BEMBoundary:
-    def __init__(
-        self, obj: "BEMBoundaryFeature", boundary: "RelSpaceBoundaryFeature"
-    ) -> None:
+    def __init__(self, obj: "BEMBoundaryFeature", boundary: "RelSpaceBoundaryFeature") -> None:
         self.Type = "BEMBoundary"  # pylint: disable=invalid-name
         obj.Proxy = self
         category_name = "BEM"
@@ -453,28 +433,18 @@ class Project(Root):
         obj.addProperty("App::PropertyVector", "WorldCoordinateSystem", ifc_attributes)
 
         owning_application = "OwningApplication"
-        obj.addProperty(
-            "App::PropertyString", "ApplicationIdentifier", owning_application
-        )
+        obj.addProperty("App::PropertyString", "ApplicationIdentifier", owning_application)
         obj.addProperty("App::PropertyString", "ApplicationVersion", owning_application)
-        obj.addProperty(
-            "App::PropertyString", "ApplicationFullName", owning_application
-        )
+        obj.addProperty("App::PropertyString", "ApplicationFullName", owning_application)
 
     @classmethod
     def read_from_ifc(cls, obj: "ProjectFeature", ifc_entity) -> None:
         super().read_from_ifc(obj, ifc_entity)
         obj.LongName = ifc_entity.LongName or ""
         true_north = ifc_entity.RepresentationContexts[0].TrueNorth
-        obj.TrueNorth = (
-            FreeCAD.Vector(*true_north.DirectionRatios)
-            if true_north
-            else FreeCAD.Vector(0, 1)
-        )
+        obj.TrueNorth = FreeCAD.Vector(*true_north.DirectionRatios) if true_north else FreeCAD.Vector(0, 1)
         obj.WorldCoordinateSystem = FreeCAD.Vector(
-            ifc_entity.RepresentationContexts[
-                0
-            ].WorldCoordinateSystem.Location.Coordinates
+            ifc_entity.RepresentationContexts[0].WorldCoordinateSystem.Location.Coordinates
         )
 
         if ifc_entity.OwnerHistory:
@@ -520,7 +490,7 @@ class Space(Root):
     def read_from_ifc(cls, obj: "SpaceFeature", ifc_entity) -> None:
         super().read_from_ifc(obj, ifc_entity)
         ifc_importer = obj.Proxy.ifc_importer
-        obj.Shape = ifc_importer.space_shape_by_brep(ifc_entity)
+        obj.Shape = ifc_importer.element_shape_by_brep(ifc_entity)
         obj.LongName = ifc_entity.LongName or ""
         space_full_name = f"{ifc_entity.Name} {ifc_entity.LongName}"
         obj.Label = space_full_name

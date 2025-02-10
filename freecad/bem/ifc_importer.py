@@ -50,9 +50,7 @@ def get_by_class(doc=FreeCAD.ActiveDocument, by_class=object):
             continue
 
 
-def get_elements_by_ifctype(
-    ifc_type: str, doc=FreeCAD.ActiveDocument
-) -> Generator[Part.Feature, None, None]:
+def get_elements_by_ifctype(ifc_type: str, doc=FreeCAD.ActiveDocument) -> Generator[Part.Feature, None, None]:
     """Generator throught FreeCAD document element of specific ifc_type"""
     for element in doc.Objects:
         try:
@@ -80,10 +78,7 @@ def get_materials(doc=FreeCAD.ActiveDocument):
 
 
 def is_second_level(boundary):
-    return (
-        boundary.is_a("IfcRelSpaceBoundary2ndLevel")
-        or (boundary.Name or "").lower() == "2ndlevel"
-    )
+    return boundary.is_a("IfcRelSpaceBoundary2ndLevel") or (boundary.Name or "").lower() == "2ndlevel"
 
 
 class IfcImporter:
@@ -189,10 +184,7 @@ class IfcImporter:
                 thicknesses.append(thickness)
             return max(thicknesses)
         for representation in ifc_entity.Representation.Representations:
-            if (
-                representation.RepresentationIdentifier == "Box"
-                and representation.RepresentationType == "BoundingBox"
-            ):
+            if representation.RepresentationIdentifier == "Box" and representation.RepresentationType == "BoundingBox":
                 if self.is_wall_like(obj.IfcType):
                     return representation.Items[0].YDim * self.fc_scale * self.ifc_scale
                 elif self.is_slab_like(obj.IfcType):
@@ -200,7 +192,7 @@ class IfcImporter:
                 else:
                     return 0
         try:
-            fc_shape = self.element_local_shape_by_brep(ifc_entity)
+            fc_shape = self.element_shape_by_brep(ifc_entity)
             bbox = fc_shape.BoundBox
         except RuntimeError:
             return 0
@@ -276,25 +268,17 @@ class IfcImporter:
         fc_space.Placement = space_matrix
         for ifc_boundary in (b for b in ifc_space.BoundedBy if is_second_level(b)):
             if not ifc_boundary.ConnectionGeometry:
-                logger.warning(
-                    f"Boundary <{ifc_boundary.id()}> has no ConnectionGeometry and has therefore been ignored"
-                )
+                logger.warning(f"[Ignored] No ConnectionGeometry: {ifc_boundary}")
                 continue
             try:
-                fc_boundary = RelSpaceBoundary.create_from_ifc(
-                    ifc_entity=ifc_boundary, ifc_importer=self
-                )
+                fc_boundary = RelSpaceBoundary.create_from_ifc(ifc_entity=ifc_boundary, ifc_importer=self)
                 fc_boundary.RelatingSpace = fc_space
                 second_levels.addObject(fc_boundary)
-                fc_boundary.Placement = space_placement
+                fc_boundary.Placement = space_matrix
             except utils.ShapeCreationError:
-                logger.warning(
-                    f"Failed to create fc_shape for RelSpaceBoundary <{ifc_boundary.id()}> even with fallback methode _part_by_mesh. IfcOpenShell bug ?"
-                )
+                logger.error(f"[Geometry] All fallback failed: {ifc_boundary}")
             except utils.IsTooSmall:
-                logger.warning(
-                    f"Boundary <{ifc_boundary.id()}> shape is too small and has been ignored"
-                )
+                logger.warning(f"[Ignored] Too small: {ifc_boundary}")
 
     def get_fc_placement(self, placement):
         """Transform position to FreeCAD.Matrix"""
@@ -438,9 +422,7 @@ def associate_host_element(ifc_file, elements_group):
     for ifc_entity in ifc_elements:
         if ifc_entity.FillsVoids:
             try:
-                host = utils.get_element_by_guid(
-                    utils.get_host_guid(ifc_entity), elements_group
-                )
+                host = utils.get_element_by_guid(utils.get_host_guid(ifc_entity), elements_group)
             except LookupError as err:
                 logger.exception(err)
                 continue
@@ -532,9 +514,7 @@ def associate_parent_and_corresponding(ifc_file, doc):
                 fc_boundary = utils.get_object(boundary, doc)
                 if fc_boundary.CorrespondingBoundary:
                     continue
-                fc_corresponding_boundary = utils.get_object(
-                    boundary.CorrespondingBoundary, doc
-                )
+                fc_corresponding_boundary = utils.get_object(boundary.CorrespondingBoundary, doc)
                 fc_boundary.CorrespondingBoundary = fc_corresponding_boundary
                 fc_corresponding_boundary.CorrespondingBoundary = fc_boundary
     except RuntimeError:
@@ -550,9 +530,7 @@ def associate_corresponding_boundaries(doc=FreeCAD.ActiveDocument):
 
 def cleaned_corresponding_candidates(boundary1):
     candidates = []
-    for boundary2 in getattr(
-        boundary1.RelatedBuildingElement, "ProvidesBoundaries", ()
-    ):
+    for boundary2 in getattr(boundary1.RelatedBuildingElement, "ProvidesBoundaries", ()):
         if boundary2 is boundary1:
             continue
         if boundary2.CorrespondingBoundary:
@@ -574,9 +552,7 @@ def get_best_corresponding_candidate(boundary, candidates):
     center_of_mass = utils.get_outer_wire(boundary).CenterOfMass
     min_lenght = 10000  # No element has 10 m thickness
     for candidate in candidates:
-        distance = center_of_mass.distanceToPoint(
-            utils.get_outer_wire(candidate).CenterOfMass
-        )
+        distance = center_of_mass.distanceToPoint(utils.get_outer_wire(candidate).CenterOfMass)
         if distance < min_lenght:
             min_lenght = distance
             corresponding_boundary = candidate
@@ -602,10 +578,7 @@ def associate_corresponding_boundary(boundary, doc):
     space separating thermal boundary element.
     https://standards.buildingsmart.org/IFC/RELEASE/IFC4_1/FINAL/HTML/link/ifcrelspaceboundary2ndlevel.htm
     """
-    if (
-        boundary.InternalOrExternalBoundary != "INTERNAL"
-        or boundary.CorrespondingBoundary
-    ):
+    if boundary.InternalOrExternalBoundary != "INTERNAL" or boundary.CorrespondingBoundary:
         return
 
     candidates = cleaned_corresponding_candidates(boundary)
