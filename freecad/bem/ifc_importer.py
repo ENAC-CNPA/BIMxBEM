@@ -34,22 +34,7 @@ from freecad.bem.entities import (
 )
 
 
-def ios_settings(brep):
-    """Create ifcopenshell.geom.settings for various cases"""
-    settings = ifcopenshell.geom.settings()
-    settings.set("dimensionality", ifcopenshell.ifcopenshell_wrapper.CURVES_SURFACES_AND_SOLIDS)
-    if brep:
-        settings.set("iterator-output", ifcopenshell.ifcopenshell_wrapper.SERIALIZED)
-    return settings
-
-
-BREP_SETTINGS = ios_settings(brep=True)
-MESH_SETTINGS = ios_settings(brep=False)
 TOLERANCE = 0.001
-
-"""With IfcOpenShell 0.6.0a1 recreating face from wires seems to give more consistant results.
-Especially when inner boundaries touch outer boundary"""
-BREP = False
 
 
 def get_by_class(doc=FreeCAD.ActiveDocument, by_class=object):
@@ -133,6 +118,10 @@ class IfcImporter:
         self.material_creator = materials.MaterialCreator(self)
         self.xml: str = ""
         self.log: str = ""
+        self.settings = ifcopenshell.geom.settings()
+        self.settings_brep_curve = self.load_brep_curve_settings()
+        self.settings_brep_local = self.load_brep_settings(use_world_coordinates=False)
+        self.settings_brep_world = self.load_brep_settings(use_world_coordinates=True)
 
     def generate_rel_space_boundaries(self):
         """Display IfcRelSpaceBoundaries from selected IFC file into FreeCAD documennt"""
@@ -470,6 +459,20 @@ class IfcImporter:
             self.element_types[fc_element_type.Id] = fc_element_type
         fc_element.IsTypedBy = fc_element_type
         utils.append(fc_element_type, "ApplicableOccurrence", fc_element)
+
+    def load_brep_curve_settings(self):
+        settings = self.load_brep_settings(use_world_coordinates=False)
+        settings.set(
+            "dimensionality",
+            ifcopenshell.ifcopenshell_wrapper.CURVES_SURFACES_AND_SOLIDS,
+        )
+        return settings
+
+    def load_brep_settings(self, use_world_coordinates):
+        settings = ifcopenshell.geom.settings()
+        settings.set("iterator-output", ifcopenshell.ifcopenshell_wrapper.SERIALIZED)
+        settings.set("use-world-coords", use_world_coordinates)
+        return settings
 
 
 def associate_host_element(ifc_file, elements_group):
