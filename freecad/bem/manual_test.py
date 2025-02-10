@@ -18,18 +18,22 @@ if __name__ == "__main__":
     FOLDERS = (Path(r"TestFiles\IfcRelSpaceBoundary2ndLevel"), 
                Path(r"TestFiles\Private"))
     TEST_FILES = {
-        0: "Triangle_A24_IFC4.ifc",
-        1: "Triangle_2x3_R19.ifc",
-        2: "2Storey_2x3_A22.ifc",
-        3: "2Storey_2x3_R19.ifc",
-        4: "OverSplitted_R20_2x3.ifc",
+        0: "Triangle_AC24_IFC4.ifczip",
+        1: "Triangle_R19_IFC2X3.ifczip",
+        2: "2Storey_AC22_IFC2X3.ifc",
+        3: "2Storey_R19_IFC2X3.ifc",
+        4: "OverSplitted_R20_IFC2X3.ifc",
         5: "ExternalEarth_R20_IFC4.ifc",
         6: "3196 Aalseth Lane_R21_bem.ifc",
         7: "3196 Aalseth Lane - AC - IFC4 BIM-BEM - Entier.ifc",
+        8: "SmallHouse_BB_IFC4.ifczip",
+    }
     for folder in FOLDERS:
         ifc_path = folder / TEST_FILES[8]
         if ifc_path.exists():
             break
+    else:
+        raise FileNotFoundError
     DOC = FreeCAD.ActiveDocument
     WITH_GUI = True
 
@@ -45,11 +49,10 @@ if __name__ == "__main__":
         boundaries.process_test_file(ifc_path, DOC)
     else:
         if WITH_GUI:
-            FreeCADGui.showMainWindow()
             DOC = FreeCAD.newDocument()
 
             boundaries.process_test_file(ifc_path, DOC)
-            FreeCADGui.exec_loop()
+            DOC.saveAs(str(ifc_path.with_suffix(".FCStd").absolute()))
         else:
             DOC = FreeCAD.newDocument()
             boundaries.process_test_file(ifc_path, DOC)
