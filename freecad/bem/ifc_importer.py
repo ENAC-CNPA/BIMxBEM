@@ -8,14 +8,17 @@ See the LICENSE.TXT file for more details.
 
 Author : Cyril Waechter
 """
-from typing import NamedTuple, Generator
-import os
-import zipfile
+
+from typing import Generator
 
 import ifcopenshell
 import ifcopenshell.geom
+import ifcopenshell.util.placement
 import ifcopenshell.util.element
 import ifcopenshell.util.unit
+import ifcopenshell.util.shape
+
+import numpy as np
 
 import FreeCAD
 import Part
@@ -76,29 +79,6 @@ def get_materials(doc=FreeCAD.ActiveDocument):
             continue
 
 
-def get_unit_conversion_factor(ifc_file, unit_type, default=None):
-    # TODO: Test with Imperial units
-    units = [
-        u
-        for u in ifc_file.by_type("IfcUnitAssignment")[0][0]
-        if getattr(u, "UnitType", None) == unit_type
-    ]
-    if len(units) == 0:
-        return default
-
-    ifc_unit = units[0]
-
-    unit_factor = 1.0
-    if ifc_unit.is_a("IfcConversionBasedUnit"):
-        ifc_unit = ifc_unit.ConversionFactor
-        unit_factor = ifc_unit.wrappedValue
-
-    assert ifc_unit.is_a("IfcSIUnit")
-    prefix_factor = ifcopenshell.util.unit.get_prefix_multiplier(ifc_unit.Prefix)
-
-    return unit_factor * prefix_factor
-
-
 def is_second_level(boundary):
     return (
         boundary.is_a("IfcRelSpaceBoundary2ndLevel")
@@ -112,8 +92,9 @@ class IfcImporter:
             doc = FreeCAD.newDocument()
         self.doc = doc
         self.ifc_file = ifcopenshell.open(ifc_path)
-        self.ifc_scale = get_unit_conversion_factor(self.ifc_file, "LENGTHUNIT")
+        self.ifc_scale = ifcopenshell.util.unit.calculate_unit_scale(self.ifc_file)
         self.fc_scale = FreeCAD.Units.Metre.Value
+        self.total_scale = self.fc_scale * self.ifc_scale
         self.element_types = dict()
         self.material_creator = materials.MaterialCreator(self)
         self.xml: str = ""
@@ -132,12 +113,14 @@ class IfcImporter:
         # Generate elements (Door, Window, Wall, Slab etc…) without their geometry
         Progress.set(1, "IfcImport_Elements", "")
         elements_group = get_or_create_group("Elements", doc)
-        ifc_elements = ifc_file.by_type("IfcElement")
-        for ifc_entity in ifc_elements:
-            elements_group.addObject(Element.create_from_ifc(ifc_entity, self))
         element_types_group = get_or_create_group("ElementTypes", doc)
-        for element_type in utils.get_by_class(doc, ElementType):
-            element_types_group.addObject(element_type)
+        ifc_types = set()
+        for ifc_entity in (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries):
+            elements_group.addObject(Element.create_from_ifc(ifc_entity, self))
+            ifc_type = ifcopenshell.util.element.get_type(ifc_entity)
+            if ifc_type not in ifc_types and ifc_type is not None:
+                ifc_types.add(ifc_type)
+                element_types_group.addObject(Element.create_from_ifc(ifc_type, self))
         materials_group = get_or_create_group("Materials", doc)
         for material in get_materials(doc):
             materials_group.addObject(material)
@@ -288,7 +271,9 @@ class IfcImporter:
         fc_space.SecondLevel = second_levels
 
         # All boundaries have their placement relative to space placement
-        space_placement = self.get_placement(ifc_space)
+        placement = ifcopenshell.util.placement.get_local_placement(ifc_space.ObjectPlacement)
+        space_matrix = self.get_fc_placement(placement)
+        fc_space.Placement = space_matrix
         for ifc_boundary in (b for b in ifc_space.BoundedBy if is_second_level(b)):
             if not ifc_boundary.ConnectionGeometry:
                 logger.warning(
@@ -311,39 +296,11 @@ class IfcImporter:
                     f"Boundary <{ifc_boundary.id()}> shape is too small and has been ignored"
                 )
 
-    def get_placement(self, space):
-        """Retrieve object placement"""
-        space_geom = ifcopenshell.geom.create_shape(BREP_SETTINGS, space)
-        # IfcOpenShell matrix values FreeCAD matrix values are transposed
-        ios_matrix = space_geom.transformation.matrix
-        m_l = list()
-        for i in range(3):
-            line = list(ios_matrix[i::3])
-            line[-1] *= self.fc_scale
-            m_l.extend(line)
-        return FreeCAD.Matrix(*m_l)
-
-    def get_matrix(self, position):
+    def get_fc_placement(self, placement):
         """Transform position to FreeCAD.Matrix"""
-        total_scale = self.fc_scale * self.ifc_scale
-        location = FreeCAD.Vector(position.Location.Coordinates)
-        location.scale(*list(3 * [total_scale]))
-
-        v_1 = FreeCAD.Vector(
-            getattr(position.RefDirection, "DirectionRatios", (1, 0, 0))
-        )
-        v_3 = FreeCAD.Vector(getattr(position.Axis, "DirectionRatios", (0, 0, 1)))
-        v_2 = v_3.cross(v_1)
-
-        # fmt: off
-        matrix = FreeCAD.Matrix(
-            v_1.x, v_2.x, v_3.x, location.x,
-            v_1.y, v_2.y, v_3.y, location.y,
-            v_1.z, v_2.z, v_3.z, location.z,
-            0, 0, 0, 1,
-        )
-        # fmt: on
-
+        placement[:3, -1] *= self.total_scale
+        # placement[:3, :3]=placement[:3, :3].transpose()
+        matrix = FreeCAD.Matrix(*placement.flatten().tolist())
         return matrix
 
     def get_global_placement(self, obj_placement) -> FreeCAD.Matrix:
@@ -353,7 +310,7 @@ class IfcImporter:
             parent = FreeCAD.Matrix()
         else:
             parent = self.get_global_placement(obj_placement.PlacementRelTo)
-        return parent.multiply(self.get_matrix(obj_placement.RelativePlacement))
+        return parent.multiply(self.get_fc_placement(obj_placement.RelativePlacement))
 
     def get_global_y_axis(self, ifc_entity):
         global_placement = self.get_global_placement(ifc_entity)
