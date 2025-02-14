@@ -96,7 +96,7 @@ class BEMxml:
     def write_zone(self, ifc_zone) -> None:
         zone = ET.SubElement(self.zones, "Zone")
         self.write_root_attrib(zone, ifc_zone)
-        ET.SubElement(zone, "LongName").text = ifc_zone.LongName
+        ET.SubElement(zone, "LongName").text = getattr(ifc_zone, "LongName", "")
         spaces = ET.SubElement(zone, "Spaces")
         for space in (s for s in ifc_zone.IsGroupedBy[0].RelatedObjects if s.BoundedBy):
             ET.SubElement(spaces, "Space").text = str(space.id())
@@ -163,7 +163,7 @@ class BEMxml:
         for fc_inner_b in fc_object.InnerBoundaries:
             ET.SubElement(inner_boundaries, "InnerBoundary").text = str(fc_inner_b.Id)
 
-        self.write_shape(boundary, fc_object)
+        self.write_fc_polygon(boundary, fc_object)
         self.write_attributes(boundary, fc_object, ("UndergroundDepth",))
 
         is_hosted = fc_object.IsHosted
@@ -182,46 +182,30 @@ class BEMxml:
             for geo_type in ("SIA_Interior", "SIA_Exterior"):
                 geo = ET.SubElement(boundary, geo_type)
                 fc_geo = getattr(fc_object, geo_type)
-                self.write_shape(geo, fc_geo)
+                self.write_fc_polygon(geo, fc_geo)
 
     def write_building_element_types(self, fc_object):
-        building_element_types = ET.SubElement(
-            self.building_element_types, "BuildingElementType"
-        )
+        building_element_types = ET.SubElement(self.building_element_types, "BuildingElementType")
         self.write_root_attrib(building_element_types, fc_object)
-        ET.SubElement(building_element_types, "Thickness").text = str(
-            fc_object.Thickness.Value / SCALE
-        )
-        ET.SubElement(building_element_types, "ThermalTransmittance").text = str(
-            fc_object.ThermalTransmittance or ""
-        )
+        ET.SubElement(building_element_types, "Thickness").text = str(fc_object.Thickness.Value / SCALE)
+        ET.SubElement(building_element_types, "ThermalTransmittance").text = str(fc_object.ThermalTransmittance or "")
         occurences = ET.SubElement(building_element_types, "ApplicableOccurrence")
         for element in fc_object.ApplicableOccurrence:
             ET.SubElement(occurences, "Id").text = str(element.Id)
         if fc_object.Material:
-            ET.SubElement(building_element_types, "Material").text = str(
-                fc_object.Material.Id or ""
-            )
+            ET.SubElement(building_element_types, "Material").text = str(fc_object.Material.Id or "")
 
     def write_building_elements(self, fc_object):
         building_element = ET.SubElement(self.building_elements, "BuildingElement")
         self.write_root_attrib(building_element, fc_object)
-        ET.SubElement(building_element, "IsTypedBy").text = str(
-            getattr(fc_object.IsTypedBy, "Id", "")
-        )
-        ET.SubElement(building_element, "Thickness").text = str(
-            fc_object.Thickness.Value / SCALE
-        )
-        ET.SubElement(building_element, "ThermalTransmittance").text = str(
-            fc_object.ThermalTransmittance or ""
-        )
+        ET.SubElement(building_element, "IsTypedBy").text = str(getattr(fc_object.IsTypedBy, "Id", ""))
+        ET.SubElement(building_element, "Thickness").text = str(fc_object.Thickness.Value / SCALE)
+        ET.SubElement(building_element, "ThermalTransmittance").text = str(fc_object.ThermalTransmittance or "")
         boundaries = ET.SubElement(building_element, "ProvidesBoundaries")
         for element in fc_object.ProvidesBoundaries:
             ET.SubElement(boundaries, "Id").text = str(element.Id)
         if fc_object.Material:
-            ET.SubElement(building_element, "Material").text = str(
-                fc_object.Material.Id or ""
-            )
+            ET.SubElement(building_element, "Material").text = str(fc_object.Material.Id or "")
 
     def write_class_attrib(self, xml_element, fc_object):
         self.write_attributes(xml_element, fc_object, fc_object.Proxy.attributes)
@@ -266,16 +250,18 @@ class BEMxml:
             ET.SubElement(polygon, "point", array_to_vector_dict(v))
 
     @staticmethod
-    def write_shape(xml_element, fc_object):
+    def write_fc_polygon(xml_element, fc_object):
         geom = ET.SubElement(xml_element, "geom")
-        for wire in fc_object.Proxy.get_wires(fc_object):
+        try:
+            wires = fc_object.Proxy.get_wires(fc_object)
+        except AttributeError:
+            wires = ()
+        for wire in wires:
             polygon = ET.SubElement(geom, "Polygon")
             for vertex in wire.Vertexes:
                 ET.SubElement(polygon, "point", vector_to_dict(vertex.Point))
         ET.SubElement(xml_element, "Area").text = fc_area_to_si_xml(fc_object.Area)
-        ET.SubElement(xml_element, "AreaWithHosted").text = fc_area_to_si_xml(
-            fc_object.AreaWithHosted
-        )
+        ET.SubElement(xml_element, "AreaWithHosted").text = fc_area_to_si_xml(fc_object.AreaWithHosted)
 
     @staticmethod
     def append_id_element(xml_element, fc_object, name):
