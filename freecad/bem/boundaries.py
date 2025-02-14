@@ -303,6 +303,8 @@ def write_xml(doc=FreeCAD.ActiveDocument, model=None) -> BEMxml:
         ),
     ):
         bem_xml.write_material(material)
+    for shade in (e for e in model.by_type("IfcRelSpaceBoundary") if e.Name.lower().startswith("shade")):
+        bem_xml.write_shade(shade)
     return bem_xml
 
 

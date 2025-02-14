@@ -11,6 +11,9 @@ Author : Cyril Waechter
 
 import xml.etree.ElementTree as ET
 import typing
+import ifcopenshell
+import ifcopenshell.geom
+import ifcopenshell.util
 
 import FreeCAD
 
@@ -33,6 +36,7 @@ class BEMxml:
         self.building_element_types = ET.SubElement(self.root, "BuildingElementTypes")
         self.building_elements = ET.SubElement(self.root, "BuildingElements")
         self.materials = ET.SubElement(self.root, "Materials")
+        self.shades = ET.SubElement(self.root, "Shades")
         self.sites = None
         self.buildings = None
         self.storeys = None
@@ -247,6 +251,20 @@ class BEMxml:
                 else:
                     ET.SubElement(part, attrib).text = str(value)
 
+    def write_shade(self, model_element):
+        shade = ET.SubElement(self.shades, "Shade")
+        self.write_root_attrib(shade, model_element)
+        self.write_polygon(shade, model_element)
+
+    def write_polygon(self, xml_element, boundary):
+        surface = boundary.ConnectionGeometry.SurfaceOnRelatingElement
+        settings = ifcopenshell.geom.settings()
+        shape = ifcopenshell.geom.create_shape(settings, surface)
+        geom = ET.SubElement(xml_element, "geom")
+        polygon = ET.SubElement(geom, "Polygon")
+        for v in ifcopenshell.util.shape.get_vertices(shape):
+            ET.SubElement(polygon, "point", array_to_vector_dict(v))
+
     @staticmethod
     def write_shape(xml_element, fc_object):
         geom = ET.SubElement(xml_element, "geom")
@@ -281,6 +299,11 @@ class BEMxml:
 def vector_to_dict(vector):
     """Convert a FreeCAD.Vector into a dict to write it as attribute in xml"""
     return {key: str(getattr(vector, key) / SCALE) for key in ("x", "y", "z")}
+
+
+def array_to_vector_dict(array):
+    """Convert a FreeCAD.Vector into a dict to write it as attribute in xml"""
+    return {key: str(value) for key, value in zip(("x", "y", "z"), array.tolist())}
 
 
 def unitary_vector_to_dict(vector):
