@@ -925,7 +925,7 @@ def generate_bem_xml_from_file(ifc_path: str) -> XmlResult:
     doc = ifc_importer.doc
     processing_sia_boundaries(doc)
     Progress.set(90, "Communicate_Write", "")
-    xml_str = write_xml(doc).tostring()
+    xml_str = write_xml(doc, ifc_importer.ifc_file).tostring()
     log_str = LOG_STREAM.getvalue()
     Progress.set(100, "Communicate_Send", "")
     return XmlResult(xml_str, log_str)
@@ -935,7 +935,7 @@ def process_test_file(ifc_path, doc):
     ifc_importer = IfcImporter(ifc_path, doc)
     ifc_importer.generate_rel_space_boundaries()
     processing_sia_boundaries(doc)
-    bem_xml = write_xml(doc)
+    bem_xml = write_xml(doc, ifc_importer.ifc_file)
     output_xml_to_path(bem_xml)
     ifc_importer.xml = bem_xml
     ifc_importer.log = LOG_STREAM.getvalue()
