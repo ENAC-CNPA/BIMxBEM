@@ -109,13 +109,17 @@ class IfcImporter:
         Progress.set(1, "IfcImport_Elements", "")
         elements_group = get_or_create_group("Elements", doc)
         element_types_group = get_or_create_group("ElementTypes", doc)
-        ifc_types = set()
         for ifc_entity in (e for e in ifc_file.by_type("IfcElement") if e.ProvidesBoundaries):
-            elements_group.addObject(Element.create_from_ifc(ifc_entity, self))
+            fc_element = Element.create_from_ifc(ifc_entity, self)
+            elements_group.addObject(fc_element)
             ifc_type = ifcopenshell.util.element.get_type(ifc_entity)
-            if ifc_type not in ifc_types and ifc_type is not None:
-                ifc_types.add(ifc_type)
-                element_types_group.addObject(Element.create_from_ifc(ifc_type, self))
+            if ifc_type is None:
+                continue
+            if ifc_type not in self.element_types.keys():
+                fc_element_type = ElementType.create_from_ifc(ifc_type, self)
+                self.element_types[ifc_type] = fc_element_type
+                element_types_group.addObject(fc_element_type)
+            utils.append(self.element_types[ifc_type], "ApplicableOccurrence", fc_element)
         materials_group = get_or_create_group("Materials", doc)
         for material in get_materials(doc):
             materials_group.addObject(material)
@@ -389,17 +393,6 @@ class IfcImporter:
         vectors = [FreeCAD.Vector(v.X, v.Y, v.Z) for v in fc_shape.Wires[0].Vertexes]
         vectors.append(vectors[0])
         return Part.makePolygon(vectors)
-
-    def create_element_type(self, fc_element, ifc_entity_type):
-        if not ifc_entity_type:
-            return
-        try:
-            fc_element_type = self.element_types[ifc_entity_type.id()]
-        except KeyError:
-            fc_element_type = ElementType.create_from_ifc(ifc_entity_type, self)
-            self.element_types[fc_element_type.Id] = fc_element_type
-        fc_element.IsTypedBy = fc_element_type
-        utils.append(fc_element_type, "ApplicableOccurrence", fc_element)
 
     def load_brep_curve_settings(self):
         settings = self.load_brep_settings(use_world_coordinates=False)

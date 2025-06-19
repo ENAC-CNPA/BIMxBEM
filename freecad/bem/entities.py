@@ -19,6 +19,8 @@ import Part
 
 from freecad.bem.bem_logging import logger
 from freecad.bem import utils
+import ifcopenshell.util
+import ifcopenshell.util.placement
 
 if typing.TYPE_CHECKING:  # https://www.python.org/dev/peps/pep-0484/#id36
     from freecad.bem.ifc_importer import IfcImporter
@@ -279,7 +281,8 @@ class Element(Root):
     def create_from_ifc(cls, ifc_entity, ifc_importer: "IfcImporter") -> "ElementFeature":
         """Stantard FreeCAD FeaturePython Object creation method"""
         obj = super().create_from_ifc(ifc_entity, ifc_importer)
-        ifc_importer.create_element_type(obj, ifcopenshell.util.element.get_type(ifc_entity))
+        placement = ifcopenshell.util.placement.get_local_placement(ifc_entity.ObjectPlacement)
+        obj.Placement = ifc_importer.get_fc_placement(placement)
         ifc_importer.material_creator.create(obj, ifc_entity)
         obj.Thickness = ifc_importer.guess_thickness(obj, ifc_entity)
 
